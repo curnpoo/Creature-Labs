@@ -109,6 +109,26 @@
             </div>
 
             <div class="control-group">
+                <div class="control-label">Challenges</div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="btn-ground-draw" class="cam-btn">Draw Ground</button>
+                    <button id="btn-ground-clear" class="cam-btn">Clear Ground</button>
+                    <button id="btn-obstacle-add" class="cam-btn">Add Obstacle</button>
+                    <button id="btn-challenge-clear" class="cam-btn">Clear All</button>
+                </div>
+                <div class="text-[10px] text-gray-400 mt-1">Draw mode: click world to add line points.</div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-label">Brains</div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="btn-brain-save" class="cam-btn">Save Brain</button>
+                    <button id="btn-brain-load" class="cam-btn">Load Brain</button>
+                </div>
+                <input id="brain-file-input" type="file" accept=".json,application/json" class="hidden">
+            </div>
+
+            <div class="control-group">
                 <div class="control-label">Fitness Breakdown <span class="control-val" id="fitness-tag">LIVE</span></div>
                 <div class="grid grid-cols-2 gap-2 text-xs font-mono">
                     <div class="glass-panel p-2"><div class="text-gray-400">Speed</div><div id="fitness-speed" class="text-cyan-300">0.0</div></div>

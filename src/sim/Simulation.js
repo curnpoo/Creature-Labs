@@ -1,5 +1,5 @@
 import { CONFIG } from '../utils/config.js';
-import { createEngine, createGround, cleanup, Engine, Body } from './Physics.js';
+import { createEngine, createGround, cleanup, Engine, Body, Bodies, Composite, Vector } from './Physics.js';
 import { Creature } from './Creature.js';
 import { Evolution } from '../nn/Evolution.js';
 
@@ -37,6 +37,10 @@ export class Simulation {
     this.championAwards = 0;
     this.visualLeader = null;
     this.lastLeaderSwitchAt = 0;
+    this.groundProfile = [];
+    this.obstacles = [];
+    this.challengeBodies = [];
+    this.importedBrainDNA = null;
 
     // Callbacks
     this.onGenerationEnd = null;
@@ -168,7 +172,11 @@ export class Simulation {
     this.lastFrame = performance.now();
     this.fpsSmoothed = 60;
 
-    this.spawnGeneration();
+    const seedDNA = this.importedBrainDNA
+      ? Array.from({ length: this.popSize }, () => new Float32Array(this.importedBrainDNA))
+      : null;
+    this.spawnGeneration(seedDNA);
+    this.rebuildChallengeBodies();
     this.frameId = requestAnimationFrame(now => this.gameLoop(now));
     return true;
   }
@@ -183,10 +191,129 @@ export class Simulation {
   clearSimulation() {
     this.creatures.forEach(c => c.destroy());
     this.creatures = [];
+    this.challengeBodies = [];
     if (this.engine) {
       cleanup(this.engine);
       this.engine = null;
     }
+  }
+
+  setGroundProfile(points) {
+    this.groundProfile = Array.isArray(points)
+      ? points
+        .map(p => ({ x: Number(p.x), y: Number(p.y) }))
+        .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y))
+      : [];
+    this.rebuildChallengeBodies();
+  }
+
+  addGroundPoint(point) {
+    const next = this.groundProfile.slice();
+    next.push({ x: Number(point.x), y: Number(point.y) });
+    this.setGroundProfile(next);
+  }
+
+  clearGroundProfile() {
+    this.groundProfile = [];
+    this.rebuildChallengeBodies();
+  }
+
+  addObstacle(obstacle) {
+    const o = {
+      x: Number(obstacle.x),
+      y: Number(obstacle.y),
+      w: Math.max(10, Number(obstacle.w) || 60),
+      h: Math.max(10, Number(obstacle.h) || 40)
+    };
+    if (!Number.isFinite(o.x) || !Number.isFinite(o.y)) return;
+    this.obstacles.push(o);
+    this.rebuildChallengeBodies();
+  }
+
+  clearObstacles() {
+    this.obstacles = [];
+    this.rebuildChallengeBodies();
+  }
+
+  clearChallenge() {
+    this.groundProfile = [];
+    this.obstacles = [];
+    this.rebuildChallengeBodies();
+  }
+
+  rebuildChallengeBodies() {
+    if (!this.engine) return;
+    if (this.challengeBodies.length) {
+      Composite.remove(this.engine.world, this.challengeBodies);
+      this.challengeBodies = [];
+    }
+
+    const bodies = [];
+    for (let i = 1; i < this.groundProfile.length; i++) {
+      const p1 = this.groundProfile[i - 1];
+      const p2 = this.groundProfile[i];
+      const delta = Vector.sub(p2, p1);
+      const length = Vector.magnitude(delta);
+      if (length < 2) continue;
+      const angle = Math.atan2(delta.y, delta.x);
+      const seg = Bodies.rectangle(
+        (p1.x + p2.x) * 0.5,
+        (p1.y + p2.y) * 0.5,
+        length,
+        16,
+        {
+          isStatic: true,
+          angle,
+          friction: this.groundFriction,
+          frictionStatic: this.groundStaticFriction,
+          restitution: 0
+        }
+      );
+      bodies.push(seg);
+    }
+
+    this.obstacles.forEach(o => {
+      bodies.push(Bodies.rectangle(o.x, o.y, o.w, o.h, {
+        isStatic: true,
+        friction: this.groundFriction,
+        frictionStatic: this.groundStaticFriction,
+        restitution: 0
+      }));
+    });
+
+    this.challengeBodies = bodies;
+    if (bodies.length) Composite.add(this.engine.world, bodies);
+  }
+
+  exportBrain() {
+    const leader = this.visualLeader || this.getLeader();
+    const sourceDna = this.championDNA || (leader ? leader.dna : null);
+    if (!sourceDna) return null;
+    return {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      hiddenLayers: this.hiddenLayers,
+      neuronsPerLayer: this.neuronsPerLayer,
+      dna: Array.from(sourceDna)
+    };
+  }
+
+  importBrain(payload) {
+    if (!payload || !Array.isArray(payload.dna) || payload.dna.length < 1) {
+      throw new Error('Invalid brain file.');
+    }
+    const dna = payload.dna.map(v => Number(v)).filter(v => Number.isFinite(v));
+    if (dna.length !== payload.dna.length) {
+      throw new Error('Brain file contains invalid weight values.');
+    }
+    if (Number.isFinite(payload.hiddenLayers)) {
+      this.hiddenLayers = Math.max(1, Math.min(3, Math.round(payload.hiddenLayers)));
+    }
+    if (Number.isFinite(payload.neuronsPerLayer)) {
+      this.neuronsPerLayer = Math.max(4, Math.min(32, Math.round(payload.neuronsPerLayer)));
+    }
+    this.importedBrainDNA = new Float32Array(dna);
+    this.championDNA = new Float32Array(dna);
   }
 
   getLeader() {
@@ -420,5 +547,9 @@ export class Simulation {
       this.ground.friction = this.groundFriction;
       this.ground.frictionStatic = this.groundStaticFriction;
     }
+    this.challengeBodies.forEach(b => {
+      b.friction = this.groundFriction;
+      b.frictionStatic = this.groundStaticFriction;
+    });
   }
 }

@@ -18,6 +18,7 @@ const screens = {
 
 const worldCanvas = document.getElementById('world');
 let worldCtx = null;
+let challengeTool = 'none';
 
 // --- Modules ---
 const sim = new Simulation();
@@ -78,6 +79,16 @@ function resizeCanvases() {
   designer.resize();
   worldCanvas.width = window.innerWidth;
   worldCanvas.height = window.innerHeight;
+}
+
+function worldPointFromEvent(e) {
+  const rect = worldCanvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  return {
+    x: sx / sim.zoom + sim.cameraX,
+    y: sy / sim.zoom
+  };
 }
 
 // --- Tool binding ---
@@ -163,6 +174,75 @@ controls.bind({
     }
   },
   isSimScreen: () => currentScreen === 'sim'
+});
+
+const brainFileInput = document.getElementById('brain-file-input');
+const setChallengeTool = tool => {
+  challengeTool = challengeTool === tool ? 'none' : tool;
+  const groundBtn = document.getElementById('btn-ground-draw');
+  const obstacleBtn = document.getElementById('btn-obstacle-add');
+  if (groundBtn) groundBtn.classList.toggle('active', challengeTool === 'ground');
+  if (obstacleBtn) obstacleBtn.classList.toggle('active', challengeTool === 'obstacle');
+};
+
+const groundDrawBtn = document.getElementById('btn-ground-draw');
+if (groundDrawBtn) groundDrawBtn.onclick = () => setChallengeTool('ground');
+const obstacleAddBtn = document.getElementById('btn-obstacle-add');
+if (obstacleAddBtn) obstacleAddBtn.onclick = () => setChallengeTool('obstacle');
+const groundClearBtn = document.getElementById('btn-ground-clear');
+if (groundClearBtn) groundClearBtn.onclick = () => sim.clearGroundProfile();
+const challengeClearBtn = document.getElementById('btn-challenge-clear');
+if (challengeClearBtn) challengeClearBtn.onclick = () => sim.clearChallenge();
+
+const brainSaveBtn = document.getElementById('btn-brain-save');
+if (brainSaveBtn) {
+  brainSaveBtn.onclick = () => {
+    const payload = sim.exportBrain();
+    if (!payload) {
+      alert('No brain available yet. Let a generation run first.');
+      return;
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `polycreature-brain-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+}
+
+const brainLoadBtn = document.getElementById('btn-brain-load');
+if (brainLoadBtn && brainFileInput) {
+  brainLoadBtn.onclick = () => brainFileInput.click();
+  brainFileInput.onchange = async e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      sim.importBrain(JSON.parse(text));
+      controls.updateLabels();
+      if (currentScreen === 'sim') {
+        sim.startSimulation();
+      }
+    } catch (err) {
+      alert(`Brain load failed: ${err.message}`);
+    } finally {
+      e.target.value = '';
+    }
+  };
+}
+
+worldCanvas.addEventListener('click', e => {
+  if (currentScreen !== 'sim' || challengeTool === 'none') return;
+  const p = worldPointFromEvent(e);
+  if (challengeTool === 'ground') {
+    sim.addGroundPoint({ x: p.x, y: p.y });
+  } else if (challengeTool === 'obstacle') {
+    sim.addObstacle({ x: p.x, y: p.y - 20, w: 60, h: 40 });
+  }
 });
 
 // --- Generation end summary overlay ---
@@ -287,6 +367,27 @@ function renderWorld(leader) {
   ctx.lineWidth = 2;
   ctx.stroke();
 
+  // Challenge terrain line
+  if (sim.groundProfile.length > 1) {
+    ctx.beginPath();
+    ctx.moveTo(sim.groundProfile[0].x, sim.groundProfile[0].y);
+    for (let i = 1; i < sim.groundProfile.length; i++) {
+      ctx.lineTo(sim.groundProfile[i].x, sim.groundProfile[i].y);
+    }
+    ctx.strokeStyle = '#ffb347';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+  }
+
+  // Challenge obstacles
+  sim.obstacles.forEach(o => {
+    ctx.fillStyle = 'rgba(255,170,60,0.45)';
+    ctx.fillRect(o.x - o.w / 2, o.y - o.h / 2, o.w, o.h);
+    ctx.strokeStyle = 'rgba(255,220,130,0.85)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(o.x - o.w / 2, o.y - o.h / 2, o.w, o.h);
+  });
+
   // Distance markers
   ctx.fillStyle = 'rgba(255,255,255,0.22)';
   ctx.font = '12px monospace';
@@ -299,6 +400,16 @@ function renderWorld(leader) {
 
   // Draw creatures
   sim.creatures.forEach(c => c.draw(ctx, c === leader));
+
+  if (challengeTool !== 'none') {
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = '12px monospace';
+    ctx.fillText(
+      challengeTool === 'ground' ? 'Ground draw ON: click to add points' : 'Obstacle mode ON: click to place box',
+      sim.cameraX + 18,
+      24
+    );
+  }
 
   ctx.restore();
 }
