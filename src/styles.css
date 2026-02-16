@@ -294,109 +294,91 @@ canvas {
     pointer-events: none;
 }
 
-/* ─── Edge Tab Rails (Full-width bars) ─── */
+/* ─── Edge Tab Buttons (Visible clickable tabs) ─── */
 .edge-tab-rail {
     position: absolute;
     z-index: 30;
     pointer-events: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .edge-top-rail {
     top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
+    left: 50%;
+    transform: translateX(-50%);
+    height: 28px;
+    padding: 4px;
 }
 
 .edge-left-rail {
     left: 0;
-    top: 0;
-    bottom: 0;
-    width: 3px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    padding: 4px;
 }
 
 .edge-right-rail {
     right: 0;
-    top: 0;
-    bottom: 0;
-    width: 3px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    padding: 4px;
 }
 
 .edge-bottom-rail {
     bottom: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
+    left: 50%;
+    transform: translateX(-50%);
+    height: 28px;
+    padding: 4px;
 }
 
 .edge-tab {
-    width: 100%;
-    height: 100%;
-    border: none;
-    background: rgba(255, 255, 255, 0.05);
+    padding: 6px 16px;
+    border-radius: 6px;
+    background: rgba(10, 14, 24, 0.85);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     color: var(--text-muted);
     font-family: "JetBrains Mono", monospace;
-    font-size: 0;
-    cursor: pointer;
-    transition: all 0.25s ease;
-    position: relative;
-}
-
-.edge-tab:hover {
-    background: rgba(255, 255, 255, 0.12);
-}
-
-.edge-tab.active {
-    background: rgba(0, 242, 255, 0.35);
-    box-shadow: 0 0 12px rgba(0, 242, 255, 0.4);
-}
-
-/* Tooltip on hover */
-.edge-tab::after {
-    content: attr(title);
-    position: absolute;
-    padding: 4px 10px;
-    border-radius: 4px;
-    background: rgba(10, 14, 24, 0.95);
-    color: var(--text-primary);
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s ease;
     white-space: nowrap;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s ease;
-    z-index: 100;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.edge-top-rail .edge-tab::after {
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
+.edge-tab:hover {
+    background: rgba(15, 20, 35, 0.95);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--text-secondary);
+    transform: scale(1.05);
 }
 
-.edge-left-rail .edge-tab::after {
-    left: 8px;
-    top: 50%;
-    transform: translateY(-50%);
+.edge-tab.active {
+    background: rgba(0, 242, 255, 0.15);
+    border-color: rgba(0, 242, 255, 0.5);
+    color: var(--primary);
+    box-shadow: 0 0 16px rgba(0, 242, 255, 0.3), 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.edge-right-rail .edge-tab::after {
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
+.edge-tab.active:hover {
+    background: rgba(0, 242, 255, 0.2);
+    transform: scale(1.05);
 }
 
-.edge-bottom-rail .edge-tab::after {
-    bottom: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-}
-
-.edge-tab:hover::after {
-    opacity: 1;
+/* Vertical text for left/right rails */
+.edge-left-rail .edge-tab,
+.edge-right-rail .edge-tab {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    padding: 12px 6px;
 }
 
 /* ─── Scrollbar Styling ─── */
