@@ -344,20 +344,27 @@ export class Creature {
         const energyCost = actuationMagnitude * this.energy.usagePerActuation;
         energyUsedThisFrame += energyCost;
 
-        // Energy availability affects muscle strength
-        const energyRatio = this.energy.current / this.energy.max;
-        if (energyRatio < 0.2) {
-          // Below 20% energy: severe strength reduction
-          energyMultiplier = 0.3 + energyRatio * 2.0; // 0.3 to 0.7
+        // Energy availability affects muscle strength (0% energy = 0% strength)
+        const energyRatio = Math.max(0, Math.min(1, this.energy.current / this.energy.max));
+
+        if (energyRatio <= 0) {
+          // Completely exhausted - no movement possible
+          energyMultiplier = 0.0;
+        } else if (energyRatio < 0.2) {
+          // Below 20% energy: linear from 0% to 40% strength
+          energyMultiplier = energyRatio * 2.0; // 0.0 to 0.4
         } else if (energyRatio < 0.5) {
-          // Below 50% energy: moderate strength reduction
-          energyMultiplier = 0.7 + energyRatio * 0.6; // 0.7 to 1.0
+          // Below 50% energy: linear from 40% to 85% strength
+          energyMultiplier = 0.4 + (energyRatio - 0.2) * 1.5; // 0.4 to 0.85
+        } else {
+          // Above 50% energy: linear from 85% to 100% strength
+          energyMultiplier = 0.85 + (energyRatio - 0.5) * 0.3; // 0.85 to 1.0
         }
-        // Above 50%: full strength
       }
 
       const effectiveStrength = strength * muscleStrengthMultiplier * energyMultiplier;
-      const amplitude = Math.max(0.05, rangeScale * effectiveStrength);
+      // Allow amplitude to reach 0 when energy is depleted
+      const amplitude = rangeScale * effectiveStrength;
       const targetLength = m.c.baseLength * (1 + smoothSignal * amplitude);
       const currentLength = m.c.currentLength || m.c.length;
       const maxDelta = m.c.baseLength * 0.02 * moveSpeed;

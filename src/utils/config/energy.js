@@ -21,8 +21,8 @@ export const ENERGY_CONFIG = {
   // Energy-Based Strength Modifiers
   strengthAtFullEnergy: 1.0,    // Strength multiplier at 100% energy
   strengthAt50Energy: 0.85,     // Strength multiplier at 50% energy
-  strengthAt20Energy: 0.5,      // Strength multiplier at 20% energy
-  strengthAtZeroEnergy: 0.3,    // Strength multiplier at 0% energy
+  strengthAt20Energy: 0.4,      // Strength multiplier at 20% energy
+  strengthAtZeroEnergy: 0.0,    // Strength multiplier at 0% energy (complete exhaustion)
 
   // Fitness Rewards
   efficiencyBonus: 0.5,         // Fitness bonus for energy efficiency (distance/energy)

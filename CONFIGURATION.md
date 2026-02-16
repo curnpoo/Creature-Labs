@@ -149,8 +149,8 @@ Muscle strength scales with available energy to prevent depletion exploitation.
 |-----------|---------|-------|-------------|
 | `strengthAtFullEnergy` | 1.0 | 1.0 | Strength multiplier at 100% energy. |
 | `strengthAt50Energy` | 0.85 | 0.7-1.0 | Strength multiplier at 50% energy. |
-| `strengthAt20Energy` | 0.5 | 0.3-0.7 | Strength multiplier at 20% energy. |
-| `strengthAtZeroEnergy` | 0.3 | 0.1-0.5 | Strength multiplier at 0% energy (never fully disabled). |
+| `strengthAt20Energy` | 0.4 | 0.2-0.6 | Strength multiplier at 20% energy. |
+| `strengthAtZeroEnergy` | 0.0 | 0.0 | Strength multiplier at 0% energy (complete exhaustion - no movement). |
 
 ### Fitness Integration
 
