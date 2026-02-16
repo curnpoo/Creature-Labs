@@ -375,14 +375,20 @@ export class Simulation {
     const progressX = Number.isFinite(fitness.maxX) ? fitness.maxX : creature.getX();
     const distance = this.distMetersContinuousFromX(progressX);
     const gaitPenaltyScale = this.rewardStability ? 1.5 : 1.0;
+
+    // Distance-dependent scaling: longer runs require better gaits
+    const distanceScale = 1 + distance * 0.02;
+
     return (
       distance * this.distanceRewardWeight +
       fitness.speed * this.speedRewardWeight * (0.2 + (fitness.actuationLevel || 0) * 0.8) +
       (this.rewardStability ? fitness.stability * this.stabilityRewardWeight : 0) -
-      fitness.airtimePct * 0.2 * gaitPenaltyScale -
-      fitness.stumbles * 10 * gaitPenaltyScale -
-      fitness.spin * this.spinPenaltyWeight * gaitPenaltyScale -
-      (fitness.actuationJerk || 0) * this.jitterPenaltyWeight * gaitPenaltyScale -
+      fitness.airtimePct * 0.3 * gaitPenaltyScale * distanceScale -           // Scales with distance
+      fitness.stumbles * 15 * gaitPenaltyScale -                              // Slightly increased
+      Math.pow(fitness.spin, 2) * this.spinPenaltyWeight * gaitPenaltyScale - // QUADRATIC!
+      (fitness.spinAccumulated || 0) * 150 -                                  // Cumulative spin budget
+      (fitness.energyViolations || 0) * 500 -                                 // Harsh penalty for free energy
+      Math.pow(fitness.actuationJerk || 0, 1.5) * this.jitterPenaltyWeight * gaitPenaltyScale -
       (fitness.groundSlip || 0) * this.groundSlipPenaltyWeight * gaitPenaltyScale
     );
   }

@@ -5,9 +5,10 @@ const { Engine, Bodies, Composite, Body } = Matter;
 export function createEngine(gravity = 1.0) {
   const engine = Engine.create();
   engine.world.gravity.y = gravity;
-  engine.positionIterations = 10;
-  engine.velocityIterations = 8;
-  engine.constraintIterations = 12;
+  engine.positionIterations = 20;  // Double for better stability
+  engine.velocityIterations = 16;   // Double for better stability
+  engine.constraintIterations = 24; // Double for constraint resolution
+  engine.enableSleeping = false;    // Prevent sleeping exploits
   return engine;
 }
 

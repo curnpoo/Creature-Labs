@@ -34,9 +34,11 @@ export class Creature {
       airtimePct: 0,
       stumbles: 0,
       spin: 0,
+      spinAccumulated: 0, // Track total spin budget
       actuationJerk: 0,
       actuationLevel: 0,
       groundSlip: 0,
+      energyViolations: 0, // Track suspicious energy gains
       frames: 0,
       airFrames: 0,
       maxX: -Infinity,
@@ -66,7 +68,8 @@ export class Creature {
           frictionAir: simConfig.bodyAirFriction ?? 0.07,
           isBullet: true,
           density: 0.0035,
-          restitution: 0
+          restitution: 0,
+          slop: 0.01  // Minimum separation to prevent tunneling
         }
       );
       b.creatureId = this.id;
@@ -285,7 +288,20 @@ export class Creature {
     const strength = this.simConfig.muscleStrength || 1.2;
     const moveSpeed = Math.max(0.2, Math.min(2.2, this.simConfig.jointMoveSpeed || 1.0));
     const rangeScale = this.simConfig.muscleRange ?? 0.18;
-    const amplitude = Math.max(0.05, rangeScale * strength);
+
+    // Calculate ground contact ratio
+    let groundedBodies = 0;
+    this.bodies.forEach(b => {
+      if ((b.position.y + CONFIG.nodeRadius) >= (groundY - 2)) {
+        groundedBodies++;
+      }
+    });
+    const groundRatio = groundedBodies / Math.max(1, this.bodies.length);
+
+    // Quadratic penalty for airborne creatures: can't push off air!
+    const groundedStrength = strength * Math.pow(groundRatio, 2);
+
+    const amplitude = Math.max(0.05, rangeScale * groundedStrength);
     const smoothingBase = this.simConfig.muscleSmoothing ?? 0.22;
     const smoothing = Math.min(0.5, Math.max(0.02, smoothingBase));
     let totalJerk = 0;
@@ -303,6 +319,11 @@ export class Creature {
       const nextLength = currentLength + Math.max(-maxDelta, Math.min(maxDelta, targetLength - currentLength));
       m.c.currentLength = nextLength;
       m.c.length = nextLength;
+
+      // Force rate limiter to prevent impulse exploits
+      const maxForcePerStep = m.c.baseLength * 0.4; // Limit based on muscle size
+      if (!m.c.maxForce) m.c.maxForce = maxForcePerStep;
+
       m.currentSignal = smoothSignal;
       totalActuation += Math.abs(smoothSignal);
     });
@@ -347,7 +368,8 @@ export class Creature {
     avgOmega /= Math.max(1, this.bodies.length);
     const avgGroundSlip = groundedAbsVx / Math.max(1, groundedCount);
     this.stats.groundSlip = this.stats.groundSlip * 0.9 + avgGroundSlip * 0.1;
-    this.stats.spin = this.stats.spin * 0.9 + avgOmega * 0.1;
+    this.stats.spin = this.stats.spin * 0.9 + avgOmega * 0.1; // Keep for display
+    this.stats.spinAccumulated += Math.abs(avgOmega) * dtSec; // Cumulative budget
 
     const yAvg = ys.reduce((a, b) => a + b, 0) / Math.max(1, ys.length);
     const variance = ys.reduce((s, y) => s + (y - yAvg) * (y - yAvg), 0) / Math.max(1, ys.length);
@@ -363,6 +385,23 @@ export class Creature {
     } else if (!lowToGround) {
       this.stats.stumbleLatched = false;
     }
+
+    // Energy conservation check
+    let kineticEnergy = 0;
+    let potentialEnergy = 0;
+    this.bodies.forEach(b => {
+      const vMag = Math.sqrt(b.velocity.x ** 2 + b.velocity.y ** 2);
+      kineticEnergy += 0.5 * b.mass * (vMag ** 2);
+      potentialEnergy += b.mass * Math.abs(this.engine.world.gravity.y) *
+                          Math.max(0, groundY - b.position.y);
+    });
+    const totalEnergy = kineticEnergy + potentialEnergy;
+
+    // High energy with low actuation = exploit
+    const suspiciousRatio = totalEnergy / Math.max(1, this.stats.actuationLevel * 100);
+    if (suspiciousRatio > 50 && this.stats.frames > 60) {
+      this.stats.energyViolations += suspiciousRatio * 0.1;
+    }
   }
 
   getFitnessSnapshot() {
@@ -372,9 +411,11 @@ export class Creature {
       airtimePct: Math.max(0, Math.min(100, this.stats.airtimePct)),
       stumbles: this.stats.stumbles,
       spin: this.stats.spin,
+      spinAccumulated: this.stats.spinAccumulated,
       actuationJerk: this.stats.actuationJerk,
       actuationLevel: this.stats.actuationLevel,
       groundSlip: this.stats.groundSlip,
+      energyViolations: this.stats.energyViolations,
       maxX: this.stats.maxX
     };
   }
