@@ -20,6 +20,8 @@ const worldCanvas = document.getElementById('world');
 let worldCtx = null;
 let challengeTool = 'none';
 let simSessionStarted = false;
+const BRAIN_LIBRARY_KEY = 'polyevolve.brainLibrary.v1';
+let brainLibrary = [];
 
 // --- Modules ---
 const sim = new Simulation();
@@ -128,6 +130,51 @@ function updateStartSimUI() {
   }
 }
 
+function loadBrainLibrary() {
+  try {
+    const raw = localStorage.getItem(BRAIN_LIBRARY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistBrainLibrary() {
+  localStorage.setItem(BRAIN_LIBRARY_KEY, JSON.stringify(brainLibrary));
+}
+
+function renderBrainLibrary() {
+  const select = document.getElementById('brain-library-select');
+  const meta = document.getElementById('brain-library-meta');
+  if (!select || !meta) return;
+
+  select.innerHTML = '';
+  if (!brainLibrary.length) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'No saved brains';
+    select.appendChild(opt);
+    meta.textContent = 'Run at least one generation, then save.';
+    return;
+  }
+
+  brainLibrary.forEach(item => {
+    const opt = document.createElement('option');
+    opt.value = item.id;
+    const dist = Number.isFinite(item.distance) ? `${item.distance}m` : '?m';
+    const gen = Number.isFinite(item.generation) ? `G${item.generation}` : 'G?';
+    opt.textContent = `${item.name || 'Brain'} • ${gen} • ${dist}`;
+    select.appendChild(opt);
+  });
+
+  if (!select.value) select.value = brainLibrary[0].id;
+  const selected = brainLibrary.find(b => b.id === select.value) || brainLibrary[0];
+  const mode = sim.sandboxMode ? 'Sandbox ON' : 'Sandbox OFF';
+  meta.textContent = `${mode} • ${selected.name || 'Brain'} • ${selected.distance || 0}m • ${new Date(selected.createdAt).toLocaleString()}`;
+}
+
 // --- Tool binding ---
 function setTool(tool, btn) {
   designer.setTool(tool);
@@ -184,6 +231,19 @@ window.addEventListener('keydown', e => {
 });
 
 // --- Controls binding ---
+const startTrainingNow = () => {
+  if (!sim.startSimulation()) {
+    alert('Design needs at least 2 nodes, 1 bone, and 1 muscle.');
+    return false;
+  }
+  simSessionStarted = true;
+  const icon = document.getElementById('icon-pause');
+  if (icon) icon.className = 'fas fa-pause';
+  updateStartSimUI();
+  triggerTrainingStatAnimation();
+  return true;
+};
+
 controls.bind({
   onStartDraw: () => setScreen('draw'),
   onBack: () => setScreen('splash'),
@@ -192,15 +252,8 @@ controls.bind({
     const design = designer.getDesign();
     sim.nodes = design.nodes;
     sim.constraints = design.constraints;
-    if (!sim.startSimulation()) {
-      alert('Design needs at least 2 nodes, 1 bone, and 1 muscle.');
-      return;
-    }
-    simSessionStarted = true;
-    const icon = document.getElementById('icon-pause');
-    if (icon) icon.className = 'fas fa-pause';
-    updateStartSimUI();
-    triggerTrainingStatAnimation();
+    sim.exitSandboxMode();
+    startTrainingNow();
   },
   onEdit: () => setScreen('draw'),
   onPause: () => {
@@ -212,10 +265,7 @@ controls.bind({
     const design = designer.getDesign();
     sim.nodes = design.nodes;
     sim.constraints = design.constraints;
-    sim.startSimulation();
-    simSessionStarted = true;
-    updateStartSimUI();
-    triggerTrainingStatAnimation();
+    startTrainingNow();
   },
   onResetSettings: () => {
     if (sim.engine) {
@@ -236,8 +286,9 @@ controls.bind({
   isSimScreen: () => currentScreen === 'sim'
 });
 updateStartSimUI();
+brainLibrary = loadBrainLibrary();
+renderBrainLibrary();
 
-const brainFileInput = document.getElementById('brain-file-input');
 const setChallengeTool = tool => {
   challengeTool = challengeTool === tool ? 'none' : tool;
   const groundBtn = document.getElementById('btn-ground-draw');
@@ -258,44 +309,86 @@ if (challengeClearBtn) challengeClearBtn.onclick = () => sim.clearChallenge();
 const brainSaveBtn = document.getElementById('btn-brain-save');
 if (brainSaveBtn) {
   brainSaveBtn.onclick = () => {
-    const payload = sim.exportBrain();
+    const payload = sim.getLastGenerationBrain();
     if (!payload) {
-      alert('No brain available yet. Let a generation run first.');
+      alert('No completed generation yet. Let at least one generation finish.');
       return;
     }
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `polycreature-brain-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    const design = designer.getDesign();
+    const entry = {
+      id: `brain-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      name: `G${payload.generation} ${payload.distance}m`,
+      createdAt: payload.createdAt,
+      generation: payload.generation,
+      distance: payload.distance,
+      fitness: payload.fitness,
+      hiddenLayers: payload.hiddenLayers,
+      neuronsPerLayer: payload.neuronsPerLayer,
+      dna: payload.dna,
+      design
+    };
+    brainLibrary.unshift(entry);
+    if (brainLibrary.length > 60) brainLibrary = brainLibrary.slice(0, 60);
+    persistBrainLibrary();
+    renderBrainLibrary();
   };
 }
 
-const brainLoadBtn = document.getElementById('btn-brain-load');
-if (brainLoadBtn && brainFileInput) {
-  brainLoadBtn.onclick = () => brainFileInput.click();
-  brainFileInput.onchange = async e => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      sim.importBrain(JSON.parse(text));
-      controls.updateLabels();
-      if (currentScreen === 'sim') {
-        sim.startSimulation();
-        simSessionStarted = true;
-        updateStartSimUI();
-        triggerTrainingStatAnimation();
-      }
-    } catch (err) {
-      alert(`Brain load failed: ${err.message}`);
-    } finally {
-      e.target.value = '';
+const brainSelect = document.getElementById('brain-library-select');
+if (brainSelect) {
+  brainSelect.onchange = () => renderBrainLibrary();
+}
+
+const sandboxRunBtn = document.getElementById('btn-sandbox-run');
+if (sandboxRunBtn) {
+  sandboxRunBtn.onclick = () => {
+    if (!brainLibrary.length) {
+      alert('No saved brains. Save one first.');
+      return;
     }
+    const selectedId = brainSelect ? brainSelect.value : '';
+    const picked = brainLibrary.find(b => b.id === selectedId) || brainLibrary[0];
+    if (!picked) return;
+    try {
+      if (picked.design && Array.isArray(picked.design.nodes) && Array.isArray(picked.design.constraints)) {
+        designer.loadDesign({
+          nodes: picked.design.nodes,
+          constraints: picked.design.constraints,
+          nextId: Math.max(...picked.design.nodes.map(n => n.id)) + 1
+        });
+      }
+      sim.setSandboxBrain(picked);
+      controls.updateLabels();
+      setScreen('sim');
+      const design = designer.getDesign();
+      sim.nodes = design.nodes;
+      sim.constraints = design.constraints;
+      startTrainingNow();
+      renderBrainLibrary();
+    } catch (err) {
+      alert(`Sandbox start failed: ${err.message}`);
+    }
+  };
+}
+
+const sandboxExitBtn = document.getElementById('btn-sandbox-exit');
+if (sandboxExitBtn) {
+  sandboxExitBtn.onclick = () => {
+    sim.exitSandboxMode();
+    renderBrainLibrary();
+  };
+}
+
+const brainDeleteBtn = document.getElementById('btn-brain-delete');
+if (brainDeleteBtn) {
+  brainDeleteBtn.onclick = () => {
+    if (!brainLibrary.length) return;
+    const selectedId = brainSelect ? brainSelect.value : '';
+    const idx = brainLibrary.findIndex(b => b.id === selectedId);
+    if (idx < 0) return;
+    brainLibrary.splice(idx, 1);
+    persistBrainLibrary();
+    renderBrainLibrary();
   };
 }
 

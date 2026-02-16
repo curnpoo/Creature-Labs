@@ -129,10 +129,17 @@
             <div class="control-group">
                 <div class="control-label">Brains</div>
                 <div class="grid grid-cols-2 gap-2">
-                    <button id="btn-brain-save" class="cam-btn">Save Brain</button>
-                    <button id="btn-brain-load" class="cam-btn">Load Brain</button>
+                    <button id="btn-brain-save" class="cam-btn">Save Last Gen Best</button>
+                    <button id="btn-sandbox-run" class="cam-btn">Run Sandbox</button>
                 </div>
-                <input id="brain-file-input" type="file" accept=".json,application/json" class="hidden">
+                <select id="brain-library-select" class="bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-xs text-gray-300 cursor-pointer hover:bg-white/10 mt-2 w-full">
+                    <option value="">No saved brains</option>
+                </select>
+                <div class="grid grid-cols-2 gap-2 mt-2">
+                    <button id="btn-sandbox-exit" class="cam-btn">Exit Sandbox</button>
+                    <button id="btn-brain-delete" class="cam-btn">Delete Brain</button>
+                </div>
+                <div id="brain-library-meta" class="text-[10px] text-gray-400 mt-1">Run at least one generation, then save.</div>
             </div>
 
             <div class="control-group">

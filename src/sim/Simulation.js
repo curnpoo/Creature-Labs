@@ -41,6 +41,10 @@ export class Simulation {
     this.obstacles = [];
     this.challengeBodies = [];
     this.importedBrainDNA = null;
+    this.lastGenerationBrain = null;
+    this.sandboxMode = false;
+    this.sandboxBrainDNA = null;
+    this.sandboxRuns = 0;
 
     // Callbacks
     this.onGenerationEnd = null;
@@ -128,7 +132,8 @@ export class Simulation {
     const startX = this.spawnX;
     const startY = this.getGroundY() - CONFIG.spawnClearance - CONFIG.nodeRadius - relMaxY;
 
-    for (let i = 0; i < this.popSize; i++) {
+    const creatureCount = this.sandboxMode ? 1 : this.popSize;
+    for (let i = 0; i < creatureCount; i++) {
       const dna = dnaArray ? dnaArray[i] : null;
       this.creatures.push(
         new Creature(
@@ -174,11 +179,14 @@ export class Simulation {
     this.championFitness = -Infinity;
     this.championAwards = 0;
     this.simTimeElapsed = 0;
+    this.sandboxRuns = 0;
     this.lastFrame = performance.now();
     this.fpsSmoothed = 60;
 
-    const seedDNA = this.importedBrainDNA
-      ? Array.from({ length: this.popSize }, () => new Float32Array(this.importedBrainDNA))
+    const sourceBrain = this.sandboxMode ? this.sandboxBrainDNA : this.importedBrainDNA;
+    const count = this.sandboxMode ? 1 : this.popSize;
+    const seedDNA = sourceBrain
+      ? Array.from({ length: count }, () => new Float32Array(sourceBrain))
       : null;
     this.spawnGeneration(seedDNA);
     this.rebuildChallengeBodies();
@@ -369,6 +377,16 @@ export class Simulation {
     const winnerFitness = this.creatureScore(winner);
     const genBest = this.distMetersFromX(winner.getX());
     this.genBestDist = genBest;
+    this.lastGenerationBrain = {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      generation: this.generation,
+      distance: genBest,
+      fitness: winnerFitness,
+      hiddenLayers: this.hiddenLayers,
+      neuronsPerLayer: this.neuronsPerLayer,
+      dna: new Float32Array(winner.dna)
+    };
 
     const popDistances = this.creatures.map(c => this.distMetersContinuousFromX(c.getX()));
     const popFitness = this.creatures.map(c => c.getFitnessSnapshot());
@@ -529,7 +547,11 @@ export class Simulation {
     }
 
     if (this.timer <= 0) {
-      this.endGeneration();
+      if (this.sandboxMode) {
+        this.restartSandboxRun();
+      } else {
+        this.endGeneration();
+      }
     }
 
     if (this.onFrame) {
@@ -558,5 +580,51 @@ export class Simulation {
       b.friction = this.groundFriction;
       b.frictionStatic = this.groundStaticFriction;
     });
+  }
+
+  getLastGenerationBrain() {
+    if (!this.lastGenerationBrain) return null;
+    return {
+      version: this.lastGenerationBrain.version,
+      createdAt: this.lastGenerationBrain.createdAt,
+      generation: this.lastGenerationBrain.generation,
+      distance: this.lastGenerationBrain.distance,
+      fitness: this.lastGenerationBrain.fitness,
+      hiddenLayers: this.lastGenerationBrain.hiddenLayers,
+      neuronsPerLayer: this.lastGenerationBrain.neuronsPerLayer,
+      dna: Array.from(this.lastGenerationBrain.dna)
+    };
+  }
+
+  setSandboxBrain(payload) {
+    if (!payload || !Array.isArray(payload.dna) || payload.dna.length < 1) {
+      throw new Error('Invalid sandbox brain.');
+    }
+    const dna = payload.dna.map(v => Number(v)).filter(v => Number.isFinite(v));
+    if (dna.length !== payload.dna.length) {
+      throw new Error('Sandbox brain contains invalid weights.');
+    }
+    this.sandboxBrainDNA = new Float32Array(dna);
+    this.sandboxMode = true;
+    if (Number.isFinite(payload.hiddenLayers)) {
+      this.hiddenLayers = Math.max(1, Math.min(3, Math.round(payload.hiddenLayers)));
+    }
+    if (Number.isFinite(payload.neuronsPerLayer)) {
+      this.neuronsPerLayer = Math.max(4, Math.min(32, Math.round(payload.neuronsPerLayer)));
+    }
+  }
+
+  exitSandboxMode() {
+    this.sandboxMode = false;
+    this.sandboxBrainDNA = null;
+  }
+
+  restartSandboxRun() {
+    if (!this.sandboxBrainDNA) return;
+    this.sandboxRuns += 1;
+    this.timer = this.simDuration;
+    this.visualLeader = null;
+    this.currentGhostPath = [];
+    this.spawnGeneration([new Float32Array(this.sandboxBrainDNA)]);
   }
 }
