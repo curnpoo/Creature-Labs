@@ -73,7 +73,7 @@ export class Designer {
       throw new Error('Invalid design JSON.');
     }
     const nodes = payload.nodes
-      .map(n => ({ id: Number(n.id), x: Number(n.x), y: Number(n.y) }))
+      .map(n => ({ id: Number(n.id), x: Number(n.x), y: Number(n.y), fixed: !!n.fixed }))
       .filter(n => Number.isFinite(n.id) && Number.isFinite(n.x) && Number.isFinite(n.y));
 
     const nodeIds = new Set(nodes.map(n => n.id));
@@ -210,6 +210,15 @@ export class Designer {
       return;
     }
 
+    if (this.tool === 'joint') {
+      if (hitNode) {
+        this._pushUndo();
+        hitNode.fixed = !hitNode.fixed;
+        this.render();
+      }
+      return;
+    }
+
     if (this.tool === 'erase') {
       if (hitNode) {
         this._pushUndo();
@@ -231,6 +240,32 @@ export class Designer {
 
     if (this.tool === 'node') {
       if (!hitNode) {
+        // Check for split
+        const cIdx = this._findConstraintAt(p.x, p.y);
+        if (cIdx >= 0) {
+           const c = this.constraints[cIdx];
+           const n1 = this.nodes.find(n => n.id === c.n1);
+           const n2 = this.nodes.find(n => n.id === c.n2);
+           if (n1 && n2) {
+               const vx = n2.x - n1.x, vy = n2.y - n1.y;
+               const wx = p.x - n1.x, wy = p.y - n1.y;
+               const len2 = vx*vx + vy*vy;
+               const t = Math.max(0, Math.min(1, (wx*vx + wy*vy) / len2));
+               
+               this._pushUndo();
+               const newNode = { id: this.nextId++, x: n1.x + t*vx, y: n1.y + t*vy, fixed: true };
+               this.nodes.push(newNode);
+               
+               this.constraints.splice(cIdx, 1);
+               this.constraints.push({ type: c.type, n1: c.n1, n2: newNode.id });
+               this.constraints.push({ type: c.type, n1: newNode.id, n2: c.n2 });
+               
+               this.render();
+               this._checkValid();
+               return;
+           }
+        }
+
         this._pushUndo();
         this.nodes.push({ id: this.nextId++, x: p.x, y: p.y });
         this.render();
@@ -335,16 +370,28 @@ export class Designer {
     }
 
     // Nodes
+    // Nodes
     this.nodes.forEach(n => {
       ctx.beginPath();
-      ctx.arc(n.x, n.y, 8, 0, Math.PI * 2);
+      if (n.fixed) {
+        const sz = 16;
+        ctx.rect(n.x - sz/2, n.y - sz/2, sz, sz);
+      } else {
+        ctx.arc(n.x, n.y, 8, 0, Math.PI * 2);
+      }
       ctx.fillStyle = '#222';
       ctx.fill();
       ctx.lineWidth = 2;
-      ctx.strokeStyle = this.dragNode === n ? '#ffff00' : '#00f2ff';
+      ctx.strokeStyle = this.dragNode === n ? '#ffff00' : (n.fixed ? '#ffaa00' : '#00f2ff');
       ctx.stroke();
+
       ctx.beginPath();
-      ctx.arc(n.x, n.y, 3, 0, Math.PI * 2);
+      if (n.fixed) {
+        const sz = 6;
+        ctx.rect(n.x - sz/2, n.y - sz/2, sz, sz);
+      } else {
+        ctx.arc(n.x, n.y, 3, 0, Math.PI * 2);
+      }
       ctx.fillStyle = '#fff';
       ctx.fill();
     });

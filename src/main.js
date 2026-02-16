@@ -223,7 +223,8 @@ function setTool(tool, btn) {
   else btn.classList.add('active');
 
   const hints = {
-    node: 'Click to add joints.',
+    node: 'Click to add joints. Click on bone to split.',
+    joint: 'Click joint to toggle Fixed/Hinge.',
     bone: 'Drag joint to joint to add rigid bones.',
     muscle: 'Drag joint to joint to add muscles.',
     move: 'Drag joints to reposition.',
@@ -235,6 +236,7 @@ function setTool(tool, btn) {
 
 // Tool buttons
 document.getElementById('tool-node').onclick = e => setTool('node', e.currentTarget);
+document.getElementById('tool-joint').onclick = e => setTool('joint', e.currentTarget);
 document.getElementById('tool-bone').onclick = e => setTool('bone', e.currentTarget);
 document.getElementById('tool-muscle').onclick = e => setTool('muscle', e.currentTarget);
 document.getElementById('tool-move').onclick = e => setTool('move', e.currentTarget);

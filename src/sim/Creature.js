@@ -123,6 +123,9 @@ export class Creature {
 
     // Angle limiters for joint freedom
     const neighbors = new Map();
+    const nodeMap = new Map();
+    schemaNodes.forEach(n => nodeMap.set(n.id, n));
+
     schemaConstraints.forEach(schema => {
       if (!neighbors.has(schema.n1)) neighbors.set(schema.n1, new Set());
       if (!neighbors.has(schema.n2)) neighbors.set(schema.n2, new Set());
@@ -137,6 +140,11 @@ export class Creature {
     neighbors.forEach((set, centerId) => {
       const ids = Array.from(set);
       if (ids.length < 2) return;
+      
+      const centerNode = nodeMap.get(centerId);
+      const isFixed = centerNode && centerNode.fixed;
+      const currentStiffness = isFixed ? 1.0 : bendStiffness; // Max stiffness for fixed joints
+
       for (let i = 0; i < ids.length; i++) {
         for (let j = i + 1; j < ids.length; j++) {
           const bodyA = bodyMap[ids[i]];
@@ -146,8 +154,8 @@ export class Creature {
             bodyA,
             bodyB,
             length: Vector.magnitude(Vector.sub(bodyA.position, bodyB.position)),
-            stiffness: bendStiffness,
-            damping: 0.06
+            stiffness: currentStiffness,
+            damping: isFixed ? 0.1 : 0.06
           });
           limiter.isAngleLimiter = true;
           this.angleLimiters.push(limiter);
@@ -248,7 +256,7 @@ export class Creature {
     const strength = this.simConfig.muscleStrength || 1.2;
     const moveSpeed = Math.max(0.2, Math.min(2.2, this.simConfig.jointMoveSpeed || 1.0));
     const rangeScale = this.simConfig.muscleRange ?? 0.18;
-    const amplitude = Math.min(0.4, Math.max(0.05, rangeScale * strength));
+    const amplitude = Math.max(0.05, rangeScale * strength);
     const smoothingBase = this.simConfig.muscleSmoothing ?? 0.22;
     const smoothing = Math.min(0.5, Math.max(0.02, smoothingBase));
     let totalJerk = 0;
