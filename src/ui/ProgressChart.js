@@ -1,6 +1,6 @@
 /**
- * Evolution progress graphs — polished live charting.
- * Right mini-chart (in top bar), Left full panel with two chart canvases.
+ * Individual Metric Graph System
+ * Creates separate sparkline-style graphs for each evolution metric
  */
 export class ProgressChart {
   constructor(rightCanvas, leftCanvas, leftMeta) {
@@ -9,76 +9,165 @@ export class ProgressChart {
     this.leftMeta = leftMeta;
     this.rightCtx = rightCanvas ? rightCanvas.getContext('2d') : null;
     this.leftCtx = leftCanvas ? leftCanvas.getContext('2d') : null;
-    // Secondary metrics canvas (left panel bottom chart)
-    this.leftMetricsCanvas = document.getElementById('left-metrics-canvas');
-    this.leftMetricsCtx = this.leftMetricsCanvas ? this.leftMetricsCanvas.getContext('2d') : null;
-    // Bottom score chart
-    this.scoreCanvas = document.getElementById('score-progress-canvas');
-    this.scoreCtx = this.scoreCanvas ? this.scoreCanvas.getContext('2d') : null;
+
+    // Containers for individual graphs
+    this.leftContainer = document.getElementById('left-metrics-container');
+    this.topContainer = document.getElementById('top-metrics-container');
+    this.bottomContainer = document.getElementById('bottom-metrics-container');
+
+    // Individual metric graph configs
+    this.metrics = [
+      { id: 'fitness', label: 'Best Fitness', color: '#a855f7', getValue: p => p.bestFitness || 0, format: v => v.toFixed(1) },
+      { id: 'allbest', label: 'All-Time Best', color: '#00f2ff', getValue: p => p.allBest, format: v => `${v.toFixed(1)}m` },
+      { id: 'genbest', label: 'Gen Best', color: '#ff0055', getValue: p => p.genBest, format: v => `${v.toFixed(1)}m` },
+      { id: 'avgdist', label: 'Avg Distance', color: '#6ee7b7', getValue: p => p.avgDist, format: v => `${v.toFixed(1)}m` },
+      { id: 'avgspeed', label: 'Avg Speed', color: '#fbbf24', getValue: p => p.avgSpeed || 0, format: v => v.toFixed(2) },
+      { id: 'avgstab', label: 'Avg Stability', color: '#34d399', getValue: p => p.avgStability || 0, format: v => `${v.toFixed(0)}%` },
+      { id: 'evoscore', label: 'Evo Score', color: '#fb923c', getValue: p => p.evoScore, format: v => v.toFixed(1) },
+      { id: 'champfit', label: 'Champion Fitness', color: '#f87171', getValue: p => p.championFitness || 0, format: v => v.toFixed(1) },
+    ];
+
+    // Create graph elements
+    this.graphElements = new Map();
+    this.createGraphElements();
   }
 
-  /* ─── Shared Helpers ─── */
-
-  _drawGrid(ctx, w, h, x0, y0, gw, gh, steps = 4) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-    ctx.lineWidth = 1;
-    for (let i = 0; i <= steps; i++) {
-      const y = y0 - (i / steps) * gh;
-      ctx.beginPath();
-      ctx.moveTo(x0, y);
-      ctx.lineTo(x0 + gw, y);
-      ctx.stroke();
+  createGraphElements() {
+    // Create left panel graphs (all metrics, vertical layout)
+    if (this.leftContainer) {
+      this.metrics.forEach(metric => {
+        const graphEl = this.createMetricGraph(metric, 'left');
+        this.leftContainer.appendChild(graphEl.container);
+        this.graphElements.set(`left-${metric.id}`, graphEl);
+      });
     }
-    ctx.beginPath();
-    ctx.moveTo(x0, y0 - gh);
-    ctx.lineTo(x0, y0);
-    ctx.lineTo(x0 + gw, y0);
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.stroke();
-  }
 
-  _drawLine(ctx, data, toX, toY, color, getVal, width = 1.6, dashed = false) {
-    ctx.beginPath();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    if (dashed) ctx.setLineDash([4, 3]);
-    else ctx.setLineDash([]);
-    data.forEach((p, i) => {
-      const x = toX(i), y = toY(getVal(p));
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  _drawArea(ctx, data, toX, toY, baseline, color, getVal) {
-    if (data.length < 2) return;
-    ctx.beginPath();
-    ctx.moveTo(toX(0), baseline);
-    data.forEach((p, i) => {
-      ctx.lineTo(toX(i), toY(getVal(p)));
-    });
-    ctx.lineTo(toX(data.length - 1), baseline);
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
-  }
-
-  _drawYLabels(ctx, minVal, maxVal, x0, y0, gh, steps = 4) {
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.font = '9px "JetBrains Mono", monospace';
-    ctx.textAlign = 'right';
-    for (let i = 0; i <= steps; i++) {
-      const val = minVal + (i / steps) * (maxVal - minVal);
-      const y = y0 - (i / steps) * gh;
-      ctx.fillText(val.toFixed(val >= 100 ? 0 : 1), x0 - 4, y + 3);
+    // Create top bar graphs (key metrics, horizontal)
+    if (this.topContainer) {
+      const topMetrics = ['fitness', 'allbest', 'avgspeed', 'avgstab'];
+      topMetrics.forEach(metricId => {
+        const metric = this.metrics.find(m => m.id === metricId);
+        if (metric) {
+          const graphEl = this.createMetricGraph(metric, 'top');
+          this.topContainer.appendChild(graphEl.container);
+          this.graphElements.set(`top-${metric.id}`, graphEl);
+        }
+      });
     }
-    ctx.textAlign = 'left';
+
+    // Create bottom panel graphs (key metrics, horizontal cards)
+    if (this.bottomContainer) {
+      const bottomMetrics = ['fitness', 'allbest', 'genbest', 'avgdist', 'avgspeed', 'avgstab', 'evoscore'];
+      bottomMetrics.forEach(metricId => {
+        const metric = this.metrics.find(m => m.id === metricId);
+        if (metric) {
+          const graphEl = this.createMetricGraph(metric, 'bottom');
+          this.bottomContainer.appendChild(graphEl.container);
+          this.graphElements.set(`bottom-${metric.id}`, graphEl);
+        }
+      });
+    }
   }
 
-  /* ─── Right Mini-Chart (Top Bar) ─── */
+  createMetricGraph(metric, location) {
+    const container = document.createElement('div');
+
+    if (location === 'left') {
+      // Vertical layout for left panel
+      container.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        background: rgba(5, 8, 16, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 6px;
+        padding: 6px 8px;
+        min-height: 70px;
+      `;
+    } else if (location === 'top') {
+      // Horizontal mini cards for top
+      container.style.cssText = `
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background: rgba(5, 8, 16, 0.3);
+        border-radius: 4px;
+        padding: 4px 6px;
+        min-width: 0;
+      `;
+    } else {
+      // Bottom panel cards
+      container.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        background: rgba(5, 8, 16, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 6px;
+        padding: 6px 8px;
+        min-height: 90px;
+      `;
+    }
+
+    // Header with label and value
+    const header = document.createElement('div');
+    header.style.cssText = `
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 4px;
+      gap: 4px;
+    `;
+
+    const label = document.createElement('div');
+    label.textContent = metric.label;
+    label.style.cssText = `
+      font-size: ${location === 'top' ? '9px' : '10px'};
+      color: rgba(255, 255, 255, 0.4);
+      font-family: 'JetBrains Mono', monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    `;
+
+    const value = document.createElement('div');
+    value.style.cssText = `
+      font-size: ${location === 'top' ? '11px' : '13px'};
+      color: ${metric.color};
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      white-space: nowrap;
+    `;
+    value.textContent = metric.format(0);
+
+    header.appendChild(label);
+    header.appendChild(value);
+
+    // Canvas for sparkline
+    const canvas = document.createElement('canvas');
+    const canvasHeight = location === 'top' ? 32 : (location === 'left' ? 42 : 50);
+    canvas.width = 300;
+    canvas.height = canvasHeight;
+    canvas.style.cssText = `
+      width: 100%;
+      height: ${canvasHeight}px;
+      display: block;
+    `;
+
+    container.appendChild(header);
+    container.appendChild(canvas);
+
+    return {
+      container,
+      canvas,
+      ctx: canvas.getContext('2d'),
+      valueEl: value,
+      metric
+    };
+  }
 
   renderRight(sim) {
+    // Keep the simple right mini chart for backwards compatibility
     if (!this.rightCtx || !this.rightCanvas) return;
     const ctx = this.rightCtx;
     const w = this.rightCanvas.width;
@@ -131,196 +220,137 @@ export class ProgressChart {
     ctx.textAlign = 'left';
   }
 
-  /* ─── Left Main Chart (Evolution Progress) ─── */
-
   renderLeft(sim) {
-    this._renderLeftMain(sim);
-    this._renderLeftMetrics(sim);
-    this._renderBottomScore(sim);
-  }
-
-  _renderLeftMain(sim) {
-    if (!this.leftCtx || !this.leftCanvas) return;
-    const ctx = this.leftCtx;
-    const w = this.leftCanvas.width;
-    const h = this.leftCanvas.height;
-
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(5,8,16,0.85)';
-    ctx.fillRect(0, 0, w, h);
-
-    if (sim.progressHistory.length < 2) {
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.font = '11px "JetBrains Mono", monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('Waiting for generations...', w / 2, h / 2);
-      ctx.textAlign = 'left';
-      if (this.leftMeta) this.leftMeta.textContent = `G${sim.generation}`;
-      return;
-    }
-
-    const data = sim.progressHistory;
-    const maxY = Math.max(1, ...data.map(p => Math.max(p.bestFitness || 0, p.allBest, p.genBest)));
-    const minY = Math.min(0, ...data.map(p => Math.min(p.bestFitness || 0, p.genBest)));
-    const span = Math.max(1, maxY - minY);
-
-    const x0 = 42, y0 = h - 28;
-    const gw = w - x0 - 10, gh = h - 40;
-    const toX = i => x0 + (i / Math.max(1, data.length - 1)) * gw;
-    const toY = v => y0 - ((v - minY) / span) * gh;
-
-    // Grid + axes
-    this._drawGrid(ctx, w, h, x0, y0, gw, gh, 5);
-    this._drawYLabels(ctx, minY, maxY, x0, y0, gh, 5);
-
-    // X-axis generation labels
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.font = '8px "JetBrains Mono", monospace';
-    ctx.textAlign = 'center';
-    const step = Math.max(1, Math.floor(data.length / 6));
-    for (let i = 0; i < data.length; i += step) {
-      ctx.fillText(`G${data[i].generation}`, toX(i), y0 + 14);
-    }
-    ctx.textAlign = 'left';
-
-    // Area fill for all-best
-    this._drawArea(ctx, data, toX, toY, y0, 'rgba(0,242,255,0.06)', p => p.allBest);
-
-    // Lines
-    this._drawLine(ctx, data, toX, toY, 'rgba(168,85,247,0.95)', p => p.bestFitness || 0, 2.2);
-    this._drawLine(ctx, data, toX, toY, 'rgba(0,242,255,0.9)', p => p.allBest, 1.8);
-    this._drawLine(ctx, data, toX, toY, 'rgba(255,0,85,0.75)', p => p.genBest, 1.2);
-    this._drawLine(ctx, data, toX, toY, 'rgba(120,250,155,0.7)', p => p.avgDist, 1.0);
-
-    // Latest values as dots
-    const latest = data[data.length - 1];
-    const lastX = toX(data.length - 1);
-    [[latest.bestFitness || 0, '#a855f7'], [latest.allBest, '#00f2ff'], [latest.genBest, '#ff0055']].forEach(([val, col]) => {
-      ctx.beginPath();
-      ctx.arc(lastX, toY(val), 3, 0, Math.PI * 2);
-      ctx.fillStyle = col;
-      ctx.fill();
-    });
-
-    if (this.leftMeta) {
+    // Update meta info
+    if (this.leftMeta && sim.progressHistory.length > 0) {
+      const latest = sim.progressHistory[sim.progressHistory.length - 1];
       this.leftMeta.textContent = `G${latest.generation} · ${sim.championAwards} awards`;
     }
-  }
 
-  _renderLeftMetrics(sim) {
-    if (!this.leftMetricsCtx || !this.leftMetricsCanvas) return;
-    const ctx = this.leftMetricsCtx;
-    const w = this.leftMetricsCanvas.width;
-    const h = this.leftMetricsCanvas.height;
-
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(5,8,16,0.85)';
-    ctx.fillRect(0, 0, w, h);
-
-    if (sim.progressHistory.length < 2) return;
-
-    const data = sim.progressHistory;
-    const vals = data.map(p => [p.evoScore, p.avgSpeed || 0, p.championFitness || 0]).flat();
-    const maxV = Math.max(1, ...vals);
-    const minV = Math.min(0, ...vals);
-    const span = Math.max(1, maxV - minV);
-
-    const x0 = 42, y0 = h - 24;
-    const gw = w - x0 - 10, gh = h - 34;
-    const toX = i => x0 + (i / Math.max(1, data.length - 1)) * gw;
-    const toY = v => y0 - ((v - minV) / span) * gh;
-
-    this._drawGrid(ctx, w, h, x0, y0, gw, gh, 3);
-    this._drawYLabels(ctx, minV, maxV, x0, y0, gh, 3);
-
-    this._drawLine(ctx, data, toX, toY, 'rgba(251,191,36,0.85)', p => p.evoScore, 1.6);
-    this._drawLine(ctx, data, toX, toY, 'rgba(56,189,248,0.8)', p => (p.avgSpeed || 0) * 5, 1.2); // scaled for visibility
-    this._drawLine(ctx, data, toX, toY, 'rgba(248,113,113,0.7)', p => p.championFitness || 0, 1.2, true);
-  }
-
-  /* ─── Bottom Score Chart ─── */
-
-  _renderBottomScore(sim) {
-    if (!this.scoreCtx || !this.scoreCanvas) return;
-    const ctx = this.scoreCtx;
-    const w = this.scoreCanvas.width;
-    const h = this.scoreCanvas.height;
-
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(5,8,16,0.7)';
-    ctx.fillRect(0, 0, w, h);
-
-    if (sim.progressHistory.length < 2) {
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      ctx.font = '10px "JetBrains Mono", monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('Train to see history...', w / 2, h / 2 + 4);
-      ctx.textAlign = 'left';
-      return;
-    }
-
-    // Use history window from slider
-    const windowEl = document.getElementById('inp-history-window');
-    const windowSize = windowEl ? parseInt(windowEl.value, 10) : 120;
-    const data = sim.progressHistory.slice(-windowSize);
-
-    const maxV = Math.max(1, ...data.map(p => Math.max(p.allBest, p.bestFitness || 0, p.genBest)));
-    const minV = Math.min(0, ...data.map(p => Math.min(p.genBest, p.avgDist)));
-    const span = Math.max(1, maxV - minV);
-
-    const pad = 6;
-    const toX = i => pad + (i / Math.max(1, data.length - 1)) * (w - pad * 2);
-    const toY = v => h - pad - ((v - minV) / span) * (h - pad * 2);
-
-    this._drawArea(ctx, data, toX, toY, h, 'rgba(0,242,255,0.04)', p => p.allBest);
-
-    this._drawLine(ctx, data, toX, toY, 'rgba(0,242,255,0.8)', p => p.allBest, 1.4);
-    this._drawLine(ctx, data, toX, toY, 'rgba(255,0,85,0.65)', p => p.genBest, 1.0);
-    this._drawLine(ctx, data, toX, toY, 'rgba(168,85,247,0.8)', p => p.bestFitness || 0, 1.2);
-    this._drawLine(ctx, data, toX, toY, 'rgba(120,250,155,0.6)', p => p.avgDist, 0.8);
-
-    // Training details cards
-    const latest = data[data.length - 1];
-    this._updateScoreCards(sim, latest);
-  }
-
-  _updateScoreCards(sim, latest) {
-    const set = (id, val) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = val;
-    };
-    set('score-bestfit', (latest.bestFitness || 0).toFixed(1));
-    set('score-avgdist', `${latest.avgDist.toFixed(2)}m`);
-    set('score-avgstab', `${(latest.avgStability || 0).toFixed(0)}%`);
-    set('score-avgspeed', (latest.avgSpeed || 0).toFixed(2));
-    set('score-slip', '—');
-    set('score-mut', `${(sim.effectiveMutationRate() * 100).toFixed(0)}%`);
-    set('score-awards', String(sim.championAwards));
-
-    const totalSec = Math.floor(sim.simTimeElapsed);
-    if (totalSec < 60) {
-      set('score-elapsed', `${totalSec}s`);
-    } else {
-      const m = Math.floor(totalSec / 60);
-      const s = totalSec % 60;
-      set('score-elapsed', `${m}:${String(s).padStart(2, '0')}`);
-    }
-
-    const modeEl = document.getElementById('score-mode');
-    if (modeEl) {
-      if (sim.sandboxMode) {
-        modeEl.textContent = 'SANDBOX';
-        modeEl.style.color = '#34d399';
-      } else {
-        modeEl.textContent = 'TRAINING';
-        modeEl.style.color = '#22d3ee';
+    // Render all individual metric graphs
+    this.graphElements.forEach((graphEl, key) => {
+      if (key.startsWith('left-')) {
+        this.renderMetricGraph(graphEl, sim.progressHistory, sim);
       }
-    }
+    });
 
-    const windowLabel = document.getElementById('val-history-window');
-    const windowEl = document.getElementById('inp-history-window');
-    if (windowLabel && windowEl) {
-      windowLabel.textContent = `${windowEl.value}g`;
-    }
+    // Render top bar metric graphs
+    this.graphElements.forEach((graphEl, key) => {
+      if (key.startsWith('top-')) {
+        this.renderMetricGraph(graphEl, sim.progressHistory, sim);
+      }
+    });
+
+    // Render bottom metric graphs
+    this.graphElements.forEach((graphEl, key) => {
+      if (key.startsWith('bottom-')) {
+        this.renderMetricGraph(graphEl, sim.progressHistory, sim);
+      }
+    });
+  }
+
+  renderMetricGraph(graphEl, history, sim) {
+    if (history.length < 2) return;
+
+    const { ctx, canvas, valueEl, metric } = graphEl;
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Get data values
+    const values = history.map(p => metric.getValue(p));
+    const minVal = Math.min(...values);
+    const maxVal = Math.max(...values);
+    const span = Math.max(0.1, maxVal - minVal);
+
+    // Update current value display
+    const latestValue = values[values.length - 1];
+    valueEl.textContent = metric.format(latestValue);
+
+    // Drawing functions
+    const pad = 2;
+    const toX = i => (i / (history.length - 1)) * (w - pad * 2) + pad;
+    const toY = v => h - pad - ((v - minVal) / span) * (h - pad * 2);
+
+    // Draw subtle grid line at middle
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const midY = h / 2;
+    ctx.moveTo(pad, midY);
+    ctx.lineTo(w - pad, midY);
+    ctx.stroke();
+
+    // Draw area fill
+    ctx.beginPath();
+    ctx.moveTo(toX(0), h - pad);
+    values.forEach((val, i) => {
+      ctx.lineTo(toX(i), toY(val));
+    });
+    ctx.lineTo(toX(values.length - 1), h - pad);
+    ctx.closePath();
+
+    // Semi-transparent fill based on metric color
+    const rgb = this.hexToRgb(metric.color);
+    ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`;
+    ctx.fill();
+
+    // Draw line
+    ctx.beginPath();
+    values.forEach((val, i) => {
+      const x = toX(i);
+      const y = toY(val);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = metric.color;
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+
+    // Draw dot at latest value
+    const lastX = toX(values.length - 1);
+    const lastY = toY(latestValue);
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = metric.color;
+    ctx.fill();
+  }
+
+  hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : { r: 255, g: 255, b: 255 };
+  }
+
+  // Helper drawing methods
+  _drawLine(ctx, data, toX, toY, color, getVal, width = 1.6, dashed = false) {
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    if (dashed) ctx.setLineDash([4, 3]);
+    else ctx.setLineDash([]);
+    data.forEach((p, i) => {
+      const x = toX(i), y = toY(getVal(p));
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  _drawArea(ctx, data, toX, toY, baseline, color, getVal) {
+    if (data.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(toX(0), baseline);
+    data.forEach((p, i) => {
+      ctx.lineTo(toX(i), toY(getVal(p)));
+    });
+    ctx.lineTo(toX(data.length - 1), baseline);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
   }
 }

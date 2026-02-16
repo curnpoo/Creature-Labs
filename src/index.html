@@ -274,36 +274,27 @@
                     <div
                         id="panel-neural"
                         class="sim-panel grid-lines"
-                        style="flex: 1; border-radius: 0; border: none; overflow: hidden"
+                        style="flex: 1; border-radius: 0; border: none; overflow: hidden; display: flex; flex-direction: column;"
                     >
                         <div
                             class="sim-panel-title"
-                            style="border-color: var(--secondary)"
+                            style="border-color: var(--secondary); flex-shrink: 0;"
                         >
                             <span><i class="fas fa-brain mr-1"></i> Neural
                                 Network</span>
                             <span class="text-[var(--secondary)]">LIVE</span>
                         </div>
-                        <div
-                            style="display: flex; gap: 0; height: calc(100% - 32px)"
-                        >
-                            <div style="flex: 1; min-width: 0">
+                        <div style="display: flex; flex: 1; min-height: 0;">
+                            <div style="flex: 0 0 380px; min-width: 0">
                                 <canvas
                                     id="nn-canvas"
-                                    width="360"
+                                    width="380"
                                     height="92"
                                     class="w-full h-full"
                                 ></canvas>
                             </div>
-                            <div
-                                style="flex: 1; min-width: 0; border-left: 1px solid var(--border-color)"
-                            >
-                                <canvas
-                                    id="progress-canvas"
-                                    width="360"
-                                    height="92"
-                                    class="w-full h-full"
-                                ></canvas>
+                            <div id="top-metrics-container" style="flex: 1; min-width: 0; border-left: 1px solid var(--border-color); display: flex; gap: 0; padding: 4px;">
+                                <!-- Individual metric mini-graphs will be inserted here -->
                             </div>
                         </div>
                     </div>
@@ -319,82 +310,14 @@
                         class="sim-panel-title"
                         style="border-color: rgba(0, 242, 255, 0.3)"
                     >
-                        <span><i class="fas fa-chart-area mr-1"></i> Evolution
-                            Progress</span>
+                        <span><i class="fas fa-chart-area mr-1"></i> Metrics
+                            History</span>
                         <span id="left-graph-meta" class="text-cyan-300"
                         >G1</span>
                     </div>
-                    <div class="chart-container">
-                        <canvas
-                            id="left-progress-canvas"
-                            width="320"
-                            height="220"
-                            class="w-full"
-                            style="height: 220px"
-                        ></canvas>
-                    </div>
-                    <div class="chart-legend" style="padding: 6px 10px">
-                        <div class="chart-legend-item">
-                            <div
-                                class="chart-legend-dot"
-                                style="background: #a855f7"
-                            >
-                            </div>Fitness
-                        </div>
-                        <div class="chart-legend-item">
-                            <div
-                                class="chart-legend-dot"
-                                style="background: #00f2ff"
-                            >
-                            </div>All-Time
-                        </div>
-                        <div class="chart-legend-item">
-                            <div
-                                class="chart-legend-dot"
-                                style="background: #ff0055"
-                            >
-                            </div>Gen Best
-                        </div>
-                        <div class="chart-legend-item">
-                            <div
-                                class="chart-legend-dot"
-                                style="background: #6ee7b7"
-                            >
-                            </div>Avg Dist
-                        </div>
-                    </div>
-                    <div class="chart-container">
-                        <canvas
-                            id="left-metrics-canvas"
-                            width="320"
-                            height="160"
-                            class="w-full"
-                            style="height: 160px"
-                        ></canvas>
-                    </div>
-                    <div class="chart-legend" style="padding: 6px 10px">
-                        <div class="chart-legend-item">
-                            <div
-                                class="chart-legend-dot"
-                                style="background: #fbbf24"
-                            >
-                            </div>Evo Score
-                        </div>
-                        <div class="chart-legend-item">
-                            <div
-                                class="chart-legend-dot"
-                                style="background: #38bdf8"
-                            >
-                            </div>Avg Speed
-                        </div>
-                        <div class="chart-legend-item">
-                            <div
-                                class="chart-legend-dot"
-                                style="background: #f87171"
-                            >
-                            </div>Champion
-                        </div>
-                    </div>
+
+                    <!-- Individual metric graphs container -->
+                    <div id="left-metrics-container" style="padding: 4px 8px 8px; display: flex; flex-direction: column; gap: 2px;"></div>
 
                     <!-- Sandbox Scorecard (hidden until sandbox mode) -->
                     <div
@@ -1236,54 +1159,11 @@
                     <!-- TRAINING MODE DETAILS -->
                     <div id="training-details" class="h-full flex flex-col">
                         <div class="sim-panel-title" style="border: none; padding: 4px 0 2px">
-                            <span><i class="fas fa-table-list mr-1"></i> Training Details</span>
+                            <span><i class="fas fa-table-list mr-1"></i> Evolution Metrics</span>
                             <span id="score-mode" class="text-cyan-300 text-[9px]">TRAINING</span>
                         </div>
-                        <div class="grid grid-cols-4 gap-2 text-xs" style="font-family: 'JetBrains Mono', monospace">
-                            <div class="fitness-card">
-                                <div class="fitness-card-label">Best Fit</div>
-                                <div class="fitness-card-value text-purple-300" id="score-bestfit">0.0</div>
-                            </div>
-                            <div class="fitness-card">
-                                <div class="fitness-card-label">Avg Dist</div>
-                                <div class="fitness-card-value text-cyan-300" id="score-avgdist">0.00m</div>
-                            </div>
-                            <div class="fitness-card">
-                                <div class="fitness-card-label">Avg Stab</div>
-                                <div class="fitness-card-value text-emerald-300" id="score-avgstab">0%</div>
-                            </div>
-                            <div class="fitness-card">
-                                <div class="fitness-card-label">Avg Speed</div>
-                                <div class="fitness-card-value text-yellow-300" id="score-avgspeed">0.00</div>
-                            </div>
-                            <div class="fitness-card">
-                                <div class="fitness-card-label">Slip</div>
-                                <div class="fitness-card-value text-rose-300" id="score-slip">0.00</div>
-                            </div>
-                            <div class="fitness-card">
-                                <div class="fitness-card-label">Mut. Rate</div>
-                                <div class="fitness-card-value text-pink-300" id="score-mut">0%</div>
-                            </div>
-                            <div class="fitness-card">
-                                <div class="fitness-card-label">Awards</div>
-                                <div class="fitness-card-value text-blue-300" id="score-awards">0</div>
-                            </div>
-                            <div class="fitness-card">
-                                <div class="fitness-card-label">Elapsed</div>
-                                <div class="fitness-card-value text-slate-200" id="score-elapsed">0:00</div>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-4 mt-1">
-                            <div class="control-group" style="flex: 1; margin-bottom: 0">
-                                <div class="control-label">
-                                    History Window <span class="control-val" id="val-history-window">120g</span>
-                                </div>
-                                <input type="range" id="inp-history-window" min="20" max="240" value="120" step="10">
-                            </div>
-                        </div>
-                        <div class="chart-container" style="flex: 1; min-height: 0; margin-top: 2px">
-                            <canvas id="score-progress-canvas" width="720" height="110" class="w-full h-full"></canvas>
-                        </div>
+                        <!-- Individual metric graphs in horizontal layout -->
+                        <div id="bottom-metrics-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; padding: 4px 0 8px; flex: 1;"></div>
                     </div>
 
                     <!-- SANDBOX MODE SCORECARD -->
