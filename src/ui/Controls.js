@@ -23,7 +23,7 @@ export class Controls {
       'replay-label', 'replay-play-icon',
       'fitness-tag', 'fitness-speed', 'fitness-stability',
       'fitness-energy', 'fitness-energy-bar', 'fitness-stumbles', 'fitness-spin',
-      'val-spinpen'
+      'val-spinpen', 'val-maxenergy', 'val-regen', 'val-energycost'
     ];
     ids.forEach(id => {
       this.els[id] = document.getElementById(id);
@@ -120,6 +120,30 @@ export class Controls {
       this.sim.muscleSmoothing = v / 100;
       this.sim.creatures.forEach(c => { c.simConfig.muscleSmoothing = this.sim.muscleSmoothing; });
     });
+
+    // Energy system sliders
+    this._bindSlider('inp-maxenergy', v => {
+      this.sim.maxEnergy = v;
+      this.sim.creatures.forEach(c => {
+        if (c.energy) {
+          c.energy.max = v;
+          c.energy.current = Math.min(c.energy.current, v);
+        }
+      });
+    });
+    this._bindSlider('inp-regen', v => {
+      this.sim.energyRegenRate = v;
+      this.sim.creatures.forEach(c => {
+        if (c.energy) c.energy.regenRate = v;
+      });
+    });
+    this._bindSlider('inp-energycost', v => {
+      this.sim.energyUsagePerActuation = v / 100;
+      this.sim.creatures.forEach(c => {
+        if (c.energy) c.energy.usagePerActuation = v / 100;
+      });
+    });
+
     this._bindSlider('inp-distreward', v => { this.sim.distanceRewardWeight = v; });
     this._bindSlider('inp-speedreward', v => { this.sim.speedRewardWeight = v / 100; });
     this._bindSlider('inp-jitterpen', v => { this.sim.jitterPenaltyWeight = v; });
@@ -369,6 +393,9 @@ export class Controls {
     set('val-bodyair', `${s.bodyAirFriction.toFixed(3)}`);
     set('val-musrange', `${Math.round(s.muscleRange * 100)}%`);
     set('val-musmooth', `${Math.round(s.muscleSmoothing * 100)}%`);
+    set('val-maxenergy', `${Math.round(s.maxEnergy)}`);
+    set('val-regen', `${Math.round(s.energyRegenRate)}/s`);
+    set('val-energycost', `${(s.energyUsagePerActuation || 0.8).toFixed(2)}`);
     set('val-distreward', `${Math.round(s.distanceRewardWeight)}`);
     set('val-speedreward', `${s.speedRewardWeight.toFixed(2)}`);
     set('val-jitterpen', `${Math.round(s.jitterPenaltyWeight)}`);
@@ -434,6 +461,9 @@ export class Controls {
     s.eliteCount = CONFIG.defaultEliteCount;
     s.tournamentSize = CONFIG.defaultTournamentSize;
     s.zoom = CONFIG.defaultZoom;
+    s.maxEnergy = CONFIG.defaultMaxEnergy;
+    s.energyRegenRate = CONFIG.defaultEnergyRegenRate;
+    s.energyUsagePerActuation = CONFIG.defaultEnergyUsagePerActuation;
 
     const sliderValues = {
       'inp-speed': String(Math.round(s.simSpeed)),
@@ -462,7 +492,10 @@ export class Controls {
       'inp-neurons': String(Math.round(s.neuronsPerLayer)),
       'inp-elites': String(Math.round(s.eliteCount)),
       'inp-tournament': String(Math.round(s.tournamentSize)),
-      'inp-zoom': String(Math.round(s.zoom * 100))
+      'inp-zoom': String(Math.round(s.zoom * 100)),
+      'inp-maxenergy': String(Math.round(s.maxEnergy)),
+      'inp-regen': String(Math.round(s.energyRegenRate)),
+      'inp-energycost': String(Math.round(s.energyUsagePerActuation * 100))
     };
 
     Object.entries(sliderValues).forEach(([id, value]) => {
