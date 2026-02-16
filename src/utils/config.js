@@ -38,6 +38,7 @@ export const CONFIG = {
   defaultDistanceRewardWeight: 320,
   defaultSpeedRewardWeight: 0.35,
   defaultJitterPenaltyWeight: 40,
+  defaultGroundSlipPenaltyWeight: 8,
   defaultZoom: 1.0,
 };
 

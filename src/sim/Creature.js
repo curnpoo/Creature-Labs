@@ -34,6 +34,8 @@ export class Creature {
       stumbles: 0,
       spin: 0,
       actuationJerk: 0,
+      actuationLevel: 0,
+      groundSlip: 0,
       frames: 0,
       airFrames: 0,
       maxX: -Infinity,
@@ -250,6 +252,7 @@ export class Creature {
     const smoothingBase = this.simConfig.muscleSmoothing ?? 0.22;
     const smoothing = Math.min(0.5, Math.max(0.02, smoothingBase));
     let totalJerk = 0;
+    let totalActuation = 0;
     this.muscles.forEach((m, i) => {
       const rawSignal = outputs[i] || 0;
       const prevSignal = m.smoothSignal !== undefined ? m.smoothSignal : rawSignal;
@@ -264,9 +267,12 @@ export class Creature {
       m.c.currentLength = nextLength;
       m.c.length = nextLength;
       m.currentSignal = smoothSignal;
+      totalActuation += Math.abs(smoothSignal);
     });
     const avgJerk = totalJerk / Math.max(1, this.muscles.length);
     this.stats.actuationJerk = this.stats.actuationJerk * 0.9 + avgJerk * 0.1;
+    const avgAct = totalActuation / Math.max(1, this.muscles.length);
+    this.stats.actuationLevel = this.stats.actuationLevel * 0.9 + avgAct * 0.1;
   }
 
   sampleFitness(dtSec, groundY) {
@@ -288,14 +294,22 @@ export class Creature {
 
     let avgVy = 0;
     let avgOmega = 0;
+    let groundedAbsVx = 0;
+    let groundedCount = 0;
     const ys = [];
     this.bodies.forEach(b => {
       avgVy += Math.abs(b.velocity.y);
       avgOmega += Math.abs(b.angularVelocity);
       ys.push(b.position.y);
+      if ((b.position.y + CONFIG.nodeRadius) >= (groundY - 2)) {
+        groundedAbsVx += Math.abs(b.velocity.x);
+        groundedCount++;
+      }
     });
     avgVy /= Math.max(1, this.bodies.length);
     avgOmega /= Math.max(1, this.bodies.length);
+    const avgGroundSlip = groundedAbsVx / Math.max(1, groundedCount);
+    this.stats.groundSlip = this.stats.groundSlip * 0.9 + avgGroundSlip * 0.1;
     this.stats.spin = this.stats.spin * 0.9 + avgOmega * 0.1;
 
     const yAvg = ys.reduce((a, b) => a + b, 0) / Math.max(1, ys.length);
@@ -322,6 +336,8 @@ export class Creature {
       stumbles: this.stats.stumbles,
       spin: this.stats.spin,
       actuationJerk: this.stats.actuationJerk,
+      actuationLevel: this.stats.actuationLevel,
+      groundSlip: this.stats.groundSlip,
       maxX: this.stats.maxX
     };
   }

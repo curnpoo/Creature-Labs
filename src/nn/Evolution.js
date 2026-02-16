@@ -22,6 +22,7 @@ export class Evolution {
 
     // Sort by fitness descending
     const sorted = creatures.slice().sort((a, b) => b.fitness - a.fitness);
+    if (!sorted.length) return [];
     const nextGen = [];
 
     // Elitism: copy top creatures unchanged
@@ -35,13 +36,20 @@ export class Evolution {
       0.95,
       mutationRate + stagnantGens * 0.015
     );
+    const dnaLength = sorted[0].dna.length;
+    const immigrantCount = Math.max(1, Math.floor(popSize * 0.12));
 
     // Fill rest via tournament selection + crossover + mutation
     while (nextGen.length < popSize) {
+      const slotsLeft = popSize - nextGen.length;
+      if (slotsLeft <= immigrantCount) {
+        nextGen.push(Evolution.randomDNA(dnaLength));
+        continue;
+      }
       const parentA = Evolution.tournamentSelect(sorted, tournamentSize);
       const parentB = Evolution.tournamentSelect(sorted, tournamentSize);
       let childDna = Evolution.crossover(parentA.dna, parentB.dna);
-      childDna = Evolution.mutate(childDna, effectiveRate, mutationSize);
+      childDna = Evolution.mutate(childDna, effectiveRate, mutationSize, stagnantGens);
       nextGen.push(childDna);
     }
 
@@ -77,13 +85,24 @@ export class Evolution {
   /**
    * Gaussian mutation: each weight has mutationRate chance of += N(0, mutationSize).
    */
-  static mutate(dna, mutationRate, mutationSize) {
+  static mutate(dna, mutationRate, mutationSize, stagnantGens = 0) {
     const mutated = new Float32Array(dna);
+    const resetChance = Math.min(0.2, 0.01 + stagnantGens * 0.01 + mutationRate * 0.05);
     for (let i = 0; i < mutated.length; i++) {
-      if (Math.random() < mutationRate) {
+      if (Math.random() < resetChance) {
+        mutated[i] = gaussianRandom() * 0.8;
+      } else if (Math.random() < mutationRate) {
         mutated[i] += gaussianRandom() * mutationSize * 0.3;
       }
     }
     return mutated;
+  }
+
+  static randomDNA(length) {
+    const dna = new Float32Array(length);
+    for (let i = 0; i < length; i++) {
+      dna[i] = gaussianRandom() * 0.8;
+    }
+    return dna;
   }
 }

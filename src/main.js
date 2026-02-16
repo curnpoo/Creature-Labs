@@ -61,17 +61,14 @@ function setScreen(name) {
     sim.stopLoop();
     designer.render();
   } else if (name === 'sim') {
-    // Transfer design to simulation
+    // Transfer design to simulation; wait for explicit Start Sim.
     const design = designer.getDesign();
     sim.nodes = design.nodes;
     sim.constraints = design.constraints;
     resizeCanvases();
-
-    if (!sim.startSimulation()) {
-      setScreen('draw');
-      return;
-    }
     worldCtx = worldCanvas.getContext('2d');
+    const icon = document.getElementById('icon-pause');
+    if (icon) icon.className = 'fas fa-pause';
   }
 }
 
@@ -151,6 +148,17 @@ controls.bind({
   onStartDraw: () => setScreen('draw'),
   onBack: () => setScreen('splash'),
   onRun: () => setScreen('sim'),
+  onStartSim: () => {
+    const design = designer.getDesign();
+    sim.nodes = design.nodes;
+    sim.constraints = design.constraints;
+    if (!sim.startSimulation()) {
+      alert('Design needs at least 2 nodes, 1 bone, and 1 muscle.');
+      return;
+    }
+    const icon = document.getElementById('icon-pause');
+    if (icon) icon.className = 'fas fa-pause';
+  },
   onEdit: () => setScreen('draw'),
   onPause: () => {
     sim.paused = !sim.paused;
@@ -162,6 +170,12 @@ controls.bind({
     sim.nodes = design.nodes;
     sim.constraints = design.constraints;
     sim.startSimulation();
+  },
+  onResetSettings: () => {
+    if (sim.engine) {
+      sim.engine.world.gravity.y = sim.gravity;
+      sim.syncCreatureRuntimeSettings();
+    }
   },
   onPresetSelect: idx => {
     if (idx >= 0 && idx < PRESETS.length) {

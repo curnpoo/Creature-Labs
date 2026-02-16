@@ -65,6 +65,7 @@ export class Simulation {
     this.distanceRewardWeight = CONFIG.defaultDistanceRewardWeight;
     this.speedRewardWeight = CONFIG.defaultSpeedRewardWeight;
     this.jitterPenaltyWeight = CONFIG.defaultJitterPenaltyWeight;
+    this.groundSlipPenaltyWeight = CONFIG.defaultGroundSlipPenaltyWeight;
     this.spawnX = 60;
     this.mutationRate = CONFIG.defaultMutationRate;
     this.mutationSize = CONFIG.defaultMutationSize;
@@ -340,12 +341,13 @@ export class Simulation {
     const distance = this.distMetersContinuousFromX(progressX);
     return (
       distance * this.distanceRewardWeight +
-      fitness.speed * this.speedRewardWeight +
+      fitness.speed * this.speedRewardWeight * (0.2 + (fitness.actuationLevel || 0) * 0.8) +
       fitness.stability * 0.5 -
       fitness.airtimePct * 0.2 -
       fitness.stumbles * 10 -
       fitness.spin * 30 -
-      (fitness.actuationJerk || 0) * this.jitterPenaltyWeight
+      (fitness.actuationJerk || 0) * this.jitterPenaltyWeight -
+      (fitness.groundSlip || 0) * this.groundSlipPenaltyWeight
     );
   }
 

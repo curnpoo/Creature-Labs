@@ -1,4 +1,4 @@
-import { STORAGE_KEYS } from '../utils/config.js';
+import { STORAGE_KEYS, CONFIG } from '../utils/config.js';
 
 /**
  * Right panel controls + bindings.
@@ -16,7 +16,7 @@ export class Controls {
       'val-jointspeed', 'val-joint', 'val-gravity', 'val-groundfric',
       'val-groundstatic', 'val-traction', 'val-bodyfric', 'val-bodystatic',
       'val-bodyair', 'val-musrange', 'val-musmooth', 'val-distreward',
-      'val-speedreward', 'val-jitterpen', 'val-mut',
+      'val-speedreward', 'val-jitterpen', 'val-slippen', 'val-mut',
       'val-mutsize', 'val-zoom', 'val-cam',
       'val-hidden', 'val-neurons', 'val-elites', 'val-tournament',
       'cam-lock', 'cam-free', 'icon-pause',
@@ -30,7 +30,7 @@ export class Controls {
   }
 
   bind(callbacks) {
-    const { onPause, onReset, onEdit, onStartDraw, onBack, onRun } = callbacks;
+    const { onPause, onReset, onEdit, onStartDraw, onBack, onRun, onStartSim, onResetSettings } = callbacks;
 
     // Screen nav
     const btnStartDraw = document.getElementById('btn-start-draw');
@@ -43,10 +43,19 @@ export class Controls {
     // Sim controls
     const btnPause = document.getElementById('btn-pause');
     if (btnPause) btnPause.onclick = onPause;
+    const btnStartSim = document.getElementById('btn-start-sim');
+    if (btnStartSim) btnStartSim.onclick = onStartSim;
     const btnReset = document.getElementById('btn-reset');
     if (btnReset) btnReset.onclick = onReset;
     const btnEdit = document.getElementById('btn-edit');
     if (btnEdit) btnEdit.onclick = onEdit;
+    const btnResetSettings = document.getElementById('btn-reset-settings');
+    if (btnResetSettings) {
+      btnResetSettings.onclick = () => {
+        this.resetToDefaults();
+        if (onResetSettings) onResetSettings();
+      };
+    }
 
     // Sliders
     this._bindSlider('inp-speed', v => { this.sim.simSpeed = v; });
@@ -104,6 +113,7 @@ export class Controls {
     this._bindSlider('inp-distreward', v => { this.sim.distanceRewardWeight = v; });
     this._bindSlider('inp-speedreward', v => { this.sim.speedRewardWeight = v / 100; });
     this._bindSlider('inp-jitterpen', v => { this.sim.jitterPenaltyWeight = v; });
+    this._bindSlider('inp-slippen', v => { this.sim.groundSlipPenaltyWeight = v; });
     this._bindSlider('inp-mut', v => { this.sim.mutationRate = v / 100; });
     this._bindSlider('inp-mutsize', v => { this.sim.mutationSize = v / 100; });
 
@@ -328,6 +338,7 @@ export class Controls {
     set('val-distreward', `${Math.round(s.distanceRewardWeight)}`);
     set('val-speedreward', `${s.speedRewardWeight.toFixed(2)}`);
     set('val-jitterpen', `${Math.round(s.jitterPenaltyWeight)}`);
+    set('val-slippen', `${Math.round(s.groundSlipPenaltyWeight)}`);
     set('val-mut', `${Math.round(s.mutationRate * 100)}%`);
     set('val-mutsize', `${s.mutationSize.toFixed(2)}x`);
     set('val-zoom', `${s.zoom.toFixed(2)}x`);
@@ -343,5 +354,70 @@ export class Controls {
     if (this.els['fitness-stability']) this.els['fitness-stability'].textContent = `${f.stability.toFixed(0)}%`;
     if (this.els['fitness-airtime']) this.els['fitness-airtime'].textContent = `${f.airtimePct.toFixed(0)}%`;
     if (this.els['fitness-stumbles']) this.els['fitness-stumbles'].textContent = String(f.stumbles);
+  }
+
+  resetToDefaults() {
+    const s = this.sim;
+    s.simSpeed = CONFIG.defaultSimSpeed;
+    s.simDuration = CONFIG.defaultSimDuration;
+    s.popSize = CONFIG.defaultPopSize;
+    s.gravity = CONFIG.defaultGravity;
+    s.muscleStrength = CONFIG.defaultMuscleStrength;
+    s.jointMoveSpeed = CONFIG.defaultJointMoveSpeed;
+    s.jointFreedom = CONFIG.defaultJointFreedom;
+    s.groundFriction = CONFIG.defaultGroundFriction;
+    s.groundStaticFriction = CONFIG.defaultGroundStaticFriction;
+    s.tractionDamping = CONFIG.defaultTractionDamping;
+    s.bodyFriction = CONFIG.defaultBodyFriction;
+    s.bodyStaticFriction = CONFIG.defaultBodyStaticFriction;
+    s.bodyAirFriction = CONFIG.defaultBodyAirFriction;
+    s.muscleRange = CONFIG.defaultMuscleRange;
+    s.muscleSmoothing = CONFIG.defaultMuscleSmoothing;
+    s.distanceRewardWeight = CONFIG.defaultDistanceRewardWeight;
+    s.speedRewardWeight = CONFIG.defaultSpeedRewardWeight;
+    s.jitterPenaltyWeight = CONFIG.defaultJitterPenaltyWeight;
+    s.groundSlipPenaltyWeight = CONFIG.defaultGroundSlipPenaltyWeight;
+    s.mutationRate = CONFIG.defaultMutationRate;
+    s.mutationSize = CONFIG.defaultMutationSize;
+    s.hiddenLayers = CONFIG.defaultHiddenLayers;
+    s.neuronsPerLayer = CONFIG.defaultNeuronsPerLayer;
+    s.eliteCount = CONFIG.defaultEliteCount;
+    s.tournamentSize = CONFIG.defaultTournamentSize;
+    s.zoom = CONFIG.defaultZoom;
+
+    const sliderValues = {
+      'inp-speed': String(Math.round(s.simSpeed)),
+      'inp-duration': String(Math.round(s.simDuration)),
+      'inp-pop': String(Math.round(s.popSize)),
+      'inp-strength': String(Math.round(s.muscleStrength * 100)),
+      'inp-jointspeed': String(Math.round(s.jointMoveSpeed * 100)),
+      'inp-joint': String(Math.round(s.jointFreedom * 100)),
+      'inp-gravity': s.gravity.toFixed(1),
+      'inp-groundfric': String(Math.round(s.groundFriction * 100)),
+      'inp-groundstatic': String(Math.round(s.groundStaticFriction * 100)),
+      'inp-traction': String(Math.round(s.tractionDamping * 100)),
+      'inp-bodyfric': String(Math.round(s.bodyFriction * 100)),
+      'inp-bodystatic': String(Math.round(s.bodyStaticFriction * 100)),
+      'inp-bodyair': String(Math.round(s.bodyAirFriction * 1000)),
+      'inp-musrange': String(Math.round(s.muscleRange * 100)),
+      'inp-musmooth': String(Math.round(s.muscleSmoothing * 100)),
+      'inp-distreward': String(Math.round(s.distanceRewardWeight)),
+      'inp-speedreward': String(Math.round(s.speedRewardWeight * 100)),
+      'inp-jitterpen': String(Math.round(s.jitterPenaltyWeight)),
+      'inp-slippen': String(Math.round(s.groundSlipPenaltyWeight)),
+      'inp-mut': String(Math.round(s.mutationRate * 100)),
+      'inp-mutsize': String(Math.round(s.mutationSize * 100)),
+      'inp-hidden': String(Math.round(s.hiddenLayers)),
+      'inp-neurons': String(Math.round(s.neuronsPerLayer)),
+      'inp-elites': String(Math.round(s.eliteCount)),
+      'inp-tournament': String(Math.round(s.tournamentSize)),
+      'inp-zoom': String(Math.round(s.zoom * 100))
+    };
+
+    Object.entries(sliderValues).forEach(([id, value]) => {
+      const el = document.getElementById(id);
+      if (el) el.value = value;
+    });
+    this.updateLabels();
   }
 }
