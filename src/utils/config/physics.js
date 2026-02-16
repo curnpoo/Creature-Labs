@@ -9,13 +9,13 @@ export const PHYSICS_CONFIG = {
   gravity: 1.0,                 // Gravity strength (1.0 = normal)
 
   // Ground/Surface Properties (Matter.js range: 0-1)
-  groundFriction: 0.5,          // Ground kinetic friction (0.5 = realistic walking surface)
-  groundStaticFriction: 0.8,    // Ground static friction (resistance to start sliding)
-  tractionDamping: 0.93,        // Velocity damping on ground contact (0.93 = keep 7%)
+  groundFriction: 0.95,         // Ground kinetic friction (0.95 = high grip, prevents sliding exploits)
+  groundStaticFriction: 1.0,    // Ground static friction (maximum resistance to start sliding)
+  tractionDamping: 0.75,        // Velocity damping on ground contact (0.75 = keep 25%, more aggressive)
 
   // Body/Node Properties (Matter.js range: 0-1)
-  bodyFriction: 0.4,            // Body-to-body kinetic friction
-  bodyStaticFriction: 0.6,      // Body-to-body static friction
+  bodyFriction: 0.85,           // Body-to-body kinetic friction (increased to prevent slipping)
+  bodyStaticFriction: 0.95,     // Body-to-body static friction (high to prevent jitter)
   bodyAirFriction: 0.08,        // Air resistance when airborne
   bodyDensity: 0.0035,          // Body mass density
   bodyRestitution: 0,           // Bounciness (0 = no bounce)
