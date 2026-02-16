@@ -177,6 +177,9 @@
                     class="sim-panel"
                     style="grid-area: top-bar; display: flex; border-bottom: 1px solid var(--border-color); border-radius: 0"
                 >
+                    <button class="panel-toggle-btn" data-panel="panel-top-bar" title="Hide Top Panel">
+                        <i class="fas fa-chevron-up"></i>
+                    </button>
                     <!-- HUD Panel -->
                     <div
                         id="panel-hud"
@@ -321,6 +324,9 @@
                     class="sim-panel"
                     style="grid-area: left; width: 320px; border-right: 1px solid var(--border-color); border-radius: 0; overflow-y: auto; max-height: 100%"
                 >
+                    <button class="panel-toggle-btn" data-panel="panel-progress-left" title="Hide Left Panel">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
                     <div
                         class="sim-panel-title"
                         style="border-color: rgba(0, 242, 255, 0.3)"
@@ -333,6 +339,52 @@
 
                     <!-- Individual metric graphs container -->
                     <div id="left-metrics-container" style="padding: 4px 8px 8px; display: flex; flex-direction: column; gap: 2px;"></div>
+
+                    <!-- ═══ EVOLUTION FEEDBACK ═══ -->
+                    <div id="evolution-feedback" style="padding: 0 10px">
+                        <div class="section-divider"></div>
+                        <div class="sim-panel-title" style="padding: 6px 0; border: none">
+                            <span><i class="fas fa-heartbeat mr-1"></i> Evolution Health</span>
+                            <span id="evo-status-badge" class="evo-status-badge severity-info">○ Starting</span>
+                        </div>
+
+                        <div style="padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px; margin-bottom: 8px">
+                            <div id="evo-message" class="text-xs text-gray-300" style="font-family: 'JetBrains Mono', monospace">
+                                Analyzing evolution progress...
+                            </div>
+                            <div id="evo-insights" class="text-xs mt-2 flex flex-wrap gap-2" style="font-family: 'JetBrains Mono', monospace">
+                            </div>
+                        </div>
+
+                        <!-- Auto-Adapt Toggle -->
+                        <div style="padding: 6px 8px; background: rgba(139, 92, 246, 0.08); border-radius: 6px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between">
+                            <div style="display: flex; align-items: center; gap: 6px">
+                                <i class="fas fa-robot text-violet-400" style="font-size: 12px"></i>
+                                <span class="text-xs text-violet-300" style="font-family: 'JetBrains Mono', monospace">Auto-Adapt</span>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="auto-adapt-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <!-- Suggestions Panel -->
+                        <div id="suggestions-panel" class="hidden">
+                            <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 8px; margin-bottom: 8px">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
+                                    <div class="text-xs font-bold text-amber-400" style="font-family: 'JetBrains Mono', monospace">
+                                        ⚠ SUGGESTIONS
+                                    </div>
+                                    <button onclick="window.evolutionFeedback?.dismissSuggestions()" class="text-xs text-gray-400 hover:text-white">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <div id="suggestions-list" style="display: flex; flex-direction: column; gap: 6px">
+                                    <!-- Suggestions will be inserted here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <!-- Sandbox Scorecard (hidden until sandbox mode) -->
                     <div
@@ -412,6 +464,9 @@
                     class="sim-panel"
                     style="grid-area: right; width: 340px; border-left: 1px solid var(--border-color); border-radius: 0; overflow-y: auto; max-height: 100%; padding: 10px"
                 >
+                    <button class="panel-toggle-btn" data-panel="panel-controls" title="Hide Right Panel">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
                     <!-- Action Buttons -->
                     <div class="flex justify-between gap-2">
                         <button
@@ -1171,6 +1226,9 @@
                     class="sim-panel"
                     style="grid-area: bottom; border-top: 1px solid var(--border-color); border-radius: 0; overflow-y: auto; max-height: 260px; padding: 0 12px 10px"
                 >
+                    <button class="panel-toggle-btn" data-panel="panel-scorecard" title="Hide Bottom Panel">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
                     <!-- TRAINING MODE DETAILS -->
                     <div id="training-details" class="h-full flex flex-col">
                         <div class="sim-panel-title" style="border: none; padding: 4px 0 2px">

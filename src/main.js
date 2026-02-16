@@ -663,6 +663,81 @@ sim.onFrame = (leader, simulatedSec) => {
   progressChart.renderLeft(sim);
 };
 
+// --- Panel Toggle Buttons ---
+document.querySelectorAll('.panel-toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const panelId = btn.getAttribute('data-panel');
+    const panel = document.getElementById(panelId);
+    const icon = btn.querySelector('i');
+
+    if (panel.style.display === 'none') {
+      // Show panel
+      panel.style.display = '';
+      btn.style.position = 'absolute';
+      btn.style.zIndex = '40';
+      // Update icon based on panel position
+      if (panelId === 'panel-top-bar') {
+        icon.className = 'fas fa-chevron-up';
+        btn.style.top = '8px';
+        btn.style.right = '8px';
+        btn.style.left = '';
+        btn.style.bottom = '';
+      } else if (panelId === 'panel-progress-left') {
+        icon.className = 'fas fa-chevron-left';
+        btn.style.top = '8px';
+        btn.style.right = '8px';
+        btn.style.left = '';
+        btn.style.bottom = '';
+      } else if (panelId === 'panel-controls') {
+        icon.className = 'fas fa-chevron-right';
+        btn.style.top = '8px';
+        btn.style.left = '8px';
+        btn.style.right = '';
+        btn.style.bottom = '';
+      } else if (panelId === 'panel-scorecard') {
+        icon.className = 'fas fa-chevron-down';
+        btn.style.top = '8px';
+        btn.style.right = '8px';
+        btn.style.left = '';
+        btn.style.bottom = '';
+      }
+    } else {
+      // Hide panel - move button to screen edge
+      panel.style.display = 'none';
+      btn.style.position = 'fixed';
+      btn.style.zIndex = '100';
+      // Update icon and position to show where panel went
+      if (panelId === 'panel-top-bar') {
+        icon.className = 'fas fa-chevron-down';
+        btn.style.top = '8px';
+        btn.style.right = '8px';
+        btn.style.left = '';
+        btn.style.bottom = '';
+      } else if (panelId === 'panel-progress-left') {
+        icon.className = 'fas fa-chevron-right';
+        btn.style.left = '8px';
+        btn.style.top = '50%';
+        btn.style.transform = 'translateY(-50%)';
+        btn.style.right = '';
+        btn.style.bottom = '';
+      } else if (panelId === 'panel-controls') {
+        icon.className = 'fas fa-chevron-left';
+        btn.style.right = '8px';
+        btn.style.top = '50%';
+        btn.style.transform = 'translateY(-50%)';
+        btn.style.left = '';
+        btn.style.bottom = '';
+      } else if (panelId === 'panel-scorecard') {
+        icon.className = 'fas fa-chevron-up';
+        btn.style.bottom = '8px';
+        btn.style.right = '8px';
+        btn.style.top = '';
+        btn.style.left = '';
+      }
+    }
+  });
+});
+
 // --- Resize ---
 window.addEventListener('resize', () => {
   resizeCanvases();

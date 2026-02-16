@@ -70,32 +70,9 @@ canvas {
     z-index: 5;
 }
 
-/* Simulation screen uses grid to layout tabs + content */
+/* Simulation screen - back to simple full screen */
 #screen-sim {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    grid-template-rows: auto 1fr auto;
-    grid-template-areas:
-        ".          top-tab     ."
-        "left-tab   content     right-tab"
-        ".          bottom-tab  .";
-}
-
-#screen-sim canvas#world {
-    grid-area: content;
-    z-index: 0;
-}
-
-#screen-sim #sim-chrome {
-    grid-area: content;
-    position: relative;
-    inset: unset;
-}
-
-#screen-sim #gen-summary {
-    grid-area: content;
-    z-index: 20;
-    pointer-events: none;
+    display: block;
 }
 
 /* ─── Glass Panel (shared utility) ─── */
@@ -197,8 +174,8 @@ canvas {
 }
 
 .sim-chrome {
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    inset: 0;
     z-index: 10;
     display: grid;
     grid-template-columns: min-content 1fr min-content;
@@ -323,103 +300,55 @@ canvas {
 }
 
 /* ─── Edge Tab Buttons (Full-width/height clickable tabs) ─── */
+/* Hide edge tab rails - replaced with panel toggle buttons */
 .edge-tab-rail {
-    z-index: 30;
-    pointer-events: auto;
+    display: none;
+}
+
+/* Panel toggle buttons - small buttons at panel corners */
+.panel-toggle-btn {
+    position: absolute;
+    width: 28px;
+    height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
-}
-
-.edge-top-rail {
-    grid-area: top-tab;
-    height: 24px;
-}
-
-.edge-left-rail {
-    grid-area: left-tab;
-    width: 24px;
-}
-
-.edge-right-rail {
-    grid-area: right-tab;
-    width: 24px;
-}
-
-.edge-bottom-rail {
-    grid-area: bottom-tab;
-    height: 24px;
-}
-
-.edge-tab {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #000000;
-    border: none;
-    color: rgba(139, 149, 168, 0.6);
-    font-family: "JetBrains Mono", monospace;
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
+    font-size: 14px;
     cursor: pointer;
     transition: all 0.2s ease;
-    white-space: nowrap;
-    gap: 4px;
+    z-index: 40;
+    pointer-events: auto;
+    border-radius: 4px;
 }
 
-/* Subtle border on panel side */
-.edge-top-rail .edge-tab {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.edge-left-rail .edge-tab {
-    border-right: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.edge-right-rail .edge-tab {
-    border-left: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.edge-bottom-rail .edge-tab {
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.edge-tab:hover {
-    background: #0a0a0a;
-    color: var(--text-secondary);
-}
-
-.edge-tab.active {
-    background: #000000;
+.panel-toggle-btn:hover {
+    background: rgba(0, 242, 255, 0.15);
+    border-color: var(--primary);
     color: var(--primary);
 }
 
-.edge-top-rail .edge-tab.active {
-    border-bottom-color: rgba(0, 242, 255, 0.5);
+/* Position toggle buttons at panel corners/edges */
+#panel-top-bar .panel-toggle-btn {
+    top: 8px;
+    right: 8px;
 }
 
-.edge-left-rail .edge-tab.active {
-    border-right-color: rgba(0, 242, 255, 0.5);
+#panel-progress-left .panel-toggle-btn {
+    top: 8px;
+    right: 8px;
 }
 
-.edge-right-rail .edge-tab.active {
-    border-left-color: rgba(0, 242, 255, 0.5);
+#panel-controls .panel-toggle-btn {
+    top: 8px;
+    left: 8px;
 }
 
-.edge-bottom-rail .edge-tab.active {
-    border-top-color: rgba(0, 242, 255, 0.5);
-}
-
-/* Vertical text for left/right rails */
-.edge-left-rail .edge-tab,
-.edge-right-rail .edge-tab {
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
-    flex-direction: column-reverse;
+#panel-scorecard .panel-toggle-btn {
+    top: 8px;
+    right: 8px;
 }
 
 /* ─── Scrollbar Styling ─── */
