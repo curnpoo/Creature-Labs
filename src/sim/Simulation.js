@@ -143,7 +143,8 @@ export class Simulation {
           this.engine, startX, startY,
           this.nodes, this.constraints,
           dna, bounds.minX, bounds.minY,
-          this.getSimConfig()
+          this.getSimConfig(),
+          i
         )
       );
     }
@@ -157,16 +158,37 @@ export class Simulation {
 
     this.engine = createEngine(this.gravity);
 
-    Matter.Events.on(this.engine, 'collisionActive', (e) => {
-      if (!this.selfCollision) return;
+    const collisionFilter = (e) => {
       const pairs = e.pairs;
       for (let i = 0; i < pairs.length; i++) {
         const p = pairs[i];
-        if (p.bodyA.connectedBodies && p.bodyA.connectedBodies.has(p.bodyB.id)) {
-           p.isActive = false;
+        
+        // INTER-CREATURE COLLISION FILTERING
+        // Category 0x0002 is creatures. If both are creature parts, filter them.
+        const catA = p.bodyA.collisionFilter.category;
+        const catB = p.bodyB.collisionFilter.category;
+        
+        if (catA === 0x0002 && catB === 0x0002) {
+          // Both are creature parts.
+          if (p.bodyA.creatureId !== p.bodyB.creatureId) {
+            // DIFFERENT creatures should NEVER collide
+            p.isActive = false;
+          } else if (!this.selfCollision) {
+            // SAME creature, but self-collision is OFF
+            p.isActive = false;
+          } else {
+            // SAME creature and self-collision is ON
+            // Skip directly connected bodies (bones/muscles) to prevent physics explosions
+            if (p.bodyA.connectedBodies && p.bodyA.connectedBodies.has(p.bodyB.id)) {
+               p.isActive = false;
+            }
+          }
         }
       }
-    });
+    };
+
+    Matter.Events.on(this.engine, 'collisionStart', collisionFilter);
+    Matter.Events.on(this.engine, 'collisionActive', collisionFilter);
 
     this.ground = createGround(this.engine, this.getGroundY(), {
       friction: this.groundFriction,

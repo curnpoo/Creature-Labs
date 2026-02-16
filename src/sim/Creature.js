@@ -18,8 +18,9 @@ export class Creature {
    * @param {number} minY
    * @param {object} simConfig - { jointFreedom, muscleStrength, jointMoveSpeed, muscleRange, muscleSmoothing }
    */
-  constructor(engine, originX, originY, schemaNodes, schemaConstraints, dna, minX, minY, simConfig = {}) {
+  constructor(engine, originX, originY, schemaNodes, schemaConstraints, dna, minX, minY, simConfig = {}, creatureId = 0) {
     this.engine = engine;
+    this.id = creatureId;
     this.composite = Composite.create();
     this.bodies = [];
     this.muscles = [];
@@ -46,7 +47,7 @@ export class Creature {
     // Create physics bodies
     const bodyMap = {};
     const category = 0x0002;
-    const mask = 0x0001; // Always allow self-overlap to prevent self-collision lockups.
+    const mask = 0x0001; // Ground only by default
 
     schemaNodes.forEach(n => {
       const b = Bodies.circle(
@@ -63,6 +64,7 @@ export class Creature {
           restitution: 0
         }
       );
+      b.creatureId = this.id;
       bodyMap[n.id] = b;
       this.bodies.push(b);
       Composite.add(this.composite, b);
