@@ -24,6 +24,10 @@ export class Designer {
     this.panMode = false;
     this.lastPanPos = null;
 
+    // Tooltip timing
+    this.tooltipNode = null;
+    this.tooltipStartTime = 0;
+
     this._setup();
   }
 
@@ -600,37 +604,53 @@ export class Designer {
       ctx.fill();
     });
 
-    // HOVER TOOLTIP - Show node details on hover
+    // HOVER TOOLTIP - Brief, semi-transparent node info
     if (this.mousePos) {
       const hoverNode = this._findNodeAt(this.mousePos.x, this.mousePos.y, 16);
       if (hoverNode) {
-        const connectedConstraints = this.constraints.filter(c =>
-          c.n1 === hoverNode.id || c.n2 === hoverNode.id
-        );
-        const muscles = connectedConstraints.filter(c => c.type === 'muscle').length;
-        const bones = connectedConstraints.filter(c => c.type === 'bone').length;
+        // Track tooltip timing
+        if (this.tooltipNode !== hoverNode) {
+          this.tooltipNode = hoverNode;
+          this.tooltipStartTime = Date.now();
+        }
 
-        const tooltipX = hoverNode.x + 20;
-        const tooltipY = hoverNode.y - 30;
-        const tooltipW = 160;
-        const tooltipH = 60;
+        // Only show for 1.2 seconds
+        const elapsed = Date.now() - this.tooltipStartTime;
+        if (elapsed < 1200) {
+          const fadeOut = elapsed > 800 ? (1200 - elapsed) / 400 : 1.0;
+          const connectedConstraints = this.constraints.filter(c =>
+            c.n1 === hoverNode.id || c.n2 === hoverNode.id
+          );
+          const muscles = connectedConstraints.filter(c => c.type === 'muscle').length;
+          const bones = connectedConstraints.filter(c => c.type === 'bone').length;
 
-        // Tooltip background
-        ctx.fillStyle = 'rgba(10, 14, 24, 0.95)';
-        ctx.fillRect(tooltipX, tooltipY, tooltipW, tooltipH);
-        ctx.strokeStyle = hoverNode.fixed ? 'rgba(255, 170, 0, 0.8)' : 'rgba(0, 242, 255, 0.8)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(tooltipX, tooltipY, tooltipW, tooltipH);
+          // Position tooltip to not block node
+          const tooltipX = hoverNode.x + 25;
+          const tooltipY = hoverNode.y - 45;
+          const tooltipW = 140;
+          const tooltipH = 50;
 
-        // Tooltip text
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.font = 'bold 10px "JetBrains Mono", monospace';
-        ctx.fillText(`Node #${hoverNode.id}`, tooltipX + 8, tooltipY + 16);
+          // Semi-transparent background
+          ctx.fillStyle = `rgba(10, 14, 24, ${0.75 * fadeOut})`;
+          ctx.fillRect(tooltipX, tooltipY, tooltipW, tooltipH);
+          ctx.strokeStyle = hoverNode.fixed ?
+            `rgba(255, 170, 0, ${0.6 * fadeOut})` :
+            `rgba(0, 242, 255, ${0.6 * fadeOut})`;
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(tooltipX, tooltipY, tooltipW, tooltipH);
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-        ctx.font = '9px "JetBrains Mono", monospace';
-        ctx.fillText(`Type: ${hoverNode.fixed ? 'Fixed (Ground)' : 'Free'}`, tooltipX + 8, tooltipY + 32);
-        ctx.fillText(`Connections: ${bones}B + ${muscles}M`, tooltipX + 8, tooltipY + 46);
+          // Tooltip text
+          ctx.fillStyle = `rgba(255, 255, 255, ${0.9 * fadeOut})`;
+          ctx.font = 'bold 9px "JetBrains Mono", monospace';
+          ctx.fillText(`Node #${hoverNode.id}`, tooltipX + 6, tooltipY + 14);
+
+          ctx.fillStyle = `rgba(255, 255, 255, ${0.7 * fadeOut})`;
+          ctx.font = '8px "JetBrains Mono", monospace';
+          ctx.fillText(`${hoverNode.fixed ? 'Fixed' : 'Free'}`, tooltipX + 6, tooltipY + 28);
+          ctx.fillText(`${bones}B + ${muscles}M`, tooltipX + 6, tooltipY + 40);
+        }
+      } else {
+        this.tooltipNode = null;
       }
     }
 
