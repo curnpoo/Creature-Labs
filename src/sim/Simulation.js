@@ -413,7 +413,7 @@ export class Simulation {
       bestFitness: winnerFitness,
       championFitness: this.championFitness
     });
-    if (this.progressHistory.length > 120) this.progressHistory.shift();
+    if (this.progressHistory.length > 300) this.progressHistory.shift();
 
     // Ghost paths
     if (this.currentGhostPath.length > 5) {

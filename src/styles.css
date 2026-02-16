@@ -1,42 +1,66 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
+
 :root {
     --primary: #00f2ff;
+    --primary-dim: rgba(0, 242, 255, 0.15);
     --secondary: #ff0055;
-    --bg-dark: #0a0a12;
-    --panel-bg: rgba(15, 15, 25, 0.9);
-    --border-color: rgba(255, 255, 255, 0.1);
+    --secondary-dim: rgba(255, 0, 85, 0.12);
+    --accent: #a855f7;
+    --accent-dim: rgba(168, 85, 247, 0.12);
+    --bg-dark: #06080e;
+    --bg-panel: #0c0f18;
+    --bg-panel-alt: #0e1220;
+    --panel-bg: rgba(10, 14, 24, 0.96);
+    --panel-border: rgba(255, 255, 255, 0.07);
+    --border-color: rgba(255, 255, 255, 0.08);
+    --text-primary: #e8ecf4;
+    --text-secondary: #8b95a8;
+    --text-muted: #5a6478;
+    --glow-primary: rgba(0, 242, 255, 0.25);
+    --glow-secondary: rgba(255, 0, 85, 0.2);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
 }
 
-html,
-body {
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+html, body {
     width: 100%;
     height: 100%;
+    margin: 0;
+    padding: 0;
 }
 
 body {
-    margin: 0;
     overflow: hidden;
     background-color: var(--bg-dark);
-    color: #fff;
-    font-family: "Segoe UI", sans-serif;
+    color: var(--text-primary);
+    font-family:
+        "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     touch-action: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 canvas {
     display: block;
 }
 
-#world,
-#design-area canvas {
+#world, #design-area canvas {
     width: 100%;
     height: 100%;
 }
 
+/* ─── Screens ─── */
 .screen {
     position: absolute;
     inset: 0;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.3s;
+    transition: opacity 0.35s ease;
     z-index: 0;
 }
 
@@ -46,65 +70,76 @@ canvas {
     z-index: 5;
 }
 
+/* ─── Glass Panel (shared utility) ─── */
 .glass-panel {
     background: var(--panel-bg);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--border-color);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    border-radius: 12px;
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--panel-border);
+    box-shadow:
+        0 4px 24px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-md);
 }
 
+/* ─── Tool Buttons (Design Screen) ─── */
 .btn-tool {
     width: 48px;
     height: 48px;
     display: flex;
     justify-content: center;
     align-items: center;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: #888;
-    transition: all 0.2s;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
     font-size: 1.1rem;
+    cursor: pointer;
 }
 
 .btn-tool:hover {
     background: rgba(255, 255, 255, 0.1);
     color: #fff;
+    border-color: rgba(255, 255, 255, 0.15);
 }
 
 .btn-tool.active {
     background: var(--primary);
     color: #000;
-    box-shadow: 0 0 15px var(--primary);
+    box-shadow: 0 0 15px var(--glow-primary);
     border-color: var(--primary);
 }
 
 .btn-tool.active-muscle {
     background: var(--secondary);
     color: #fff;
-    box-shadow: 0 0 15px var(--secondary);
+    box-shadow: 0 0 15px var(--glow-secondary);
     border-color: var(--secondary);
 }
 
 .btn-tool.active-warn {
     background: #f59e0b;
     color: #111;
-    box-shadow: 0 0 15px #f59e0b;
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.35);
     border-color: #f59e0b;
 }
 
+/* ─── Primary Button ─── */
 .btn-primary {
-    background: linear-gradient(135deg, #00f2ff, #00aaff);
+    background: linear-gradient(135deg, #00f2ff, #0088ff);
     color: #000;
-    font-weight: bold;
+    font-weight: 700;
     border: none;
-    transition: transform 0.1s, box-shadow 0.2s;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.25s ease;
+    letter-spacing: 0.02em;
 }
 
 .btn-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 0 20px rgba(0, 242, 255, 0.4);
+    box-shadow:
+        0 0 24px rgba(0, 242, 255, 0.4),
+        0 8px 32px rgba(0, 136, 255, 0.2);
 }
 
 .btn-primary:active {
@@ -112,110 +147,160 @@ canvas {
 }
 
 .btn-primary:disabled {
-    opacity: 0.5;
+    opacity: 0.4;
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
 }
 
-.grid-lines {
-    background-image:
-        linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-    background-size: 20px 20px;
+/* ═══════════════════════════════════════════════════
+   SIM SCREEN — PANEL LAYOUT (CSS Grid, non-overlapping)
+   ═══════════════════════════════════════════════════ */
+
+#screen-sim {
+    display: flex;
+    flex-direction: column;
 }
 
-.control-group {
-    margin-bottom: 10px;
+#world {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
 }
 
-.control-label {
+.sim-chrome {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: min-content 1fr min-content;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+        "top-bar    top-bar   top-bar"
+        "left       canvas    right"
+        "bottom     bottom    bottom";
+    pointer-events: none;
+    gap: 0;
+}
+
+/* ─── Sim Panel (shared base) ─── */
+.sim-panel {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    color: var(--text-primary);
+    font-size: 11px;
+    pointer-events: auto;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.sim-panel-title {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    padding: 5px 8px 4px;
+    border-bottom: 1px solid var(--border-color);
     display: flex;
     justify-content: space-between;
-    font-size: 10px;
-    color: #aaa;
-    text-transform: uppercase;
-    margin-bottom: 4px;
+    align-items: center;
 }
 
-.control-val {
-    color: var(--primary);
-    font-weight: bold;
+/* ─── Top Bar (HUD + Neural) ─── */
+#panel-top-bar {
+    grid-area: top-bar;
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border-color);
+    max-height: 140px;
+    z-index: 12;
 }
 
-.cam-btn {
-    flex: 1;
+#panel-hud {
+    flex: 0 0 auto;
+    min-width: 300px;
+    max-width: 340px;
+    border-right: 1px solid var(--border-color);
+    border-radius: 0;
+    overflow-y: auto;
+}
+
+#panel-neural {
+    flex: 1 1 auto;
+    border-radius: 0;
+    overflow: hidden;
+    min-width: 0;
+}
+
+/* ─── Left Panel ─── */
+#panel-progress-left {
+    grid-area: left;
+    width: 240px;
+    min-width: 200px;
+    border-right: 1px solid var(--border-color);
+    border-radius: 0;
+    overflow-y: auto;
+    max-height: 100%;
+}
+
+/* ─── Right Panel ─── */
+#panel-controls {
+    grid-area: right;
+    width: 260px;
+    min-width: 220px;
+    border-left: 1px solid var(--border-color);
+    border-radius: 0;
+    overflow-y: auto;
+    max-height: 100%;
     padding: 6px 8px;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    background: rgba(255, 255, 255, 0.06);
-    color: #fff;
-    font-size: 12px;
-    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
-.cam-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
+/* ─── Bottom Panel ─── */
+#panel-scorecard {
+    grid-area: bottom;
+    border-top: 1px solid var(--border-color);
+    border-radius: 0;
+    overflow-y: auto;
+    max-height: 180px;
+    padding: 0 8px 6px;
 }
 
-.cam-btn.active {
-    background: rgba(0, 242, 255, 0.18);
-    border-color: rgba(0, 242, 255, 0.6);
-    box-shadow: 0 0 12px rgba(0, 242, 255, 0.25);
+/* ─── Canvas Region ─── */
+.sim-canvas-area {
+    grid-area: canvas;
+    pointer-events: none;
+    position: relative;
+    overflow: hidden;
 }
 
-#btn-start-sim {
-    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+/* ─── Panel Show/Hide ─── */
+.sim-panel {
+    transition:
+        max-height 0.3s ease,
+        max-width 0.3s ease,
+        opacity 0.25s ease,
+        padding 0.2s ease;
 }
 
-#btn-start-sim.start-ready {
-    background: rgba(16, 185, 129, 0.22);
-    border-color: rgba(52, 211, 153, 0.9);
-    box-shadow: 0 0 18px rgba(16, 185, 129, 0.6), 0 0 34px rgba(16, 185, 129, 0.25);
-    animation: start-ready-pulse 1.2s ease-in-out infinite;
+.sim-panel.module-hidden {
+    max-height: 0 !important;
+    max-width: 0 !important;
+    opacity: 0;
+    overflow: hidden;
+    padding: 0 !important;
+    border: none !important;
+    pointer-events: none;
 }
 
-#btn-start-sim.training {
-    background: rgba(14, 116, 144, 0.24);
-    border-color: rgba(34, 211, 238, 0.7);
-    color: #a5f3fc;
-    box-shadow: 0 0 16px rgba(34, 211, 238, 0.35);
-    animation: start-training-pulse 1.4s ease-in-out infinite;
-}
-
-#panel-hud.stats-training-pop > div,
-#fitness-cards.stats-training-pop > div {
-    animation: stats-pop 0.55s ease;
-}
-
-@keyframes start-ready-pulse {
-    0%, 100% { transform: translateY(0) scale(1); }
-    50% { transform: translateY(-1px) scale(1.02); }
-}
-
-@keyframes start-training-pulse {
-    0%, 100% { box-shadow: 0 0 16px rgba(34, 211, 238, 0.32); }
-    50% { box-shadow: 0 0 24px rgba(34, 211, 238, 0.6); }
-}
-
-@keyframes stats-pop {
-    0% { transform: translateY(5px); opacity: 0.35; }
-    100% { transform: translateY(0); opacity: 1; }
-}
-
-.module-hidden {
-    display: none !important;
-}
-
-.edge-drawer {
-    transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
+/* ─── Edge Tab Rails ─── */
 .edge-tab-rail {
     position: absolute;
-    z-index: 20;
+    z-index: 30;
     display: flex;
-    gap: 8px;
+    gap: 4px;
+    pointer-events: auto;
 }
 
 .edge-top-rail {
@@ -236,57 +321,293 @@ canvas {
     transform: translateY(-50%);
 }
 
+.edge-bottom-rail {
+    bottom: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
 .edge-tab {
-    padding: 7px 11px;
-    border-radius: 9px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    background: rgba(10, 15, 28, 0.7);
-    color: #d7e8f5;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(10, 14, 24, 0.85);
+    color: var(--text-muted);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(8px);
+}
+
+.edge-tab:hover {
+    color: var(--text-secondary);
+    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(15, 20, 35, 0.9);
 }
 
 .edge-tab.vertical {
     writing-mode: vertical-rl;
     text-orientation: mixed;
-    min-height: 88px;
+    min-height: 72px;
+    padding: 8px 5px;
 }
 
 .edge-tab.active {
-    border-color: rgba(0, 242, 255, 0.65);
-    background: rgba(0, 242, 255, 0.18);
-    color: #e9fdff;
+    border-color: rgba(0, 242, 255, 0.4);
+    background: rgba(0, 242, 255, 0.1);
+    color: var(--primary);
 }
 
-.edge-left,
-.edge-right {
-    overflow-y: auto;
+/* ─── Scrollbar Styling ─── */
+.sim-panel::-webkit-scrollbar {
+    width: 5px;
 }
 
-#panel-progress-left,
-#panel-controls {
-    max-height: calc(100vh - 120px);
+.sim-panel::-webkit-scrollbar-track {
+    background: transparent;
 }
 
-@media (max-width: 1180px) {
-    #panel-progress-left {
-        width: 280px;
+.sim-panel::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+}
+
+.sim-panel::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+/* ─── Score Grid (HUD top bar) ─── */
+.score-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+    gap: 2px;
+    padding: 4px 6px 4px;
+}
+
+.score-grid > div {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 4px;
+    padding: 2px 4px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    transition: transform 0.2s ease;
+}
+
+.score-grid > div:hover {
+    transform: scale(1.04);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.score-grid .score-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 8px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: 0;
+}
+
+.score-grid .score-value {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+/* ─── Grid Lines Background ─── */
+.grid-lines {
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    background-size: 20px 20px;
+}
+
+/* ─── Control Groups ─── */
+.control-group {
+    margin-bottom: 10px;
+}
+
+.control-label {
+    display: flex;
+    justify-content: space-between;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+}
+
+.control-val {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.cam-btn {
+    flex: 1;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-secondary);
+    font-family: "Inter", sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.cam-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.cam-btn.active {
+    background: var(--primary-dim);
+    border-color: rgba(0, 242, 255, 0.45);
+    color: var(--primary);
+    box-shadow: 0 0 10px rgba(0, 242, 255, 0.15);
+}
+
+/* ─── Section Dividers ─── */
+.section-divider {
+    height: 1px;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        var(--border-color),
+        transparent
+    );
+    margin: 6px 0;
+}
+
+.section-title {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 4px;
+}
+
+/* ─── Fitness Cards ─── */
+.fitness-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 4px;
+    padding: 4px 6px;
+    text-align: center;
+}
+
+.fitness-card-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 8px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: 1px;
+}
+
+.fitness-card-value {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+/* ─── Start Sim Button States ─── */
+#btn-start-sim {
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        background 0.2s ease,
+        border-color 0.2s ease;
+}
+
+#btn-start-sim.start-ready {
+    background: rgba(16, 185, 129, 0.18);
+    border-color: rgba(52, 211, 153, 0.7);
+    box-shadow:
+        0 0 18px rgba(16, 185, 129, 0.45),
+        0 0 34px rgba(16, 185, 129, 0.15);
+    animation: start-ready-pulse 1.5s ease-in-out infinite;
+}
+
+#btn-start-sim.training {
+    background: rgba(14, 116, 144, 0.18);
+    border-color: rgba(34, 211, 238, 0.5);
+    color: #a5f3fc;
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.25);
+    animation: start-training-pulse 1.6s ease-in-out infinite;
+}
+
+/* ─── Stat Pop Animation ─── */
+#panel-hud.stats-training-pop > .score-grid > div,
+#fitness-cards.stats-training-pop > div {
+    animation: stats-pop 0.5s ease;
+}
+
+@keyframes start-ready-pulse {
+    0%, 100% {
+        transform: translateY(0) scale(1);
     }
-
-    #panel-controls {
-        width: 300px;
+    50% {
+        transform: translateY(-1px) scale(1.015);
     }
 }
 
+@keyframes start-training-pulse {
+    0%, 100% {
+        box-shadow: 0 0 12px rgba(34, 211, 238, 0.25);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(34, 211, 238, 0.45);
+    }
+}
+
+@keyframes stats-pop {
+    0% {
+        transform: translateY(4px);
+        opacity: 0.3;
+    }
+    100% {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* ─── Gen Summary Overlay ─── */
+#gen-summary {
+    position: absolute;
+    top: 33%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 15;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+    background: rgba(10, 14, 24, 0.9);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 242, 255, 0.2);
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+}
+
+/* ─── Range Inputs ─── */
 input[type="range"] {
     -webkit-appearance: none;
     appearance: none;
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
     height: 4px;
     border-radius: 2px;
     width: 100%;
+    outline: none;
 }
 
 input[type="range"]::-webkit-slider-thumb {
@@ -298,21 +619,132 @@ input[type="range"]::-webkit-slider-thumb {
     border-radius: 50%;
     margin-top: -5px;
     cursor: pointer;
-    box-shadow: 0 0 5px var(--primary);
+    box-shadow: 0 0 6px var(--glow-primary);
+    transition: transform 0.15s ease;
 }
 
 input[type="range"]:hover::-webkit-slider-thumb {
     transform: scale(1.2);
 }
 
-@media (max-width: 980px) {
-    .glass-panel {
-        backdrop-filter: blur(8px);
-    }
+input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: #fff;
+    border: 2px solid var(--primary);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 6px var(--glow-primary);
+}
 
-    #screen-sim .absolute.right-4 {
-        right: 10px;
-        top: 140px;
+/* ─── Sandbox Scorecard ─── */
+.sandbox-scorecard {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 6px;
+    padding: 8px 0;
+}
+
+.sandbox-stat {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
+    padding: 8px 10px;
+    text-align: center;
+}
+
+.sandbox-stat-label {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 3px;
+}
+
+.sandbox-stat-value {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+/* ─── Progress Canvas Wrapper ─── */
+.chart-container {
+    position: relative;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    margin-top: 6px;
+}
+
+.chart-container canvas {
+    display: block;
+    width: 100%;
+}
+
+/* ─── Chart Legend ─── */
+.chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 9px;
+    font-family: "JetBrains Mono", monospace;
+}
+
+.chart-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+}
+
+.chart-legend-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* ─── Info Text ─── */
+.info-text {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 1200px) {
+    #panel-progress-left {
         width: 260px;
+        min-width: 220px;
+    }
+    #panel-controls {
+        width: 300px;
+        min-width: 260px;
+    }
+    #panel-hud {
+        min-width: 350px;
+    }
+}
+
+@media (max-width: 900px) {
+    .sim-chrome {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr auto;
+        grid-template-areas:
+            "top-bar"
+            "canvas"
+            "bottom";
+    }
+    #panel-progress-left,
+    #panel-controls {
+        display: none;
+    }
+    #panel-hud {
+        min-width: unset;
     }
 }

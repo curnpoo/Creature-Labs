@@ -75,6 +75,7 @@ function setScreen(name) {
     const icon = document.getElementById('icon-pause');
     if (icon) icon.className = 'fas fa-pause';
     updateStartSimUI();
+    updateSandboxUI();
     renderWorld(null);
   }
 }
@@ -130,6 +131,42 @@ function updateStartSimUI() {
   }
 }
 
+function updateSandboxUI() {
+  const training = document.getElementById('training-details');
+  const sandbox = document.getElementById('sandbox-scorecard-wrap');
+  
+  if (sim.sandboxMode) {
+    if (training) training.classList.add('hidden');
+    if (sandbox) sandbox.classList.remove('hidden');
+    // Ensure panel is visible if not hidden by user preference? 
+    // Let's assume user wants to see it, but we won't force-remove 'module-hidden' 
+    // unless explicitly requested. For now, just swap contents.
+  } else {
+    if (training) training.classList.remove('hidden');
+    if (sandbox) sandbox.classList.add('hidden');
+  }
+}
+
+function updateSandboxScorecard(leader) {
+  if (!sim.sandboxMode || !leader) return;
+
+  const f = leader.getFitnessSnapshot();
+  const dist = sim.distMetersContinuousFromX(leader.getX());
+
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+
+  set('sandbox-distance', `${dist.toFixed(1)}m`);
+  set('sandbox-speed', `${(f.speed / 100).toFixed(1)} m/s`);
+  set('sandbox-stability', `${f.stability.toFixed(0)}%`);
+  set('sandbox-falls', String(f.stumbles));
+  set('sandbox-slip', (f.groundSlip || 0).toFixed(2));
+  set('sandbox-airtime', `${f.airtimePct.toFixed(0)}%`);
+  set('sandbox-run-label', `Run ${sim.sandboxRuns}`);
+}
+
 function loadBrainLibrary() {
   try {
     const raw = localStorage.getItem(BRAIN_LIBRARY_KEY);
@@ -165,14 +202,14 @@ function renderBrainLibrary() {
     opt.value = item.id;
     const dist = Number.isFinite(item.distance) ? `${item.distance}m` : '?m';
     const gen = Number.isFinite(item.generation) ? `G${item.generation}` : 'G?';
-    opt.textContent = `${item.name || 'Brain'} • ${gen} • ${dist}`;
+    opt.textContent = `${item.name || 'Brain'} · ${gen} · ${dist}`;
     select.appendChild(opt);
   });
 
   if (!select.value) select.value = brainLibrary[0].id;
   const selected = brainLibrary.find(b => b.id === select.value) || brainLibrary[0];
   const mode = sim.sandboxMode ? 'Sandbox ON' : 'Sandbox OFF';
-  meta.textContent = `${mode} • ${selected.name || 'Brain'} • ${selected.distance || 0}m • ${new Date(selected.createdAt).toLocaleString()}`;
+  meta.textContent = `${mode} · ${selected.name || 'Brain'} · ${selected.distance || 0}m · ${new Date(selected.createdAt).toLocaleString()}`;
 }
 
 // --- Tool binding ---
@@ -240,6 +277,7 @@ const startTrainingNow = () => {
   const icon = document.getElementById('icon-pause');
   if (icon) icon.className = 'fas fa-pause';
   updateStartSimUI();
+  updateSandboxUI();
   triggerTrainingStatAnimation();
   return true;
 };
@@ -375,6 +413,7 @@ const sandboxExitBtn = document.getElementById('btn-sandbox-exit');
 if (sandboxExitBtn) {
   sandboxExitBtn.onclick = () => {
     sim.exitSandboxMode();
+    updateSandboxUI();
     renderBrainLibrary();
   };
 }
@@ -447,12 +486,12 @@ function drawGhosts(ctx) {
 function drawReplayOverlay(ctx) {
   const fitnessTag = document.getElementById('fitness-tag');
   if (sim.replayIndex < 0 || sim.replayIndex >= sim.replayHistory.length) {
-    if (fitnessTag) fitnessTag.textContent = `LIVE A${sim.championAwards}`;
+    if (fitnessTag) fitnessTag.textContent = `LIVE · A${sim.championAwards}`;
     return;
   }
   const replay = sim.replayHistory[sim.replayIndex];
   if (!replay.path.length) return;
-  if (fitnessTag) fitnessTag.textContent = sim.replayPlaying ? 'REPLAY PLAY' : 'REPLAY HOLD';
+  if (fitnessTag) fitnessTag.textContent = sim.replayPlaying ? 'REPLAY ▶' : 'REPLAY ⏸';
 
   ctx.beginPath();
   ctx.moveTo(replay.path[0].x, replay.path[0].y);
@@ -485,11 +524,27 @@ function renderWorld(leader) {
   const viewW = worldCanvas.width / zoom;
   const viewH = worldCanvas.height / zoom;
 
-  // Camera follow
+  // Camera follow — center creature in visible canvas area (between panels)
   if (leader && sim.cameraMode === 'lock') {
-    const target = Math.max(0, leader.getX() - viewW * 0.3);
-    sim.cameraX += (target - sim.cameraX) * 0.09;
-    sim.cameraY += (0 - sim.cameraY) * 0.12;
+    // Approximate panel sizes that eat into canvas area
+    const leftPanel = document.getElementById('panel-progress-left');
+    const rightPanel = document.getElementById('panel-controls');
+    const topPanel = document.getElementById('panel-top-bar');
+    const bottomPanel = document.getElementById('panel-scorecard');
+    const leftW = (leftPanel && !leftPanel.classList.contains('module-hidden')) ? leftPanel.offsetWidth : 0;
+    const rightW = (rightPanel && !rightPanel.classList.contains('module-hidden')) ? rightPanel.offsetWidth : 0;
+    const topH = (topPanel && !topPanel.classList.contains('module-hidden')) ? topPanel.offsetHeight : 0;
+    const bottomH = (bottomPanel && !bottomPanel.classList.contains('module-hidden')) ? bottomPanel.offsetHeight : 0;
+
+    // Visible center in world coordinates
+    const visibleCenterX = (leftW + (worldCanvas.width - leftW - rightW) / 2) / zoom;
+    // Bias Y slightly up (0.85) to keep ground higher in viewport
+    const visibleCenterY = ((topH + (worldCanvas.height - topH - bottomH) / 2) / zoom) * 0.85;
+
+    const targetX = leader.getCenter().x - visibleCenterX;
+    const targetY = leader.getCenter().y - visibleCenterY;
+    sim.cameraX += (Math.max(0, targetX) - sim.cameraX) * 0.09;
+    sim.cameraY += (targetY - sim.cameraY) * 0.06;
   }
 
   ctx.clearRect(0, 0, worldCanvas.width, worldCanvas.height);
@@ -498,9 +553,9 @@ function renderWorld(leader) {
   ctx.translate(-sim.cameraX, -sim.cameraY);
 
   // Background
-  ctx.fillStyle = '#090a11';
+  ctx.fillStyle = '#060810';
   ctx.fillRect(sim.cameraX, sim.cameraY, viewW, viewH);
-  ctx.fillStyle = '#1a1a25';
+  ctx.fillStyle = '#121520';
   ctx.fillRect(sim.cameraX, gY, viewW, 420);
 
   // Ground line
@@ -548,7 +603,7 @@ function renderWorld(leader) {
 
   // Distance markers
   ctx.fillStyle = 'rgba(255,255,255,0.22)';
-  ctx.font = '12px monospace';
+  ctx.font = '12px "JetBrains Mono", monospace';
   for (let x = Math.floor(sim.cameraX / 100) * 100; x < sim.cameraX + viewW; x += 100) {
     ctx.fillText(`${Math.floor(x / 100)}m`, x, gY + 24);
   }
@@ -561,7 +616,7 @@ function renderWorld(leader) {
 
   if (challengeTool !== 'none') {
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.font = '12px monospace';
+    ctx.font = '12px "JetBrains Mono", monospace';
     ctx.fillText(
       challengeTool === 'ground' ? 'Ground draw ON: click to add points' : 'Obstacle mode ON: click to place box',
       sim.cameraX + 18,
@@ -572,18 +627,18 @@ function renderWorld(leader) {
   if (currentScreen === 'sim' && !simSessionStarted) {
     const cx = sim.cameraX + viewW * 0.5;
     const cy = sim.cameraY + viewH * 0.5;
-    ctx.fillStyle = 'rgba(10, 15, 25, 0.75)';
+    ctx.fillStyle = 'rgba(6, 8, 14, 0.85)';
     ctx.fillRect(cx - 210, cy - 54, 420, 108);
-    ctx.strokeStyle = 'rgba(52, 211, 153, 0.8)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(52, 211, 153, 0.6)';
+    ctx.lineWidth = 1.5;
     ctx.strokeRect(cx - 210, cy - 54, 420, 108);
     ctx.fillStyle = 'rgba(167, 243, 208, 1)';
     ctx.textAlign = 'center';
-    ctx.font = 'bold 18px "Segoe UI", sans-serif';
+    ctx.font = 'bold 18px Inter, sans-serif';
     ctx.fillText('Press START SIM to begin training', cx, cy - 6);
-    ctx.fillStyle = 'rgba(209, 250, 229, 0.85)';
-    ctx.font = '12px monospace';
-    ctx.fillText('Then watch evolution improve generation by generation.', cx, cy + 20);
+    ctx.fillStyle = 'rgba(209, 250, 229, 0.75)';
+    ctx.font = '12px "JetBrains Mono", monospace';
+    ctx.fillText('Watch evolution improve generation by generation.', cx, cy + 20);
     ctx.textAlign = 'left';
   }
 
@@ -594,6 +649,7 @@ function renderWorld(leader) {
 sim.onFrame = (leader, simulatedSec) => {
   hud.update(sim);
   controls.updateFitnessPanel(leader ? leader.getFitnessSnapshot() : null);
+  updateSandboxScorecard(leader);
   renderWorld(leader);
   visualizer.render(leader);
   progressChart.renderRight(sim);
