@@ -16,7 +16,7 @@ export class Creature {
    * @param {Float32Array|null} dna - NN weights, null for random init
    * @param {number} minX
    * @param {number} minY
-   * @param {object} simConfig - { jointFreedom, muscleStrength, jointMoveSpeed }
+   * @param {object} simConfig - { jointFreedom, muscleStrength, jointMoveSpeed, muscleRange, muscleSmoothing }
    */
   constructor(engine, originX, originY, schemaNodes, schemaConstraints, dna, minX, minY, simConfig = {}) {
     this.engine = engine;
@@ -53,9 +53,9 @@ export class Creature {
         CONFIG.nodeRadius,
         {
           collisionFilter: { category, mask },
-          friction: 2,
-          frictionStatic: 8,
-          frictionAir: 0.07,
+          friction: simConfig.bodyFriction ?? 2,
+          frictionStatic: simConfig.bodyStaticFriction ?? 8,
+          frictionAir: simConfig.bodyAirFriction ?? 0.07,
           density: 0.0035,
           restitution: 0
         }
@@ -244,8 +244,10 @@ export class Creature {
     // Apply NN outputs to muscles (tanh output in [-1, 1])
     const strength = this.simConfig.muscleStrength || 1.2;
     const moveSpeed = Math.max(0.2, Math.min(2.2, this.simConfig.jointMoveSpeed || 1.0));
-    const amplitude = Math.min(0.32, Math.max(0.08, 0.18 * strength));
-    const smoothing = Math.min(0.35, 0.1 + 0.12 * moveSpeed);
+    const rangeScale = this.simConfig.muscleRange ?? 0.18;
+    const amplitude = Math.min(0.4, Math.max(0.05, rangeScale * strength));
+    const smoothingBase = this.simConfig.muscleSmoothing ?? 0.22;
+    const smoothing = Math.min(0.5, Math.max(0.02, smoothingBase));
     let totalJerk = 0;
     this.muscles.forEach((m, i) => {
       const rawSignal = outputs[i] || 0;

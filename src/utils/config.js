@@ -27,6 +27,17 @@ export const CONFIG = {
   defaultMuscleStrength: 1.4,
   defaultJointMoveSpeed: 1.1,
   defaultJointFreedom: 1.0,
+  defaultGroundFriction: 2.0,
+  defaultGroundStaticFriction: 8.0,
+  defaultTractionDamping: 0.8,
+  defaultBodyFriction: 2.0,
+  defaultBodyStaticFriction: 8.0,
+  defaultBodyAirFriction: 0.07,
+  defaultMuscleRange: 0.18,
+  defaultMuscleSmoothing: 0.22,
+  defaultDistanceRewardWeight: 320,
+  defaultSpeedRewardWeight: 0.35,
+  defaultJitterPenaltyWeight: 40,
   defaultZoom: 1.0,
 };
 

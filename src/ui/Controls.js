@@ -13,7 +13,10 @@ export class Controls {
   _cacheElements() {
     const ids = [
       'val-speed', 'val-duration', 'val-pop', 'val-strength',
-      'val-jointspeed', 'val-joint', 'val-gravity', 'val-mut',
+      'val-jointspeed', 'val-joint', 'val-gravity', 'val-groundfric',
+      'val-groundstatic', 'val-traction', 'val-bodyfric', 'val-bodystatic',
+      'val-bodyair', 'val-musrange', 'val-musmooth', 'val-distreward',
+      'val-speedreward', 'val-jitterpen', 'val-mut',
       'val-mutsize', 'val-zoom', 'val-cam',
       'val-hidden', 'val-neurons', 'val-elites', 'val-tournament',
       'cam-lock', 'cam-free', 'icon-pause',
@@ -53,13 +56,54 @@ export class Controls {
       this.sim.timer = Math.min(this.sim.timer, v);
     });
     this._bindSlider('inp-pop', v => { this.sim.popSize = v; });
-    this._bindSlider('inp-strength', v => { this.sim.muscleStrength = v / 100; });
-    this._bindSlider('inp-jointspeed', v => { this.sim.jointMoveSpeed = v / 100; });
-    this._bindSlider('inp-joint', v => { this.sim.jointFreedom = v / 100; });
+    this._bindSlider('inp-strength', v => {
+      this.sim.muscleStrength = v / 100;
+      this.sim.creatures.forEach(c => { c.simConfig.muscleStrength = this.sim.muscleStrength; });
+    });
+    this._bindSlider('inp-jointspeed', v => {
+      this.sim.jointMoveSpeed = v / 100;
+      this.sim.creatures.forEach(c => { c.simConfig.jointMoveSpeed = this.sim.jointMoveSpeed; });
+    });
+    this._bindSlider('inp-joint', v => {
+      this.sim.jointFreedom = v / 100;
+      this.sim.creatures.forEach(c => { c.simConfig.jointFreedom = this.sim.jointFreedom; });
+    });
     this._bindSlider('inp-gravity', v => {
       this.sim.gravity = v;
       if (this.sim.engine) this.sim.engine.world.gravity.y = v;
     }, true);
+    this._bindSlider('inp-groundfric', v => {
+      this.sim.groundFriction = v / 100;
+      if (this.sim.ground) this.sim.ground.friction = this.sim.groundFriction;
+    });
+    this._bindSlider('inp-groundstatic', v => {
+      this.sim.groundStaticFriction = v / 100;
+      if (this.sim.ground) this.sim.ground.frictionStatic = this.sim.groundStaticFriction;
+    });
+    this._bindSlider('inp-traction', v => { this.sim.tractionDamping = v / 100; });
+    this._bindSlider('inp-bodyfric', v => {
+      this.sim.bodyFriction = v / 100;
+      this.sim.creatures.forEach(c => c.bodies.forEach(b => { b.friction = this.sim.bodyFriction; }));
+    });
+    this._bindSlider('inp-bodystatic', v => {
+      this.sim.bodyStaticFriction = v / 100;
+      this.sim.creatures.forEach(c => c.bodies.forEach(b => { b.frictionStatic = this.sim.bodyStaticFriction; }));
+    });
+    this._bindSlider('inp-bodyair', v => {
+      this.sim.bodyAirFriction = v / 1000;
+      this.sim.creatures.forEach(c => c.bodies.forEach(b => { b.frictionAir = this.sim.bodyAirFriction; }));
+    });
+    this._bindSlider('inp-musrange', v => {
+      this.sim.muscleRange = v / 100;
+      this.sim.creatures.forEach(c => { c.simConfig.muscleRange = this.sim.muscleRange; });
+    });
+    this._bindSlider('inp-musmooth', v => {
+      this.sim.muscleSmoothing = v / 100;
+      this.sim.creatures.forEach(c => { c.simConfig.muscleSmoothing = this.sim.muscleSmoothing; });
+    });
+    this._bindSlider('inp-distreward', v => { this.sim.distanceRewardWeight = v; });
+    this._bindSlider('inp-speedreward', v => { this.sim.speedRewardWeight = v / 100; });
+    this._bindSlider('inp-jitterpen', v => { this.sim.jitterPenaltyWeight = v; });
     this._bindSlider('inp-mut', v => { this.sim.mutationRate = v / 100; });
     this._bindSlider('inp-mutsize', v => { this.sim.mutationSize = v / 100; });
 
@@ -235,6 +279,17 @@ export class Controls {
     set('val-jointspeed', `${s.jointMoveSpeed.toFixed(2)}x`);
     set('val-joint', `${Math.round(s.jointFreedom * 100)}%`);
     set('val-gravity', s.gravity.toFixed(1));
+    set('val-groundfric', `${s.groundFriction.toFixed(2)}`);
+    set('val-groundstatic', `${s.groundStaticFriction.toFixed(2)}`);
+    set('val-traction', `${Math.round(s.tractionDamping * 100)}%`);
+    set('val-bodyfric', `${s.bodyFriction.toFixed(2)}`);
+    set('val-bodystatic', `${s.bodyStaticFriction.toFixed(2)}`);
+    set('val-bodyair', `${s.bodyAirFriction.toFixed(3)}`);
+    set('val-musrange', `${Math.round(s.muscleRange * 100)}%`);
+    set('val-musmooth', `${Math.round(s.muscleSmoothing * 100)}%`);
+    set('val-distreward', `${Math.round(s.distanceRewardWeight)}`);
+    set('val-speedreward', `${s.speedRewardWeight.toFixed(2)}`);
+    set('val-jitterpen', `${Math.round(s.jitterPenaltyWeight)}`);
     set('val-mut', `${Math.round(s.mutationRate * 100)}%`);
     set('val-mutsize', `${s.mutationSize.toFixed(2)}x`);
     set('val-zoom', `${s.zoom.toFixed(2)}x`);

@@ -50,6 +50,17 @@ export class Simulation {
     this.muscleStrength = CONFIG.defaultMuscleStrength;
     this.jointMoveSpeed = CONFIG.defaultJointMoveSpeed;
     this.jointFreedom = CONFIG.defaultJointFreedom;
+    this.groundFriction = CONFIG.defaultGroundFriction;
+    this.groundStaticFriction = CONFIG.defaultGroundStaticFriction;
+    this.tractionDamping = CONFIG.defaultTractionDamping;
+    this.bodyFriction = CONFIG.defaultBodyFriction;
+    this.bodyStaticFriction = CONFIG.defaultBodyStaticFriction;
+    this.bodyAirFriction = CONFIG.defaultBodyAirFriction;
+    this.muscleRange = CONFIG.defaultMuscleRange;
+    this.muscleSmoothing = CONFIG.defaultMuscleSmoothing;
+    this.distanceRewardWeight = CONFIG.defaultDistanceRewardWeight;
+    this.speedRewardWeight = CONFIG.defaultSpeedRewardWeight;
+    this.jitterPenaltyWeight = CONFIG.defaultJitterPenaltyWeight;
     this.spawnX = 60;
     this.mutationRate = CONFIG.defaultMutationRate;
     this.mutationSize = CONFIG.defaultMutationSize;
@@ -89,6 +100,11 @@ export class Simulation {
       jointFreedom: this.jointFreedom,
       muscleStrength: this.muscleStrength,
       jointMoveSpeed: this.jointMoveSpeed,
+      muscleRange: this.muscleRange,
+      muscleSmoothing: this.muscleSmoothing,
+      bodyFriction: this.bodyFriction,
+      bodyStaticFriction: this.bodyStaticFriction,
+      bodyAirFriction: this.bodyAirFriction,
       hiddenLayers: this.hiddenLayers,
       neuronsPerLayer: this.neuronsPerLayer
     };
@@ -123,7 +139,10 @@ export class Simulation {
     this.clearSimulation();
 
     this.engine = createEngine(this.gravity);
-    this.ground = createGround(this.engine, this.getGroundY());
+    this.ground = createGround(this.engine, this.getGroundY(), {
+      friction: this.groundFriction,
+      frictionStatic: this.groundStaticFriction
+    });
 
     this.generation = 1;
     this.timer = this.simDuration;
@@ -191,13 +210,13 @@ export class Simulation {
     const progressX = Number.isFinite(fitness.maxX) ? fitness.maxX : creature.getX();
     const distance = this.distMetersContinuousFromX(progressX);
     return (
-      distance * 320 +
-      fitness.speed * 0.35 +
+      distance * this.distanceRewardWeight +
+      fitness.speed * this.speedRewardWeight +
       fitness.stability * 0.5 -
       fitness.airtimePct * 0.2 -
       fitness.stumbles * 10 -
       fitness.spin * 30 -
-      (fitness.actuationJerk || 0) * 40
+      (fitness.actuationJerk || 0) * this.jitterPenaltyWeight
     );
   }
 
@@ -313,6 +332,7 @@ export class Simulation {
       const stepsToRun = Math.min(CONFIG.maxPhysicsStepsPerFrame, Math.max(1, this.simSpeed));
 
       for (let i = 0; i < stepsToRun; i++) {
+        this.syncCreatureRuntimeSettings();
         const time = this.engine.timing.timestamp * 0.006;
         this.creatures.forEach(c => c.update(time, groundY));
         Engine.update(this.engine, fixedDtMs);
@@ -324,7 +344,7 @@ export class Simulation {
             if (grounded) {
               // Add explicit horizontal traction to kill jitter-slide exploits.
               Body.setVelocity(b, {
-                x: b.velocity.x * 0.8,
+                x: b.velocity.x * this.tractionDamping,
                 y: b.velocity.y
               });
             }
@@ -380,6 +400,25 @@ export class Simulation {
 
     if (this.onFrame) {
       this.onFrame(leader, simulatedSec);
+    }
+  }
+
+  syncCreatureRuntimeSettings() {
+    this.creatures.forEach(c => {
+      c.simConfig.jointFreedom = this.jointFreedom;
+      c.simConfig.muscleStrength = this.muscleStrength;
+      c.simConfig.jointMoveSpeed = this.jointMoveSpeed;
+      c.simConfig.muscleRange = this.muscleRange;
+      c.simConfig.muscleSmoothing = this.muscleSmoothing;
+      c.bodies.forEach(b => {
+        b.friction = this.bodyFriction;
+        b.frictionStatic = this.bodyStaticFriction;
+        b.frictionAir = this.bodyAirFriction;
+      });
+    });
+    if (this.ground) {
+      this.ground.friction = this.groundFriction;
+      this.ground.frictionStatic = this.groundStaticFriction;
     }
   }
 }
