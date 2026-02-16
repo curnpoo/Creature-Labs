@@ -592,15 +592,19 @@ export class Simulation {
       c.simConfig.muscleRange = this.muscleRange;
       c.simConfig.muscleSmoothing = this.muscleSmoothing;
       c.simConfig.selfCollision = this.selfCollision;
+      c.simConfig.bodyFriction = this.bodyFriction;
+      c.simConfig.bodyStaticFriction = this.bodyStaticFriction;
+      c.simConfig.bodyAirFriction = this.bodyAirFriction;
       
-      const mask = this.selfCollision ? 0x0003 : 0x0001;
+      c.updateRuntimeSettings();
+
       c.bodies.forEach(b => {
         b.friction = this.bodyFriction;
         b.frictionStatic = this.bodyStaticFriction;
         b.frictionAir = this.bodyAirFriction;
-        b.collisionFilter.mask = mask;
       });
     });
+
     if (this.ground) {
       this.ground.friction = this.groundFriction;
       this.ground.frictionStatic = this.groundStaticFriction;
