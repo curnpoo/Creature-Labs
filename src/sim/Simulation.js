@@ -191,11 +191,12 @@ export class Simulation {
     const distance = this.distMetersContinuousFromX(creature.getX());
     return (
       distance * 220 +
-      fitness.speed * 0.45 +
+      fitness.speed * 0.25 +
       fitness.stability * 0.7 -
       fitness.airtimePct * 0.25 -
       fitness.stumbles * 10 -
-      fitness.spin * 30
+      fitness.spin * 30 -
+      (fitness.actuationJerk || 0) * 120
     );
   }
 

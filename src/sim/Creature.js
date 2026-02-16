@@ -33,6 +33,7 @@ export class Creature {
       airtimePct: 0,
       stumbles: 0,
       spin: 0,
+      actuationJerk: 0,
       frames: 0,
       airFrames: 0,
       prevCenter: null,
@@ -51,9 +52,9 @@ export class Creature {
         CONFIG.nodeRadius,
         {
           collisionFilter: { category, mask },
-          friction: 1.2,
-          frictionStatic: 2.6,
-          frictionAir: 0.04,
+          friction: 2,
+          frictionStatic: 8,
+          frictionAir: 0.06,
           density: 0.005,
           restitution: 0
         }
@@ -241,18 +242,27 @@ export class Creature {
 
     // Apply NN outputs to muscles (tanh output in [-1, 1])
     const strength = this.simConfig.muscleStrength || 1.2;
-    const moveSpeed = Math.max(0.2, this.simConfig.jointMoveSpeed || 1.0);
-    const amplitude = Math.min(0.45, 0.22 * strength);
+    const moveSpeed = Math.max(0.2, Math.min(1.5, this.simConfig.jointMoveSpeed || 1.0));
+    const amplitude = Math.min(0.2, Math.max(0.05, 0.12 * strength));
+    const smoothing = Math.min(0.35, 0.1 + 0.12 * moveSpeed);
+    let totalJerk = 0;
     this.muscles.forEach((m, i) => {
-      const signal = outputs[i] || 0;
-      const targetLength = m.c.baseLength * (1 + signal * amplitude);
+      const rawSignal = outputs[i] || 0;
+      const prevSignal = m.smoothSignal !== undefined ? m.smoothSignal : rawSignal;
+      const smoothSignal = prevSignal + (rawSignal - prevSignal) * smoothing;
+      m.smoothSignal = smoothSignal;
+      totalJerk += Math.abs(smoothSignal - prevSignal);
+
+      const targetLength = m.c.baseLength * (1 + smoothSignal * amplitude);
       const currentLength = m.c.currentLength || m.c.length;
-      const maxDelta = m.c.baseLength * 0.03 * moveSpeed;
+      const maxDelta = m.c.baseLength * 0.012 * moveSpeed;
       const nextLength = currentLength + Math.max(-maxDelta, Math.min(maxDelta, targetLength - currentLength));
       m.c.currentLength = nextLength;
       m.c.length = nextLength;
-      m.currentSignal = signal;
+      m.currentSignal = smoothSignal;
     });
+    const avgJerk = totalJerk / Math.max(1, this.muscles.length);
+    this.stats.actuationJerk = this.stats.actuationJerk * 0.9 + avgJerk * 0.1;
   }
 
   sampleFitness(dtSec, groundY) {
@@ -305,7 +315,8 @@ export class Creature {
       stability: Math.max(0, Math.min(100, this.stats.stability)),
       airtimePct: Math.max(0, Math.min(100, this.stats.airtimePct)),
       stumbles: this.stats.stumbles,
-      spin: this.stats.spin
+      spin: this.stats.spin,
+      actuationJerk: this.stats.actuationJerk
     };
   }
 

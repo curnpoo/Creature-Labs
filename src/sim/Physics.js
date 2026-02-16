@@ -14,8 +14,8 @@ export function createEngine(gravity = 1.0) {
 export function createGround(engine, groundY) {
   const ground = Bodies.rectangle(0, groundY + 100, 1000000, 200, {
     isStatic: true,
-    friction: 1.4,
-    frictionStatic: 4,
+    friction: 2,
+    frictionStatic: 8,
     restitution: 0
   });
   Composite.add(engine.world, [ground]);
