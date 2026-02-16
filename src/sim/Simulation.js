@@ -491,7 +491,7 @@ export class Simulation {
     if (this.ground) {
       Body.setPosition(this.ground, {
         x: this.cameraX + window.innerWidth / 2,
-        y: groundY + 100
+        y: groundY + 400
       });
     }
 
