@@ -37,6 +37,7 @@ export const CONFIG = {
   defaultMuscleSmoothing: 0.22,
   defaultDistanceRewardWeight: 320,
   defaultSpeedRewardWeight: 0.35,
+  defaultStabilityRewardWeight: 0.9,
   defaultJitterPenaltyWeight: 40,
   defaultGroundSlipPenaltyWeight: 20,
   defaultZoom: 1.0,

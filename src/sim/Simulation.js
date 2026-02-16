@@ -64,6 +64,8 @@ export class Simulation {
     this.muscleSmoothing = CONFIG.defaultMuscleSmoothing;
     this.distanceRewardWeight = CONFIG.defaultDistanceRewardWeight;
     this.speedRewardWeight = CONFIG.defaultSpeedRewardWeight;
+    this.stabilityRewardWeight = CONFIG.defaultStabilityRewardWeight;
+    this.rewardStability = true;
     this.jitterPenaltyWeight = CONFIG.defaultJitterPenaltyWeight;
     this.groundSlipPenaltyWeight = CONFIG.defaultGroundSlipPenaltyWeight;
     this.spawnX = 60;
@@ -339,15 +341,16 @@ export class Simulation {
     const fitness = creature.getFitnessSnapshot();
     const progressX = Number.isFinite(fitness.maxX) ? fitness.maxX : creature.getX();
     const distance = this.distMetersContinuousFromX(progressX);
+    const gaitPenaltyScale = this.rewardStability ? 1.5 : 1.0;
     return (
       distance * this.distanceRewardWeight +
       fitness.speed * this.speedRewardWeight * (0.2 + (fitness.actuationLevel || 0) * 0.8) +
-      fitness.stability * 0.5 -
-      fitness.airtimePct * 0.2 -
-      fitness.stumbles * 10 -
-      fitness.spin * 30 -
-      (fitness.actuationJerk || 0) * this.jitterPenaltyWeight -
-      (fitness.groundSlip || 0) * this.groundSlipPenaltyWeight
+      (this.rewardStability ? fitness.stability * this.stabilityRewardWeight : 0) -
+      fitness.airtimePct * 0.2 * gaitPenaltyScale -
+      fitness.stumbles * 10 * gaitPenaltyScale -
+      fitness.spin * 30 * gaitPenaltyScale -
+      (fitness.actuationJerk || 0) * this.jitterPenaltyWeight * gaitPenaltyScale -
+      (fitness.groundSlip || 0) * this.groundSlipPenaltyWeight * gaitPenaltyScale
     );
   }
 

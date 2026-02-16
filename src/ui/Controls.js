@@ -16,7 +16,7 @@ export class Controls {
       'val-jointspeed', 'val-joint', 'val-gravity', 'val-groundfric',
       'val-groundstatic', 'val-traction', 'val-bodyfric', 'val-bodystatic',
       'val-bodyair', 'val-musrange', 'val-musmooth', 'val-distreward',
-      'val-speedreward', 'val-jitterpen', 'val-slippen', 'val-mut',
+      'val-speedreward', 'val-jitterpen', 'val-slippen', 'val-stabmode', 'val-mut',
       'val-mutsize', 'val-zoom', 'val-cam',
       'val-hidden', 'val-neurons', 'val-elites', 'val-tournament',
       'cam-lock', 'cam-free', 'icon-pause',
@@ -122,6 +122,20 @@ export class Controls {
     this._bindSlider('inp-neurons', v => { this.sim.neuronsPerLayer = v; });
     this._bindSlider('inp-elites', v => { this.sim.eliteCount = v; });
     this._bindSlider('inp-tournament', v => { this.sim.tournamentSize = v; });
+
+    // Stability reward toggle
+    const stabOn = document.getElementById('stab-on');
+    const stabOff = document.getElementById('stab-off');
+    if (stabOn) stabOn.onclick = () => {
+      this.sim.rewardStability = true;
+      this._updateStabilityMode();
+      this.updateLabels();
+    };
+    if (stabOff) stabOff.onclick = () => {
+      this.sim.rewardStability = false;
+      this._updateStabilityMode();
+      this.updateLabels();
+    };
 
     // Camera buttons
     const camLock = document.getElementById('cam-lock');
@@ -264,6 +278,7 @@ export class Controls {
     }
 
     this.setCameraMode('lock');
+    this._updateStabilityMode();
     this.updateLabels();
     this.setReplayIndex(-1);
     this.toggleReplayPlay(false);
@@ -304,6 +319,14 @@ export class Controls {
     }
   }
 
+  _updateStabilityMode() {
+    const stabOn = document.getElementById('stab-on');
+    const stabOff = document.getElementById('stab-off');
+    if (stabOn) stabOn.classList.toggle('active', this.sim.rewardStability);
+    if (stabOff) stabOff.classList.toggle('active', !this.sim.rewardStability);
+    if (this.els['val-stabmode']) this.els['val-stabmode'].textContent = this.sim.rewardStability ? 'ON' : 'OFF';
+  }
+
   toggleReplayPlay(forceValue = null) {
     if (!this.sim.replayHistory.length) {
       this.sim.replayPlaying = false;
@@ -339,6 +362,7 @@ export class Controls {
     set('val-speedreward', `${s.speedRewardWeight.toFixed(2)}`);
     set('val-jitterpen', `${Math.round(s.jitterPenaltyWeight)}`);
     set('val-slippen', `${Math.round(s.groundSlipPenaltyWeight)}`);
+    set('val-stabmode', s.rewardStability ? 'ON' : 'OFF');
     set('val-mut', `${Math.round(s.mutationRate * 100)}%`);
     set('val-mutsize', `${s.mutationSize.toFixed(2)}x`);
     set('val-zoom', `${s.zoom.toFixed(2)}x`);
@@ -375,6 +399,8 @@ export class Controls {
     s.muscleSmoothing = CONFIG.defaultMuscleSmoothing;
     s.distanceRewardWeight = CONFIG.defaultDistanceRewardWeight;
     s.speedRewardWeight = CONFIG.defaultSpeedRewardWeight;
+    s.stabilityRewardWeight = CONFIG.defaultStabilityRewardWeight;
+    s.rewardStability = true;
     s.jitterPenaltyWeight = CONFIG.defaultJitterPenaltyWeight;
     s.groundSlipPenaltyWeight = CONFIG.defaultGroundSlipPenaltyWeight;
     s.mutationRate = CONFIG.defaultMutationRate;
@@ -418,6 +444,7 @@ export class Controls {
       const el = document.getElementById(id);
       if (el) el.value = value;
     });
+    this._updateStabilityMode();
     this.updateLabels();
   }
 }
