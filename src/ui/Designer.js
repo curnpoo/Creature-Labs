@@ -16,6 +16,14 @@ export class Designer {
     this.dragNode = null;
     this.mousePos = { x: 0, y: 0 };
 
+    // Zoom and Pan
+    this.zoom = 1.0;
+    this.panX = 0;
+    this.panY = 0;
+    this.isPanning = false;
+    this.panMode = false;
+    this.lastPanPos = null;
+
     this._setup();
   }
 
@@ -29,6 +37,7 @@ export class Designer {
     this.canvas.addEventListener('mousemove', e => this._onMove(e));
     this.canvas.addEventListener('mouseup', e => this._onUp(e));
     this.canvas.addEventListener('mouseleave', e => this._onUp(e));
+    this.canvas.addEventListener('wheel', e => this._onWheel(e), { passive: false });
 
     this.canvas.addEventListener('touchstart', e => {
       e.preventDefault();
@@ -53,6 +62,19 @@ export class Designer {
 
   setTool(tool) {
     this.tool = tool;
+  }
+
+  togglePanMode() {
+    this.panMode = !this.panMode;
+    this.canvas.style.cursor = this.panMode ? 'grab' : 'crosshair';
+    return this.panMode;
+  }
+
+  resetView() {
+    this.zoom = 1.0;
+    this.panX = 0;
+    this.panY = 0;
+    this.render();
   }
 
   isValid() {
@@ -171,7 +193,30 @@ export class Designer {
 
   _relPoint(event) {
     const rect = this.canvas.getBoundingClientRect();
-    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const screenX = event.clientX - rect.left;
+    const screenY = event.clientY - rect.top;
+    // Transform from screen space to world space
+    return {
+      x: (screenX - this.panX) / this.zoom,
+      y: (screenY - this.panY) / this.zoom
+    };
+  }
+
+  _onWheel(event) {
+    event.preventDefault();
+    const delta = -event.deltaY * 0.001;
+    const oldZoom = this.zoom;
+    this.zoom = Math.max(0.25, Math.min(3.0, this.zoom * (1 + delta)));
+
+    // Zoom toward mouse position
+    const rect = this.canvas.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+
+    this.panX = mouseX - (mouseX - this.panX) * (this.zoom / oldZoom);
+    this.panY = mouseY - (mouseY - this.panY) * (this.zoom / oldZoom);
+
+    this.render();
   }
 
   _findNodeAt(x, y, radius = 14) {
@@ -203,6 +248,16 @@ export class Designer {
   _onDown(event) {
     const p = this._relPoint(event);
     this.mousePos = p;
+
+    // Handle pan mode
+    if (this.panMode || event.button === 1) { // Middle mouse button also pans
+      this.isPanning = true;
+      const rect = this.canvas.getBoundingClientRect();
+      this.lastPanPos = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      this.canvas.style.cursor = 'grabbing';
+      return;
+    }
+
     const hitNode = this._findNodeAt(p.x, p.y);
 
     if (this.tool === 'move') {
@@ -280,6 +335,19 @@ export class Designer {
   }
 
   _onMove(event) {
+    const rect = this.canvas.getBoundingClientRect();
+    const screenX = event.clientX - rect.left;
+    const screenY = event.clientY - rect.top;
+
+    // Handle panning
+    if (this.isPanning && this.lastPanPos) {
+      this.panX += screenX - this.lastPanPos.x;
+      this.panY += screenY - this.lastPanPos.y;
+      this.lastPanPos = { x: screenX, y: screenY };
+      this.render();
+      return;
+    }
+
     const p = this._relPoint(event);
     this.mousePos = p;
     if (this.dragNode) {
@@ -292,6 +360,14 @@ export class Designer {
   }
 
   _onUp(event) {
+    // Reset panning
+    if (this.isPanning) {
+      this.isPanning = false;
+      this.lastPanPos = null;
+      this.canvas.style.cursor = this.panMode ? 'grab' : 'crosshair';
+      return;
+    }
+
     const p = event.clientX ? this._relPoint(event) : this.mousePos;
     this.mousePos = p;
 
@@ -327,6 +403,11 @@ export class Designer {
     if (!this.ctx) return;
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Apply zoom and pan transform
+    ctx.save();
+    ctx.translate(this.panX, this.panY);
+    ctx.scale(this.zoom, this.zoom);
 
     // Grid
     ctx.strokeStyle = 'rgba(255,255,255,0.05)';
@@ -552,5 +633,28 @@ export class Designer {
         ctx.fillText(`Connections: ${bones}B + ${muscles}M`, tooltipX + 8, tooltipY + 46);
       }
     }
+
+    // Restore transform for UI elements
+    ctx.restore();
+
+    // ZOOM & PAN INFO (drawn in screen space, not world space)
+    ctx.fillStyle = 'rgba(10, 14, 24, 0.85)';
+    ctx.fillRect(this.canvas.width - 150, this.canvas.height - 70, 140, 60);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(this.canvas.width - 150, this.canvas.height - 70, 140, 60);
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.font = 'bold 10px "JetBrains Mono", monospace';
+    ctx.fillText('VIEW CONTROLS', this.canvas.width - 145, this.canvas.height - 54);
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.font = '9px "JetBrains Mono", monospace';
+    ctx.fillText(`Zoom: ${(this.zoom * 100).toFixed(0)}%`, this.canvas.width - 145, this.canvas.height - 38);
+    ctx.fillText(`Pan: ${this.panMode ? 'ON' : 'OFF'}`, this.canvas.width - 145, this.canvas.height - 24);
+
+    ctx.fillStyle = 'rgba(168, 85, 247, 0.7)';
+    ctx.font = '8px "JetBrains Mono", monospace';
+    ctx.fillText('Scroll: Zoom', this.canvas.width - 145, this.canvas.height - 12);
   }
 }

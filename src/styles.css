@@ -294,83 +294,107 @@ canvas {
     pointer-events: none;
 }
 
-/* ─── Edge Tab Buttons (Visible clickable tabs) ─── */
+/* ─── Edge Tab Buttons (Full-width/height clickable tabs) ─── */
 .edge-tab-rail {
     position: absolute;
     z-index: 30;
     pointer-events: auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .edge-top-rail {
     top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    height: 28px;
-    padding: 4px;
+    left: 0;
+    right: 0;
+    height: 32px;
 }
 
 .edge-left-rail {
     left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 28px;
-    padding: 4px;
+    top: 0;
+    bottom: 0;
+    width: 32px;
 }
 
 .edge-right-rail {
     right: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 28px;
-    padding: 4px;
+    top: 0;
+    bottom: 0;
+    width: 32px;
 }
 
 .edge-bottom-rail {
     bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    height: 28px;
-    padding: 4px;
+    left: 0;
+    right: 0;
+    height: 32px;
 }
 
 .edge-tab {
-    padding: 6px 16px;
-    border-radius: 6px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: rgba(10, 14, 24, 0.85);
     backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: none;
     color: var(--text-muted);
     font-family: "JetBrains Mono", monospace;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     cursor: pointer;
     transition: all 0.2s ease;
     white-space: nowrap;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    gap: 6px;
+}
+
+/* Border on panel side */
+.edge-top-rail .edge-tab {
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.edge-left-rail .edge-tab {
+    border-right: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.edge-right-rail .edge-tab {
+    border-left: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.edge-bottom-rail .edge-tab {
+    border-top: 2px solid rgba(255, 255, 255, 0.1);
 }
 
 .edge-tab:hover {
     background: rgba(15, 20, 35, 0.95);
-    border-color: rgba(255, 255, 255, 0.2);
     color: var(--text-secondary);
-    transform: scale(1.05);
 }
 
 .edge-tab.active {
-    background: rgba(0, 242, 255, 0.15);
-    border-color: rgba(0, 242, 255, 0.5);
+    background: rgba(0, 242, 255, 0.12);
     color: var(--primary);
-    box-shadow: 0 0 16px rgba(0, 242, 255, 0.3), 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.edge-tab.active:hover {
-    background: rgba(0, 242, 255, 0.2);
-    transform: scale(1.05);
+.edge-top-rail .edge-tab.active {
+    border-bottom-color: rgba(0, 242, 255, 0.8);
+    box-shadow: 0 2px 12px rgba(0, 242, 255, 0.2);
+}
+
+.edge-left-rail .edge-tab.active {
+    border-right-color: rgba(0, 242, 255, 0.8);
+    box-shadow: 2px 0 12px rgba(0, 242, 255, 0.2);
+}
+
+.edge-right-rail .edge-tab.active {
+    border-left-color: rgba(0, 242, 255, 0.8);
+    box-shadow: -2px 0 12px rgba(0, 242, 255, 0.2);
+}
+
+.edge-bottom-rail .edge-tab.active {
+    border-top-color: rgba(0, 242, 255, 0.8);
+    box-shadow: 0 -2px 12px rgba(0, 242, 255, 0.2);
 }
 
 /* Vertical text for left/right rails */
@@ -378,7 +402,7 @@ canvas {
 .edge-right-rail .edge-tab {
     writing-mode: vertical-rl;
     text-orientation: mixed;
-    padding: 12px 6px;
+    flex-direction: column-reverse;
 }
 
 /* ─── Scrollbar Styling ─── */

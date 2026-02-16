@@ -241,6 +241,11 @@ document.getElementById('tool-muscle').onclick = e => setTool('muscle', e.curren
 document.getElementById('tool-move').onclick = e => setTool('move', e.currentTarget);
 document.getElementById('tool-erase').onclick = e => setTool('erase', e.currentTarget);
 document.getElementById('tool-undo').onclick = () => designer.undo();
+document.getElementById('tool-pan').onclick = (e) => {
+  const isPanMode = designer.togglePanMode();
+  e.currentTarget.classList.toggle('active', isPanMode);
+};
+document.getElementById('tool-reset-view').onclick = () => designer.resetView();
 document.getElementById('tool-save').onclick = () => designer.saveToFile();
 document.getElementById('tool-load').onclick = () => document.getElementById('design-file-input').click();
 
