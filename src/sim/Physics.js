@@ -1,14 +1,15 @@
 import Matter from 'matter-js';
+import { PHYSICS_CONFIG } from '../utils/config/physics.js';
 
 const { Engine, Bodies, Composite, Body } = Matter;
 
 export function createEngine(gravity = 1.0) {
   const engine = Engine.create();
   engine.world.gravity.y = gravity;
-  engine.positionIterations = 20;  // Double for better stability
-  engine.velocityIterations = 16;   // Double for better stability
-  engine.constraintIterations = 24; // Double for constraint resolution
-  engine.enableSleeping = false;    // Prevent sleeping exploits
+  engine.positionIterations = PHYSICS_CONFIG.positionIterations;
+  engine.velocityIterations = PHYSICS_CONFIG.velocityIterations;
+  engine.constraintIterations = PHYSICS_CONFIG.constraintIterations;
+  engine.enableSleeping = PHYSICS_CONFIG.enableSleeping;
   return engine;
 }
 
