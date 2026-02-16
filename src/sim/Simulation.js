@@ -173,6 +173,12 @@ export class Simulation {
           // If they belong to DIFFERENT creatures, cancel the collision.
           if (bodyA.creatureId !== bodyB.creatureId) {
             p.isActive = false;
+          } else {
+            // SAME creature: check if they are directly connected by a bone or muscle.
+            // Colliding directly connected bodies causes 'jitter' as physics fought the constraint.
+            if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB.id)) {
+              p.isActive = false;
+            }
           }
         }
       }
