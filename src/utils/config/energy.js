@@ -9,21 +9,21 @@ export const ENERGY_CONFIG = {
   startingEnergy: 100,          // Starting energy (% of max, or absolute value)
 
   // Energy Costs
-  usagePerActuation: 0.8,       // Energy cost per unit of muscle actuation (0-1 range)
+  usagePerActuation: 0.05,      // Energy cost per unit of muscle actuation (0-1 range) - reduced from 0.8
   minEnergyForActuation: 0,     // Minimum energy required to actuate muscles (0 = always allow)
 
   // Energy Regeneration
-  regenRate: 35,                // Base energy regeneration per second (35 = recovers in ~3 seconds)
+  regenRate: 60,                // Base energy regeneration per second - increased from 35
   regenInactivityBonus: true,   // Bonus regen when muscles are inactive
-  regenMinMultiplier: 0.2,      // Minimum regen even when fully active (20% of regenRate)
+  regenMinMultiplier: 0.5,      // Minimum regen even when fully active (50% of regenRate) - up from 20%
   regenWhileGrounded: 1.0,      // Regen multiplier when grounded (1.0 = normal)
-  regenWhileAirborne: 0.5,      // Regen multiplier when airborne (0.5 = half speed)
+  regenWhileAirborne: 0.8,      // Regen multiplier when airborne - up from 0.5
 
   // Energy-Based Strength Modifiers
   strengthAtFullEnergy: 1.0,    // Strength multiplier at 100% energy
-  strengthAt50Energy: 0.85,     // Strength multiplier at 50% energy
-  strengthAt20Energy: 0.4,      // Strength multiplier at 20% energy
-  strengthAtZeroEnergy: 0.0,    // Strength multiplier at 0% energy (complete exhaustion)
+  strengthAt50Energy: 0.9,      // Strength multiplier at 50% energy - up from 0.85
+  strengthAt20Energy: 0.7,      // Strength multiplier at 20% energy - up from 0.4
+  strengthAtZeroEnergy: 0.3,    // Strength multiplier at 0% energy - up from 0.0 (allow weak movement)
 
   // Fitness Rewards
   efficiencyBonus: 0.5,         // Fitness bonus for energy efficiency (distance/energy)

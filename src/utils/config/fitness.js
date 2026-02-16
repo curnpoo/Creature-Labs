@@ -6,16 +6,16 @@ export const FITNESS_CONFIG = {
   // Primary Rewards
   distanceWeight: 250,          // Reward for distance traveled (primary objective)
   speedWeight: 0.25,            // Reward for movement speed
-  stabilityWeight: 5.0,         // Reward for upright/stable posture (5 points per % stability)
-  rewardStability: true,        // Enable stability rewards
+  stabilityWeight: 1.0,         // Reward for upright/stable posture - reduced from 5.0
+  rewardStability: false,       // Disable by default - let creatures learn movement first
 
-  // Gait Quality Penalties
-  spinPenalty: 15000,           // Penalty for spinning (quadratic + cumulative)
-  spinAccumulatedPenalty: 150,  // Penalty for total accumulated spin
-  jitterPenalty: 60,            // Penalty for erratic muscle actuation (power 1.5)
-  groundSlipPenalty: 35,        // Penalty for slipping on ground
-  airtimePenalty: 0.3,          // Penalty for time spent airborne
-  stumblePenalty: 15,           // Penalty for stumbling (center too low)
+  // Gait Quality Penalties (REDUCED to allow learning)
+  spinPenalty: 2000,            // Penalty for spinning - reduced from 15000
+  spinAccumulatedPenalty: 20,   // Penalty for total accumulated spin - reduced from 150
+  jitterPenalty: 5,             // Penalty for erratic muscle actuation - reduced from 60
+  groundSlipPenalty: 5,         // Penalty for slipping on ground - reduced from 35
+  airtimePenalty: 0.1,          // Penalty for time spent airborne - reduced from 0.3
+  stumblePenalty: 2,            // Penalty for stumbling - reduced from 15
 
   // Advanced Penalties
   energyViolationPenalty: 500,  // Penalty for suspicious energy gains (exploit detection)

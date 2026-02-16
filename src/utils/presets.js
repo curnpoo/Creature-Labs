@@ -2,11 +2,66 @@
  * Working Creature Presets
  * Designed for realistic locomotion with proper body structure,
  * articulated limbs, and coordinated muscle groups.
+ *
+ * Ordered from simplest (learns fast) to complex (powerful but slow to evolve)
  */
 export const PRESETS = [
   {
+    name: 'Simple Hopper',
+    description: 'Easiest to evolve - 3 nodes, 1 muscle, learns in 10-20 gens',
+    nodes: [
+      { id: 0, x: 280, y: 280 }, // Body left
+      { id: 1, x: 320, y: 280 }, // Body right
+      { id: 2, x: 300, y: 350 }  // Foot
+    ],
+    constraints: [
+      { type: 'bone', n1: 0, n2: 1 },  // Body
+      { type: 'bone', n1: 0, n2: 2 },  // Left leg
+      { type: 'bone', n1: 1, n2: 2 },  // Right leg
+      { type: 'muscle', n1: 0, n2: 2 } // Spring muscle
+    ]
+  },
+
+  {
+    name: 'Basic Walker',
+    description: 'Simple 4-node walker - 2 legs, 2 muscles, learns in 20-40 gens',
+    nodes: [
+      { id: 0, x: 280, y: 270 }, // Body left
+      { id: 1, x: 320, y: 270 }, // Body right
+      { id: 2, x: 270, y: 340 }, // Left foot
+      { id: 3, x: 330, y: 340 }  // Right foot
+    ],
+    constraints: [
+      { type: 'bone', n1: 0, n2: 1 },  // Body
+      { type: 'bone', n1: 0, n2: 2 },  // Left leg
+      { type: 'bone', n1: 1, n2: 3 },  // Right leg
+      { type: 'muscle', n1: 0, n2: 2 }, // Left muscle
+      { type: 'muscle', n1: 1, n2: 3 }  // Right muscle
+    ]
+  },
+
+  {
+    name: 'Tripod Walker',
+    description: 'Stable 3-leg design - learns in 30-50 gens',
+    nodes: [
+      { id: 0, x: 300, y: 260 }, // Body center
+      { id: 1, x: 260, y: 340 }, // Left foot
+      { id: 2, x: 300, y: 340 }, // Center foot
+      { id: 3, x: 340, y: 340 }  // Right foot
+    ],
+    constraints: [
+      { type: 'bone', n1: 0, n2: 1 },
+      { type: 'bone', n1: 0, n2: 2 },
+      { type: 'bone', n1: 0, n2: 3 },
+      { type: 'muscle', n1: 0, n2: 1 },
+      { type: 'muscle', n1: 0, n2: 2 },
+      { type: 'muscle', n1: 0, n2: 3 }
+    ]
+  },
+
+  {
     name: 'Bipedal Walker',
-    description: 'Stable two-legged walker with body, knees, and feet',
+    description: 'Articulated legs with knees - learns in 50-100 gens',
     nodes: [
       // Body core (triangle for stability)
       { id: 0, x: 280, y: 260 }, // Left shoulder
