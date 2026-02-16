@@ -47,7 +47,7 @@ export class Creature {
     // Create physics bodies
     const bodyMap = {};
     const category = 0x0002;
-    const mask = 0x0001; // Ground only by default
+    const mask = (simConfig.selfCollision) ? 0x0003 : 0x0001; 
 
     schemaNodes.forEach(n => {
       const b = Bodies.circle(
@@ -55,7 +55,7 @@ export class Creature {
         originY + (n.y - minY),
         CONFIG.nodeRadius,
         {
-          collisionFilter: { category, mask },
+          collisionFilter: { category, mask, group: 0 },
           friction: simConfig.bodyFriction ?? 2,
           frictionStatic: simConfig.bodyStaticFriction ?? 8,
           frictionAir: simConfig.bodyAirFriction ?? 0.07,
@@ -471,5 +471,12 @@ export class Creature {
     }
 
     ctx.globalAlpha = 1;
+  }
+
+  updateRuntimeSettings() {
+    const mask = this.simConfig.selfCollision ? 0x0003 : 0x0001;
+    this.bodies.forEach(b => {
+      b.collisionFilter.mask = mask;
+    });
   }
 }

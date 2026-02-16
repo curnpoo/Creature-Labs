@@ -158,30 +158,21 @@ export class Simulation {
 
     this.engine = createEngine(this.gravity);
 
+    // STRICT COLLISION FILTERING
+    // This ensures that different creatures NEVER physically interact,
+    // even if Self-Collision is toggled ON for progress monitoring.
     const collisionFilter = (e) => {
       const pairs = e.pairs;
       for (let i = 0; i < pairs.length; i++) {
         const p = pairs[i];
+        const bodyA = p.bodyA;
+        const bodyB = p.bodyB;
         
-        // INTER-CREATURE COLLISION FILTERING
-        // Category 0x0002 is creatures. If both are creature parts, filter them.
-        const catA = p.bodyA.collisionFilter.category;
-        const catB = p.bodyB.collisionFilter.category;
-        
-        if (catA === 0x0002 && catB === 0x0002) {
-          // Both are creature parts.
-          if (p.bodyA.creatureId !== p.bodyB.creatureId) {
-            // DIFFERENT creatures should NEVER collide
+        // If both are creature parts (Category 2)
+        if (bodyA.collisionFilter.category === 0x0002 && bodyB.collisionFilter.category === 0x0002) {
+          // If they belong to DIFFERENT creatures, cancel the collision.
+          if (bodyA.creatureId !== bodyB.creatureId) {
             p.isActive = false;
-          } else if (!this.selfCollision) {
-            // SAME creature, but self-collision is OFF
-            p.isActive = false;
-          } else {
-            // SAME creature and self-collision is ON
-            // Skip directly connected bodies (bones/muscles) to prevent physics explosions
-            if (p.bodyA.connectedBodies && p.bodyA.connectedBodies.has(p.bodyB.id)) {
-               p.isActive = false;
-            }
           }
         }
       }
