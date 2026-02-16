@@ -46,6 +46,19 @@ export class Creature {
       stumbleLatched: false
     };
 
+    // Energy system
+    const maxEnergy = simConfig.maxEnergy ?? CONFIG.defaultMaxEnergy;
+    this.energy = {
+      current: maxEnergy,
+      max: maxEnergy,
+      regenRate: simConfig.energyRegenRate ?? CONFIG.defaultEnergyRegenRate,
+      usagePerActuation: simConfig.energyUsagePerActuation ?? CONFIG.defaultEnergyUsagePerActuation,
+      minForActuation: simConfig.minEnergyForActuation ?? CONFIG.defaultMinEnergyForActuation,
+      enabled: simConfig.energyEnabled ?? CONFIG.defaultEnergyEnabled,
+      totalUsed: 0,
+      efficiency: 1.0
+    };
+
     // Create physics bodies
     const bodyMap = {};
     const category = 0x0002;
@@ -115,8 +128,8 @@ export class Creature {
       const c = Constraint.create({
         bodyA,
         bodyB,
-        stiffness: schema.type === 'bone' ? 1.0 : 0.78,
-        damping: schema.type === 'bone' ? 0.12 : 0.2,
+        stiffness: schema.type === 'bone' ? 1.0 : 0.70,  // Muscle: 0.70 (was 0.78) for viscoelastic behavior
+        damping: schema.type === 'bone' ? 0.12 : 0.30,   // Muscle: 0.30 (was 0.2) mimics muscle-tendon damping
         length: Vector.magnitude(Vector.sub(bodyA.position, bodyB.position))
       });
 
@@ -299,6 +312,8 @@ export class Creature {
 
     let totalJerk = 0;
     let totalActuation = 0;
+    let energyUsedThisFrame = 0;
+
     this.muscles.forEach((m, i) => {
       const rawSignal = outputs[i] || 0;
       const prevSignal = m.smoothSignal !== undefined ? m.smoothSignal : rawSignal;
@@ -322,7 +337,26 @@ export class Creature {
         muscleStrengthMultiplier = 0.15;
       }
 
-      const effectiveStrength = strength * muscleStrengthMultiplier;
+      // Energy system: calculate energy cost and apply energy-based strength multiplier
+      let energyMultiplier = 1.0;
+      if (this.energy.enabled) {
+        const actuationMagnitude = Math.abs(smoothSignal);
+        const energyCost = actuationMagnitude * this.energy.usagePerActuation;
+        energyUsedThisFrame += energyCost;
+
+        // Energy availability affects muscle strength
+        const energyRatio = this.energy.current / this.energy.max;
+        if (energyRatio < 0.2) {
+          // Below 20% energy: severe strength reduction
+          energyMultiplier = 0.3 + energyRatio * 2.0; // 0.3 to 0.7
+        } else if (energyRatio < 0.5) {
+          // Below 50% energy: moderate strength reduction
+          energyMultiplier = 0.7 + energyRatio * 0.6; // 0.7 to 1.0
+        }
+        // Above 50%: full strength
+      }
+
+      const effectiveStrength = strength * muscleStrengthMultiplier * energyMultiplier;
       const amplitude = Math.max(0.05, rangeScale * effectiveStrength);
       const targetLength = m.c.baseLength * (1 + smoothSignal * amplitude);
       const currentLength = m.c.currentLength || m.c.length;
@@ -342,6 +376,24 @@ export class Creature {
     this.stats.actuationJerk = this.stats.actuationJerk * 0.9 + avgJerk * 0.1;
     const avgAct = totalActuation / Math.max(1, this.muscles.length);
     this.stats.actuationLevel = this.stats.actuationLevel * 0.9 + avgAct * 0.1;
+
+    // Update energy system
+    if (this.energy.enabled) {
+      // Drain energy based on actuation
+      this.energy.current = Math.max(0, this.energy.current - energyUsedThisFrame);
+      this.energy.totalUsed += energyUsedThisFrame;
+
+      // Regenerate energy based on inactivity (less actuation = more regen)
+      const regenMultiplier = Math.max(0, 1.0 - avgAct); // Low actuation = high regen
+      const dtSec = 1 / CONFIG.fixedStepHz; // Time per physics step
+      const regenAmount = this.energy.regenRate * regenMultiplier * dtSec;
+      this.energy.current = Math.min(this.energy.max, this.energy.current + regenAmount);
+
+      // Track energy efficiency (distance per energy used)
+      if (this.energy.totalUsed > 0) {
+        this.energy.efficiency = this.stats.maxX / Math.max(1, this.energy.totalUsed);
+      }
+    }
   }
 
   sampleFitness(dtSec, groundY) {
@@ -427,6 +479,7 @@ export class Creature {
       actuationLevel: this.stats.actuationLevel,
       groundSlip: this.stats.groundSlip,
       energyViolations: this.stats.energyViolations,
+      energyEfficiency: this.energy.efficiency,
       maxX: this.stats.maxX
     };
   }

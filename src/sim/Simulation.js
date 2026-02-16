@@ -75,6 +75,14 @@ export class Simulation {
     this.groundSlipPenaltyWeight = CONFIG.defaultGroundSlipPenaltyWeight;
     this.spinPenaltyWeight = CONFIG.defaultSpinPenaltyWeight;
     this.spawnX = 60;
+
+    // Energy system settings
+    this.energyEnabled = CONFIG.defaultEnergyEnabled;
+    this.maxEnergy = CONFIG.defaultMaxEnergy;
+    this.energyRegenRate = CONFIG.defaultEnergyRegenRate;
+    this.energyUsagePerActuation = CONFIG.defaultEnergyUsagePerActuation;
+    this.minEnergyForActuation = CONFIG.defaultMinEnergyForActuation;
+    this.energyEfficiencyBonus = CONFIG.defaultEnergyEfficiencyBonus;
     this.mutationRate = CONFIG.defaultMutationRate;
     this.mutationSize = CONFIG.defaultMutationSize;
     this.zoom = CONFIG.defaultZoom;
@@ -122,7 +130,12 @@ export class Simulation {
       bodyAirFriction: this.bodyAirFriction,
       hiddenLayers: this.hiddenLayers,
       neuronsPerLayer: this.neuronsPerLayer,
-      selfCollision: this.selfCollision
+      selfCollision: this.selfCollision,
+      energyEnabled: this.energyEnabled,
+      maxEnergy: this.maxEnergy,
+      energyRegenRate: this.energyRegenRate,
+      energyUsagePerActuation: this.energyUsagePerActuation,
+      minEnergyForActuation: this.minEnergyForActuation
     };
   }
 
@@ -379,10 +392,16 @@ export class Simulation {
     // Distance-dependent scaling: longer runs require better gaits
     const distanceScale = 1 + distance * 0.02;
 
+    // Energy efficiency bonus (distance per energy spent)
+    const energyBonus = this.energyEnabled && fitness.energyEfficiency > 0
+      ? fitness.energyEfficiency * this.energyEfficiencyBonus
+      : 0;
+
     return (
       distance * this.distanceRewardWeight +
       fitness.speed * this.speedRewardWeight * (0.2 + (fitness.actuationLevel || 0) * 0.8) +
-      (this.rewardStability ? fitness.stability * this.stabilityRewardWeight : 0) -
+      (this.rewardStability ? fitness.stability * this.stabilityRewardWeight : 0) +
+      energyBonus -                                                           // Reward efficient movement
       fitness.airtimePct * 0.3 * gaitPenaltyScale * distanceScale -           // Scales with distance
       fitness.stumbles * 15 * gaitPenaltyScale -                              // Slightly increased
       Math.pow(fitness.spin, 2) * this.spinPenaltyWeight * gaitPenaltyScale - // QUADRATIC!
