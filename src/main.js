@@ -163,7 +163,6 @@ function updateSandboxScorecard(leader) {
   set('sandbox-stability', `${f.stability.toFixed(0)}%`);
   set('sandbox-falls', String(f.stumbles));
   set('sandbox-slip', (f.groundSlip || 0).toFixed(2));
-  set('sandbox-airtime', `${f.airtimePct.toFixed(0)}%`);
   set('sandbox-run-label', `Run ${sim.sandboxRuns}`);
 }
 
@@ -650,7 +649,7 @@ function renderWorld(leader) {
 // --- Frame callback ---
 sim.onFrame = (leader, simulatedSec) => {
   hud.update(sim);
-  controls.updateFitnessPanel(leader ? leader.getFitnessSnapshot() : null);
+  controls.updateFitnessPanel(leader ? leader.getFitnessSnapshot() : null, leader);
   updateSandboxScorecard(leader);
   renderWorld(leader);
   visualizer.render(leader);

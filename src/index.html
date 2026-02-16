@@ -461,15 +461,6 @@
                                     0.00
                                 </div>
                             </div>
-                            <div class="sandbox-stat">
-                                <div class="sandbox-stat-label">Airtime</div>
-                                <div
-                                    class="sandbox-stat-value text-blue-300"
-                                    id="sandbox-airtime"
-                                >
-                                    0%
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -628,12 +619,14 @@
                                 </div>
                             </div>
                             <div class="fitness-card">
-                                <div class="fitness-card-label">Airtime</div>
-                                <div
-                                    class="fitness-card-value text-amber-300"
-                                    id="fitness-airtime"
-                                >
-                                    0%
+                                <div class="fitness-card-label">Energy</div>
+                                <div class="fitness-card-value" style="display: flex; flex-direction: column; gap: 4px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <span id="fitness-energy" class="text-violet-300">100%</span>
+                                    </div>
+                                    <div style="width: 100%; height: 6px; background: rgba(139, 92, 246, 0.2); border-radius: 3px; overflow: hidden;">
+                                        <div id="fitness-energy-bar" style="width: 100%; height: 100%; background: linear-gradient(90deg, #8b5cf6, #a78bfa); transition: width 0.2s ease;"></div>
+                                    </div>
                                 </div>
                             </div>
                             <div class="fitness-card">
@@ -1270,10 +1263,6 @@
                             <div class="fitness-card" style="padding: 12px 6px">
                                 <div class="fitness-card-label" style="font-size: 10px">Ground Slip</div>
                                 <div class="fitness-card-value text-yellow-300" style="font-size: 20px" id="sandbox-slip">0.00</div>
-                            </div>
-                            <div class="fitness-card" style="padding: 12px 6px">
-                                <div class="fitness-card-label" style="font-size: 10px">Airtime</div>
-                                <div class="fitness-card-value text-blue-300" style="font-size: 20px" id="sandbox-airtime">0%</div>
                             </div>
                         </div>
                     </div>

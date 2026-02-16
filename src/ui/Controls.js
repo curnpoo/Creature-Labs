@@ -22,7 +22,7 @@ export class Controls {
       'cam-lock', 'cam-free', 'icon-pause',
       'replay-label', 'replay-play-icon',
       'fitness-tag', 'fitness-speed', 'fitness-stability',
-      'fitness-airtime', 'fitness-stumbles', 'fitness-spin',
+      'fitness-energy', 'fitness-energy-bar', 'fitness-stumbles', 'fitness-spin',
       'val-spinpen'
     ];
     ids.forEach(id => {
@@ -384,11 +384,21 @@ export class Controls {
     set('val-tournament', `${s.tournamentSize}`);
   }
 
-  updateFitnessPanel(fitness) {
-    const f = fitness || { speed: 0, stability: 0, airtimePct: 0, stumbles: 0, spin: 0 };
+  updateFitnessPanel(fitness, creature) {
+    const f = fitness || { speed: 0, stability: 0, stumbles: 0, spin: 0 };
     if (this.els['fitness-speed']) this.els['fitness-speed'].textContent = `${(f.speed / 100).toFixed(1)} m/s`;
     if (this.els['fitness-stability']) this.els['fitness-stability'].textContent = `${f.stability.toFixed(0)}%`;
-    if (this.els['fitness-airtime']) this.els['fitness-airtime'].textContent = `${f.airtimePct.toFixed(0)}%`;
+
+    // Energy bar
+    if (creature && creature.energy && creature.energy.enabled) {
+      const energyPct = (creature.energy.current / creature.energy.max) * 100;
+      if (this.els['fitness-energy']) this.els['fitness-energy'].textContent = `${energyPct.toFixed(0)}%`;
+      if (this.els['fitness-energy-bar']) this.els['fitness-energy-bar'].style.width = `${energyPct}%`;
+    } else {
+      if (this.els['fitness-energy']) this.els['fitness-energy'].textContent = 'N/A';
+      if (this.els['fitness-energy-bar']) this.els['fitness-energy-bar'].style.width = '0%';
+    }
+
     if (this.els['fitness-stumbles']) this.els['fitness-stumbles'].textContent = String(f.stumbles);
     if (this.els['fitness-spin']) this.els['fitness-spin'].textContent = f.spin.toFixed(2);
   }
