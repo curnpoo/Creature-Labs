@@ -92,7 +92,10 @@
 
         <div id="panel-controls" class="absolute right-4 top-24 glass-panel p-4 flex flex-col gap-3 w-80 h-[72vh] pointer-events-auto transition-transform edge-drawer edge-right overflow-y-auto">
             <div class="flex justify-between gap-2">
-                <button id="btn-start-sim" class="flex-1 py-2 rounded bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 border border-emerald-400/30" title="Start Simulation"><i class="fas fa-play"></i></button>
+                <button id="btn-start-sim" class="flex-1 py-2 rounded bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 border border-emerald-400/30" title="Start Simulation">
+                    <i class="fas fa-play"></i>
+                    <span id="start-sim-label" class="ml-1">Start Sim</span>
+                </button>
                 <button id="btn-pause" class="flex-1 py-2 rounded bg-white/5 hover:bg-white/10 border border-white/10" title="Pause/Play"><i class="fas fa-pause" id="icon-pause"></i></button>
                 <button id="btn-reset" class="flex-1 py-2 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30" title="Restart"><i class="fas fa-redo"></i></button>
                 <button id="btn-edit" class="flex-1 py-2 rounded bg-[var(--primary)] text-black font-bold hover:brightness-110 shadow-[0_0_10px_rgba(0,242,255,0.3)]" title="Edit"><i class="fas fa-pencil"></i></button>
@@ -134,7 +137,7 @@
 
             <div class="control-group">
                 <div class="control-label">Fitness Breakdown <span class="control-val" id="fitness-tag">LIVE</span></div>
-                <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+                <div id="fitness-cards" class="grid grid-cols-2 gap-2 text-xs font-mono">
                     <div class="glass-panel p-2"><div class="text-gray-400">Speed</div><div id="fitness-speed" class="text-cyan-300">0.0</div></div>
                     <div class="glass-panel p-2"><div class="text-gray-400">Stability</div><div id="fitness-stability" class="text-emerald-300">0%</div></div>
                     <div class="glass-panel p-2"><div class="text-gray-400">Airtime</div><div id="fitness-airtime" class="text-amber-300">0%</div></div>

@@ -19,6 +19,7 @@ const screens = {
 const worldCanvas = document.getElementById('world');
 let worldCtx = null;
 let challengeTool = 'none';
+let simSessionStarted = false;
 
 // --- Modules ---
 const sim = new Simulation();
@@ -59,6 +60,7 @@ function setScreen(name) {
 
   if (name === 'draw') {
     sim.stopLoop();
+    simSessionStarted = false;
     designer.render();
   } else if (name === 'sim') {
     // Transfer design to simulation; wait for explicit Start Sim.
@@ -67,8 +69,11 @@ function setScreen(name) {
     sim.constraints = design.constraints;
     resizeCanvases();
     worldCtx = worldCanvas.getContext('2d');
+    simSessionStarted = false;
     const icon = document.getElementById('icon-pause');
     if (icon) icon.className = 'fas fa-pause';
+    updateStartSimUI();
+    renderWorld(null);
   }
 }
 
@@ -86,6 +91,41 @@ function worldPointFromEvent(e) {
     x: sx / sim.zoom + sim.cameraX,
     y: sy / sim.zoom + sim.cameraY
   };
+}
+
+function triggerTrainingStatAnimation() {
+  ['panel-hud', 'fitness-cards'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('stats-training-pop');
+    void el.offsetWidth;
+    el.classList.add('stats-training-pop');
+    setTimeout(() => el.classList.remove('stats-training-pop'), 700);
+  });
+}
+
+function updateStartSimUI() {
+  const btn = document.getElementById('btn-start-sim');
+  const label = document.getElementById('start-sim-label');
+  if (!btn || !label) return;
+
+  if (currentScreen !== 'sim') {
+    btn.classList.remove('start-ready', 'training');
+    label.textContent = 'Start Sim';
+    return;
+  }
+
+  if (!simSessionStarted) {
+    btn.classList.add('start-ready');
+    btn.classList.remove('training');
+    label.textContent = 'Start Sim';
+    btn.title = 'Start Simulation';
+  } else {
+    btn.classList.remove('start-ready');
+    btn.classList.add('training');
+    label.textContent = 'Training...';
+    btn.title = 'Simulation Running';
+  }
 }
 
 // --- Tool binding ---
@@ -156,8 +196,11 @@ controls.bind({
       alert('Design needs at least 2 nodes, 1 bone, and 1 muscle.');
       return;
     }
+    simSessionStarted = true;
     const icon = document.getElementById('icon-pause');
     if (icon) icon.className = 'fas fa-pause';
+    updateStartSimUI();
+    triggerTrainingStatAnimation();
   },
   onEdit: () => setScreen('draw'),
   onPause: () => {
@@ -170,6 +213,9 @@ controls.bind({
     sim.nodes = design.nodes;
     sim.constraints = design.constraints;
     sim.startSimulation();
+    simSessionStarted = true;
+    updateStartSimUI();
+    triggerTrainingStatAnimation();
   },
   onResetSettings: () => {
     if (sim.engine) {
@@ -189,6 +235,7 @@ controls.bind({
   },
   isSimScreen: () => currentScreen === 'sim'
 });
+updateStartSimUI();
 
 const brainFileInput = document.getElementById('brain-file-input');
 const setChallengeTool = tool => {
@@ -240,6 +287,9 @@ if (brainLoadBtn && brainFileInput) {
       controls.updateLabels();
       if (currentScreen === 'sim') {
         sim.startSimulation();
+        simSessionStarted = true;
+        updateStartSimUI();
+        triggerTrainingStatAnimation();
       }
     } catch (err) {
       alert(`Brain load failed: ${err.message}`);
@@ -424,6 +474,24 @@ function renderWorld(leader) {
       sim.cameraX + 18,
       sim.cameraY + 24
     );
+  }
+
+  if (currentScreen === 'sim' && !simSessionStarted) {
+    const cx = sim.cameraX + viewW * 0.5;
+    const cy = sim.cameraY + viewH * 0.5;
+    ctx.fillStyle = 'rgba(10, 15, 25, 0.75)';
+    ctx.fillRect(cx - 210, cy - 54, 420, 108);
+    ctx.strokeStyle = 'rgba(52, 211, 153, 0.8)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cx - 210, cy - 54, 420, 108);
+    ctx.fillStyle = 'rgba(167, 243, 208, 1)';
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 18px "Segoe UI", sans-serif';
+    ctx.fillText('Press START SIM to begin training', cx, cy - 6);
+    ctx.fillStyle = 'rgba(209, 250, 229, 0.85)';
+    ctx.font = '12px monospace';
+    ctx.fillText('Then watch evolution improve generation by generation.', cx, cy + 20);
+    ctx.textAlign = 'left';
   }
 
   ctx.restore();
