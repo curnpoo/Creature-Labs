@@ -308,9 +308,9 @@ export class Simulation {
       const stepsToRun = Math.min(CONFIG.maxPhysicsStepsPerFrame, Math.max(1, this.simSpeed));
 
       for (let i = 0; i < stepsToRun; i++) {
-        Engine.update(this.engine, fixedDtMs);
         const time = this.engine.timing.timestamp * 0.006;
         this.creatures.forEach(c => c.update(time, groundY));
+        Engine.update(this.engine, fixedDtMs);
 
         // Anti-spin stabilization
         this.creatures.forEach(c => {

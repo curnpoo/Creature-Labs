@@ -40,7 +40,7 @@ export const PRESETS = [
   },
   {
     name: 'Spider',
-    description: '7 joints, 6 bones, 4 muscles',
+    description: '7 joints, 6 bones, 2 muscles',
     nodes: [
       { id: 0, x: 300, y: 280 },
       { id: 1, x: 240, y: 260 },
@@ -58,9 +58,7 @@ export const PRESETS = [
       { type: 'bone', n1: 2, n2: 5 },
       { type: 'bone', n1: 2, n2: 6 },
       { type: 'muscle', n1: 3, n2: 4 },
-      { type: 'muscle', n1: 5, n2: 6 },
-      { type: 'muscle', n1: 1, n2: 0 },
-      { type: 'muscle', n1: 0, n2: 2 }
+      { type: 'muscle', n1: 5, n2: 6 }
     ]
   },
   {

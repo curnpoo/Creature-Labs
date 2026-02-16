@@ -76,13 +76,24 @@ export class Designer {
       .filter(n => Number.isFinite(n.id) && Number.isFinite(n.x) && Number.isFinite(n.y));
 
     const nodeIds = new Set(nodes.map(n => n.id));
-    const constraints = payload.constraints
+    const rawConstraints = payload.constraints
       .map(c => ({
         type: c.type === 'muscle' ? 'muscle' : 'bone',
         n1: Number(c.n1),
         n2: Number(c.n2)
       }))
       .filter(c => nodeIds.has(c.n1) && nodeIds.has(c.n2) && c.n1 !== c.n2);
+    const deduped = new Map();
+    rawConstraints.forEach(c => {
+      const a = Math.min(c.n1, c.n2);
+      const b = Math.max(c.n1, c.n2);
+      const key = `${a}:${b}`;
+      const prev = deduped.get(key);
+      if (!prev || (prev.type === 'bone' && c.type === 'muscle')) {
+        deduped.set(key, { type: c.type, n1: a, n2: b });
+      }
+    });
+    const constraints = Array.from(deduped.values());
 
     if (nodes.length < 2 || constraints.length < 1) {
       throw new Error('Design needs at least 2 nodes and 1 constraint.');

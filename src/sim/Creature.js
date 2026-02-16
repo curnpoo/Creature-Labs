@@ -51,8 +51,9 @@ export class Creature {
         CONFIG.nodeRadius,
         {
           collisionFilter: { category, mask },
-          friction: 1.0,
-          frictionAir: 0.02,
+          friction: 1.1,
+          frictionStatic: 2,
+          frictionAir: 0.05,
           density: 0.005,
           restitution: 0
         }
@@ -99,13 +100,14 @@ export class Creature {
       const c = Constraint.create({
         bodyA,
         bodyB,
-        stiffness: schema.type === 'bone' ? 1 : 0.8,
-        damping: 0.08,
+        stiffness: schema.type === 'bone' ? 0.85 : 0.7,
+        damping: schema.type === 'bone' ? 0.2 : 0.16,
         length: Vector.magnitude(Vector.sub(bodyA.position, bodyB.position))
       });
 
       if (schema.type === 'muscle') {
         c.baseLength = c.length;
+        c.currentLength = c.length;
         this.muscles.push({ c, index: m });
         m++;
       } else {
@@ -239,9 +241,16 @@ export class Creature {
 
     // Apply NN outputs to muscles (tanh output in [-1, 1])
     const strength = this.simConfig.muscleStrength || 1.2;
+    const moveSpeed = Math.max(0.2, this.simConfig.jointMoveSpeed || 1.0);
+    const amplitude = Math.min(0.45, 0.22 * strength);
     this.muscles.forEach((m, i) => {
       const signal = outputs[i] || 0;
-      m.c.length = m.c.baseLength * (1 + signal * 0.5 * strength);
+      const targetLength = m.c.baseLength * (1 + signal * amplitude);
+      const currentLength = m.c.currentLength || m.c.length;
+      const maxDelta = m.c.baseLength * 0.03 * moveSpeed;
+      const nextLength = currentLength + Math.max(-maxDelta, Math.min(maxDelta, targetLength - currentLength));
+      m.c.currentLength = nextLength;
+      m.c.length = nextLength;
       m.currentSignal = signal;
     });
   }
