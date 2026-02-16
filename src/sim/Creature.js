@@ -288,22 +288,15 @@ export class Creature {
     const strength = this.simConfig.muscleStrength || 1.2;
     const moveSpeed = Math.max(0.2, Math.min(2.2, this.simConfig.jointMoveSpeed || 1.0));
     const rangeScale = this.simConfig.muscleRange ?? 0.18;
-
-    // Calculate ground contact ratio
-    let groundedBodies = 0;
-    this.bodies.forEach(b => {
-      if ((b.position.y + CONFIG.nodeRadius) >= (groundY - 2)) {
-        groundedBodies++;
-      }
-    });
-    const groundRatio = groundedBodies / Math.max(1, this.bodies.length);
-
-    // Quadratic penalty for airborne creatures: can't push off air!
-    const groundedStrength = strength * Math.pow(groundRatio, 2);
-
-    const amplitude = Math.max(0.05, rangeScale * groundedStrength);
     const smoothingBase = this.simConfig.muscleSmoothing ?? 0.22;
     const smoothing = Math.min(0.5, Math.max(0.02, smoothingBase));
+
+    // Pre-calculate which bodies are grounded
+    const isGrounded = new Map();
+    this.bodies.forEach(b => {
+      isGrounded.set(b.id, (b.position.y + CONFIG.nodeRadius) >= (groundY - 2));
+    });
+
     let totalJerk = 0;
     let totalActuation = 0;
     this.muscles.forEach((m, i) => {
@@ -313,6 +306,24 @@ export class Creature {
       m.smoothSignal = smoothSignal;
       totalJerk += Math.abs(smoothSignal - prevSignal);
 
+      // Per-muscle ground contact: muscles need ground reaction to push effectively
+      const bodyAGrounded = isGrounded.get(m.c.bodyA.id) || false;
+      const bodyBGrounded = isGrounded.get(m.c.bodyB.id) || false;
+
+      let muscleStrengthMultiplier;
+      if (bodyAGrounded && bodyBGrounded) {
+        // Both ends grounded - full strength (can push against ground)
+        muscleStrengthMultiplier = 1.0;
+      } else if (bodyAGrounded || bodyBGrounded) {
+        // One end grounded - good strength (can push off that end)
+        muscleStrengthMultiplier = 0.7;
+      } else {
+        // Fully airborne - minimal strength (internal tension only, can't push off air)
+        muscleStrengthMultiplier = 0.15;
+      }
+
+      const effectiveStrength = strength * muscleStrengthMultiplier;
+      const amplitude = Math.max(0.05, rangeScale * effectiveStrength);
       const targetLength = m.c.baseLength * (1 + smoothSignal * amplitude);
       const currentLength = m.c.currentLength || m.c.length;
       const maxDelta = m.c.baseLength * 0.02 * moveSpeed;
