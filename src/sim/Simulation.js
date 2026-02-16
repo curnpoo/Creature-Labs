@@ -158,27 +158,18 @@ export class Simulation {
 
     this.engine = createEngine(this.gravity);
 
-    // STRICT COLLISION FILTERING
-    // This ensures that different creatures NEVER physically interact,
-    // even if Self-Collision is toggled ON for progress monitoring.
+    // COLLISION JITTER FILTER
+    // Isolation from other creatures is now handled by Matter.js Categories and Masks.
+    // This handler only solves the 'jitter' caused by connected nodes fighting each other.
     const collisionFilter = (e) => {
       const pairs = e.pairs;
       for (let i = 0; i < pairs.length; i++) {
         const p = pairs[i];
-        const bodyA = p.bodyA;
-        const bodyB = p.bodyB;
         
-        // If both are creature parts (Category 2)
-        if (bodyA.collisionFilter.category === 0x0002 && bodyB.collisionFilter.category === 0x0002) {
-          // If they belong to DIFFERENT creatures, cancel the collision.
-          if (bodyA.creatureId !== bodyB.creatureId) {
+        // If they are from the SAME creature and connected by a spine/muscle, skip collision.
+        if (p.bodyA.creatureId === p.bodyB.creatureId) {
+          if (p.bodyA.connectedBodies && p.bodyA.connectedBodies.has(p.bodyB.id)) {
             p.isActive = false;
-          } else {
-            // SAME creature: check if they are directly connected by a bone or muscle.
-            // Colliding directly connected bodies causes 'jitter' as physics fought the constraint.
-            if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB.id)) {
-              p.isActive = false;
-            }
           }
         }
       }

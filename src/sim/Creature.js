@@ -47,7 +47,12 @@ export class Creature {
     // Create physics bodies
     const bodyMap = {};
     const category = 0x0002;
-    const mask = (simConfig.selfCollision) ? 0x0003 : 0x0001; 
+    const mask = 0x0001; // Ground only. Inter-creature collision is blocked by this mask.
+    // Matter.js Group Rule: 
+    // - Same positive group: ALWAYS collide (Self-collision ON)
+    // - Same negative group: NEVER collide (Self-collision OFF)
+    const selfOn = !!simConfig.selfCollision;
+    const group = selfOn ? (this.id + 1) : -(this.id + 1);
 
     schemaNodes.forEach(n => {
       const b = Bodies.circle(
@@ -55,7 +60,7 @@ export class Creature {
         originY + (n.y - minY),
         CONFIG.nodeRadius,
         {
-          collisionFilter: { category, mask, group: 0 },
+          collisionFilter: { category, mask, group },
           friction: simConfig.bodyFriction ?? 2,
           frictionStatic: simConfig.bodyStaticFriction ?? 8,
           frictionAir: simConfig.bodyAirFriction ?? 0.07,
@@ -474,9 +479,11 @@ export class Creature {
   }
 
   updateRuntimeSettings() {
-    const mask = this.simConfig.selfCollision ? 0x0003 : 0x0001;
+    const selfOn = !!this.simConfig.selfCollision;
+    const group = selfOn ? (this.id + 1) : -(this.id + 1);
     this.bodies.forEach(b => {
-      b.collisionFilter.mask = mask;
+      b.collisionFilter.group = group;
+      b.collisionFilter.mask = 0x0001; // Always only ground. Self is handled by Group.
     });
   }
 }
