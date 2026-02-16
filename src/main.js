@@ -543,7 +543,7 @@ function renderWorld(leader) {
 
     const targetX = leader.getCenter().x - visibleCenterX;
     const targetY = leader.getCenter().y - visibleCenterY;
-    sim.cameraX += (Math.max(0, targetX) - sim.cameraX) * 0.09;
+    sim.cameraX += (targetX - sim.cameraX) * 0.09;
     sim.cameraY += (targetY - sim.cameraY) * 0.06;
   }
 
