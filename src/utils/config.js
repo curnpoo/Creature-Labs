@@ -1,1 +1,5 @@
-/Users/curren/Documents/projects/Creature-Labs/src/utils/config/index.js
+/**
+ * Backward compatibility layer
+ * Re-exports everything from the modular config system
+ */
+export * from './config/index.js';
