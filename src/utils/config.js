@@ -40,6 +40,7 @@ export const CONFIG = {
   defaultStabilityRewardWeight: 0.9,
   defaultJitterPenaltyWeight: 40,
   defaultGroundSlipPenaltyWeight: 20,
+  defaultSpinPenaltyWeight: 10000,
   defaultZoom: 1.0,
 };
 

@@ -1,5 +1,5 @@
 import { CONFIG } from '../utils/config.js';
-import { createEngine, createGround, cleanup, Engine, Body, Bodies, Composite, Vector } from './Physics.js';
+import { createEngine, createGround, cleanup, Engine, Body, Bodies, Composite, Vector, Matter } from './Physics.js';
 import { Creature } from './Creature.js';
 import { Evolution } from '../nn/Evolution.js';
 
@@ -18,6 +18,7 @@ export class Simulation {
     this.lastFrame = 0;
     this.fpsSmoothed = 60;
     this.simTimeElapsed = 0;
+    this.selfCollision = false;
 
     // Evolution state
     this.genBestDist = 0;
@@ -72,6 +73,7 @@ export class Simulation {
     this.rewardStability = true;
     this.jitterPenaltyWeight = CONFIG.defaultJitterPenaltyWeight;
     this.groundSlipPenaltyWeight = CONFIG.defaultGroundSlipPenaltyWeight;
+    this.spinPenaltyWeight = CONFIG.defaultSpinPenaltyWeight;
     this.spawnX = 60;
     this.mutationRate = CONFIG.defaultMutationRate;
     this.mutationSize = CONFIG.defaultMutationSize;
@@ -119,7 +121,8 @@ export class Simulation {
       bodyStaticFriction: this.bodyStaticFriction,
       bodyAirFriction: this.bodyAirFriction,
       hiddenLayers: this.hiddenLayers,
-      neuronsPerLayer: this.neuronsPerLayer
+      neuronsPerLayer: this.neuronsPerLayer,
+      selfCollision: this.selfCollision
     };
   }
 
@@ -153,6 +156,18 @@ export class Simulation {
     this.clearSimulation();
 
     this.engine = createEngine(this.gravity);
+
+    Matter.Events.on(this.engine, 'collisionActive', (e) => {
+      if (!this.selfCollision) return;
+      const pairs = e.pairs;
+      for (let i = 0; i < pairs.length; i++) {
+        const p = pairs[i];
+        if (p.bodyA.connectedBodies && p.bodyA.connectedBodies.has(p.bodyB.id)) {
+           p.isActive = false;
+        }
+      }
+    });
+
     this.ground = createGround(this.engine, this.getGroundY(), {
       friction: this.groundFriction,
       frictionStatic: this.groundStaticFriction
@@ -356,7 +371,7 @@ export class Simulation {
       (this.rewardStability ? fitness.stability * this.stabilityRewardWeight : 0) -
       fitness.airtimePct * 0.2 * gaitPenaltyScale -
       fitness.stumbles * 10 * gaitPenaltyScale -
-      fitness.spin * 30 * gaitPenaltyScale -
+      fitness.spin * this.spinPenaltyWeight * gaitPenaltyScale -
       (fitness.actuationJerk || 0) * this.jitterPenaltyWeight * gaitPenaltyScale -
       (fitness.groundSlip || 0) * this.groundSlipPenaltyWeight * gaitPenaltyScale
     );
@@ -566,10 +581,14 @@ export class Simulation {
       c.simConfig.jointMoveSpeed = this.jointMoveSpeed;
       c.simConfig.muscleRange = this.muscleRange;
       c.simConfig.muscleSmoothing = this.muscleSmoothing;
+      c.simConfig.selfCollision = this.selfCollision;
+      
+      const mask = this.selfCollision ? 0x0003 : 0x0001;
       c.bodies.forEach(b => {
         b.friction = this.bodyFriction;
         b.frictionStatic = this.bodyStaticFriction;
         b.frictionAir = this.bodyAirFriction;
+        b.collisionFilter.mask = mask;
       });
     });
     if (this.ground) {

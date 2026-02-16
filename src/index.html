@@ -645,10 +645,31 @@
                                     0
                                 </div>
                             </div>
+                            <div class="fitness-card">
+                                <div class="fitness-card-label">Spin</div>
+                                <div
+                                    class="fitness-card-value text-orange-400"
+                                    id="fitness-spin"
+                                >
+                                    0.0
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     <div class="section-divider"></div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Sim Duration (s) <span id="val-sim-dur" class="control-val">15</span>
+                        </div>
+                        <input type="range" id="inp-sim-dur" min="5" max="60" step="1" value="15">
+                    </div>
+                    
+                    <div class="control-group" style="flex-direction: row; justify-content: space-between; align-items: center;">
+                        <label for="check-self-collision" style="margin-bottom:0">Self Collision</label>
+                        <input type="checkbox" id="check-self-collision" style="width: auto;">
+                    </div>
 
                     <!-- Camera -->
                     <div class="control-group">
@@ -1098,6 +1119,23 @@
                             max="40"
                             value="20"
                             step="1"
+                        >
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Spin Penalty <span
+                                class="control-val"
+                                id="val-spinpen"
+                            >10000</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-spinpen"
+                            min="0"
+                            max="20000"
+                            value="10000"
+                            step="500"
                         >
                     </div>
 

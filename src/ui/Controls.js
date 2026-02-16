@@ -22,7 +22,8 @@ export class Controls {
       'cam-lock', 'cam-free', 'icon-pause',
       'replay-label', 'replay-play-icon',
       'fitness-tag', 'fitness-speed', 'fitness-stability',
-      'fitness-airtime', 'fitness-stumbles'
+      'fitness-airtime', 'fitness-stumbles', 'fitness-spin',
+      'val-spinpen'
     ];
     ids.forEach(id => {
       this.els[id] = document.getElementById(id);
@@ -54,6 +55,15 @@ export class Controls {
       btnResetSettings.onclick = () => {
         this.resetToDefaults();
         if (onResetSettings) onResetSettings();
+      };
+    }
+
+    const checkSelfCollision = document.getElementById('check-self-collision');
+    if (checkSelfCollision) {
+      checkSelfCollision.checked = this.sim.selfCollision;
+      checkSelfCollision.onchange = (e) => {
+        this.sim.selfCollision = e.target.checked;
+        this.sim.syncCreatureRuntimeSettings();
       };
     }
 
@@ -114,6 +124,7 @@ export class Controls {
     this._bindSlider('inp-speedreward', v => { this.sim.speedRewardWeight = v / 100; });
     this._bindSlider('inp-jitterpen', v => { this.sim.jitterPenaltyWeight = v; });
     this._bindSlider('inp-slippen', v => { this.sim.groundSlipPenaltyWeight = v; });
+    this._bindSlider('inp-spinpen', v => { this.sim.spinPenaltyWeight = v; });
     this._bindSlider('inp-mut', v => { this.sim.mutationRate = v / 100; });
     this._bindSlider('inp-mutsize', v => { this.sim.mutationSize = v / 100; });
 
@@ -362,6 +373,7 @@ export class Controls {
     set('val-speedreward', `${s.speedRewardWeight.toFixed(2)}`);
     set('val-jitterpen', `${Math.round(s.jitterPenaltyWeight)}`);
     set('val-slippen', `${Math.round(s.groundSlipPenaltyWeight)}`);
+    set('val-spinpen', `${Math.round(s.spinPenaltyWeight)}`);
     set('val-stabmode', s.rewardStability ? 'ON' : 'OFF');
     set('val-mut', `${Math.round(s.mutationRate * 100)}%`);
     set('val-mutsize', `${s.mutationSize.toFixed(2)}x`);
@@ -373,11 +385,12 @@ export class Controls {
   }
 
   updateFitnessPanel(fitness) {
-    const f = fitness || { speed: 0, stability: 0, airtimePct: 0, stumbles: 0 };
+    const f = fitness || { speed: 0, stability: 0, airtimePct: 0, stumbles: 0, spin: 0 };
     if (this.els['fitness-speed']) this.els['fitness-speed'].textContent = `${(f.speed / 100).toFixed(1)} m/s`;
     if (this.els['fitness-stability']) this.els['fitness-stability'].textContent = `${f.stability.toFixed(0)}%`;
     if (this.els['fitness-airtime']) this.els['fitness-airtime'].textContent = `${f.airtimePct.toFixed(0)}%`;
     if (this.els['fitness-stumbles']) this.els['fitness-stumbles'].textContent = String(f.stumbles);
+    if (this.els['fitness-spin']) this.els['fitness-spin'].textContent = f.spin.toFixed(2);
   }
 
   resetToDefaults() {
@@ -403,6 +416,7 @@ export class Controls {
     s.rewardStability = true;
     s.jitterPenaltyWeight = CONFIG.defaultJitterPenaltyWeight;
     s.groundSlipPenaltyWeight = CONFIG.defaultGroundSlipPenaltyWeight;
+    s.spinPenaltyWeight = CONFIG.defaultSpinPenaltyWeight;
     s.mutationRate = CONFIG.defaultMutationRate;
     s.mutationSize = CONFIG.defaultMutationSize;
     s.hiddenLayers = CONFIG.defaultHiddenLayers;
@@ -431,6 +445,7 @@ export class Controls {
       'inp-speedreward': String(Math.round(s.speedRewardWeight * 100)),
       'inp-jitterpen': String(Math.round(s.jitterPenaltyWeight)),
       'inp-slippen': String(Math.round(s.groundSlipPenaltyWeight)),
+      'inp-spinpen': String(Math.round(s.spinPenaltyWeight)),
       'inp-mut': String(Math.round(s.mutationRate * 100)),
       'inp-mutsize': String(Math.round(s.mutationSize * 100)),
       'inp-hidden': String(Math.round(s.hiddenLayers)),

@@ -133,6 +133,23 @@ export class Creature {
       neighbors.get(schema.n2).add(schema.n1);
     });
 
+    const bodyConnects = new Map();
+    this.bodies.forEach(b => bodyConnects.set(b.id, new Set()));
+
+    schemaConstraints.forEach(schema => {
+        const bA = bodyMap[schema.n1];
+        const bB = bodyMap[schema.n2];
+        if (bA && bB) {
+            bodyConnects.get(bA.id).add(bB.id);
+            bodyConnects.get(bB.id).add(bA.id);
+        }
+    });
+    
+    // Store for collision filter
+    this.bodies.forEach(b => {
+        b.connectedBodies = bodyConnects.get(b.id);
+    });
+
     const freedom = simConfig.jointFreedom !== undefined ? simConfig.jointFreedom : 1.0;
     const rigid = 1 - freedom;
     const bendStiffness = Math.max(0, Math.min(0.9, rigid * rigid * 0.9));
