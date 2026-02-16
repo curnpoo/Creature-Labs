@@ -305,28 +305,28 @@ canvas {
     top: 0;
     left: 0;
     right: 0;
-    height: 32px;
+    height: 24px;
 }
 
 .edge-left-rail {
     left: 0;
     top: 0;
     bottom: 0;
-    width: 32px;
+    width: 24px;
 }
 
 .edge-right-rail {
     right: 0;
     top: 0;
     bottom: 0;
-    width: 32px;
+    width: 24px;
 }
 
 .edge-bottom-rail {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 32px;
+    height: 24px;
 }
 
 .edge-tab {
@@ -335,66 +335,61 @@ canvas {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(10, 14, 24, 0.85);
-    backdrop-filter: blur(8px);
+    background: #000000;
     border: none;
-    color: var(--text-muted);
+    color: rgba(139, 149, 168, 0.6);
     font-family: "JetBrains Mono", monospace;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
     cursor: pointer;
     transition: all 0.2s ease;
     white-space: nowrap;
-    gap: 6px;
+    gap: 4px;
 }
 
-/* Border on panel side */
+/* Subtle border on panel side */
 .edge-top-rail .edge-tab {
-    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .edge-left-rail .edge-tab {
-    border-right: 2px solid rgba(255, 255, 255, 0.1);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .edge-right-rail .edge-tab {
-    border-left: 2px solid rgba(255, 255, 255, 0.1);
+    border-left: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .edge-bottom-rail .edge-tab {
-    border-top: 2px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .edge-tab:hover {
-    background: rgba(15, 20, 35, 0.95);
+    background: #0a0a0a;
     color: var(--text-secondary);
 }
 
 .edge-tab.active {
-    background: rgba(0, 242, 255, 0.12);
+    background: #000000;
     color: var(--primary);
 }
 
 .edge-top-rail .edge-tab.active {
-    border-bottom-color: rgba(0, 242, 255, 0.8);
-    box-shadow: 0 2px 12px rgba(0, 242, 255, 0.2);
+    border-bottom-color: rgba(0, 242, 255, 0.5);
 }
 
 .edge-left-rail .edge-tab.active {
-    border-right-color: rgba(0, 242, 255, 0.8);
-    box-shadow: 2px 0 12px rgba(0, 242, 255, 0.2);
+    border-right-color: rgba(0, 242, 255, 0.5);
 }
 
 .edge-right-rail .edge-tab.active {
-    border-left-color: rgba(0, 242, 255, 0.8);
-    box-shadow: -2px 0 12px rgba(0, 242, 255, 0.2);
+    border-left-color: rgba(0, 242, 255, 0.5);
 }
 
 .edge-bottom-rail .edge-tab.active {
-    border-top-color: rgba(0, 242, 255, 0.8);
-    box-shadow: 0 -2px 12px rgba(0, 242, 255, 0.2);
+    border-top-color: rgba(0, 242, 255, 0.5);
 }
 
 /* Vertical text for left/right rails */
