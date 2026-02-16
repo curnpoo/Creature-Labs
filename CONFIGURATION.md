@@ -178,8 +178,7 @@ Muscle strength scales with available energy to prevent depletion exploitation.
 |-----------|---------|-------|-------------|
 | `strength` | 1.0 | 0.5-2.0 | Base muscle strength. 1.0 = balanced. Higher allows exploits. |
 | `moveSpeed` | 0.7 | 0.3-1.5 | Joint movement speed. Lower = more controlled, prevents explosive actuation. |
-| `range` | 0.8 | 0.5-1.2 | Muscle contraction range multiplier. |
-| `rangeScale` | 0.18 | 0.10-0.25 | Base range scale (% of base length). Effective range = range × rangeScale. |
+| `range` | 0.8 | 0.3-1.5 | Muscle contraction range (as fraction of base length). 0.8 = muscles can change ±80% from base. |
 | `smoothing` | 0.22 | 0.05-0.50 | Muscle signal smoothing. Higher = smoother but less responsive. |
 
 **Effective contraction range:**

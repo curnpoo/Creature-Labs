@@ -6,8 +6,7 @@ export const MUSCLE_CONFIG = {
   // Base Muscle Properties
   strength: 1.0,                // Base muscle strength (1.0 = balanced)
   moveSpeed: 0.7,               // Joint movement speed (0.7 = controlled, prevents exploits)
-  range: 0.8,                   // Muscle contraction range multiplier (0.8 × 0.18 = 14.4%)
-  rangeScale: 0.18,             // Base range scale (percentage of base length)
+  range: 0.8,                   // Muscle contraction range (0.8 = ±80% from base length)
   smoothing: 0.22,              // Muscle signal smoothing (0-1, higher = smoother)
 
   // Ground-Dependent Strength (prevents air-pushing exploits)
