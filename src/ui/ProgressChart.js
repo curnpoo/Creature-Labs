@@ -15,16 +15,33 @@ export class ProgressChart {
     this.topContainer = document.getElementById('top-metrics-container');
     this.bottomContainer = document.getElementById('bottom-metrics-container');
 
-    // Individual metric graph configs
+    // Individual metric graph configs - diverse data!
     this.metrics = [
+      // Core Performance
       { id: 'fitness', label: 'Best Fitness', color: '#a855f7', getValue: p => p.bestFitness || 0, format: v => v.toFixed(1) },
       { id: 'allbest', label: 'All-Time Best', color: '#00f2ff', getValue: p => p.allBest, format: v => `${v.toFixed(1)}m` },
       { id: 'genbest', label: 'Gen Best', color: '#ff0055', getValue: p => p.genBest, format: v => `${v.toFixed(1)}m` },
       { id: 'avgdist', label: 'Avg Distance', color: '#6ee7b7', getValue: p => p.avgDist, format: v => `${v.toFixed(1)}m` },
+
+      // Movement Quality
       { id: 'avgspeed', label: 'Avg Speed', color: '#fbbf24', getValue: p => p.avgSpeed || 0, format: v => v.toFixed(2) },
       { id: 'avgstab', label: 'Avg Stability', color: '#34d399', getValue: p => p.avgStability || 0, format: v => `${v.toFixed(0)}%` },
+      { id: 'avgact', label: 'Avg Actuation', color: '#818cf8', getValue: p => (p.avgActuation || 0) * 100, format: v => `${v.toFixed(0)}%` },
+
+      // Gait Penalties
+      { id: 'avgspin', label: 'Avg Spin', color: '#f97316', getValue: p => p.avgSpin || 0, format: v => v.toFixed(2) },
+      { id: 'avgstumbles', label: 'Avg Stumbles', color: '#ef4444', getValue: p => p.avgStumbles || 0, format: v => v.toFixed(1) },
+      { id: 'avgslip', label: 'Avg Ground Slip', color: '#fbbf24', getValue: p => p.avgSlip || 0, format: v => v.toFixed(2) },
+
+      // Evolution Metrics
       { id: 'evoscore', label: 'Evo Score', color: '#fb923c', getValue: p => p.evoScore, format: v => v.toFixed(1) },
       { id: 'champfit', label: 'Champion Fitness', color: '#f87171', getValue: p => p.championFitness || 0, format: v => v.toFixed(1) },
+      { id: 'mutrate', label: 'Mutation Rate', color: '#ec4899', getValue: p => (p.mutationRate || 0) * 100, format: v => `${v.toFixed(0)}%` },
+
+      // Progress Tracking
+      { id: 'stagnant', label: 'Stagnant Gens', color: '#f59e0b', getValue: p => p.stagnantGens || 0, format: v => `${v}g` },
+      { id: 'awards', label: 'Champion Awards', color: '#22d3ee', getValue: p => p.championAwards || 0, format: v => `${v}` },
+      { id: 'popsize', label: 'Population Size', color: '#10b981', getValue: p => p.populationSize || 0, format: v => `${v}` },
     ];
 
     // Create graph elements
@@ -42,9 +59,9 @@ export class ProgressChart {
       });
     }
 
-    // Create top bar graphs (key metrics, horizontal)
+    // Create top bar graphs (key performance metrics)
     if (this.topContainer) {
-      const topMetrics = ['fitness', 'allbest', 'avgspeed', 'avgstab'];
+      const topMetrics = ['fitness', 'allbest', 'avgspeed', 'avgstab', 'mutrate', 'awards'];
       topMetrics.forEach(metricId => {
         const metric = this.metrics.find(m => m.id === metricId);
         if (metric) {
@@ -55,9 +72,10 @@ export class ProgressChart {
       });
     }
 
-    // Create bottom panel graphs (key metrics, horizontal cards)
+    // Create bottom panel graphs (comprehensive evolution view)
     if (this.bottomContainer) {
-      const bottomMetrics = ['fitness', 'allbest', 'genbest', 'avgdist', 'avgspeed', 'avgstab', 'evoscore'];
+      const bottomMetrics = ['fitness', 'allbest', 'genbest', 'avgdist', 'avgspeed', 'avgstab',
+                             'avgspin', 'avgstumbles', 'avgslip', 'evoscore', 'stagnant', 'popsize'];
       bottomMetrics.forEach(metricId => {
         const metric = this.metrics.find(m => m.id === metricId);
         if (metric) {

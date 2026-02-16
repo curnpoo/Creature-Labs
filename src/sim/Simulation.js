@@ -444,6 +444,9 @@ export class Simulation {
     const avgSpeed = popFitness.reduce((a, f) => a + f.speed, 0) / Math.max(1, popFitness.length);
     const avgStability = popFitness.reduce((a, f) => a + f.stability, 0) / Math.max(1, popFitness.length);
     const avgStumbles = popFitness.reduce((a, f) => a + f.stumbles, 0) / Math.max(1, popFitness.length);
+    const avgSpin = popFitness.reduce((a, f) => a + (f.spin || 0), 0) / Math.max(1, popFitness.length);
+    const avgSlip = popFitness.reduce((a, f) => a + (f.groundSlip || 0), 0) / Math.max(1, popFitness.length);
+    const avgActuation = popFitness.reduce((a, f) => a + (f.actuationLevel || 0), 0) / Math.max(1, popFitness.length);
     const evoScore = genBest * 2 + avgDist + avgSpeed * 0.03 + avgStability * 0.15 - avgStumbles * 1.2;
 
     this.prevAllTimeBest = this.allTimeBest;
@@ -459,9 +462,17 @@ export class Simulation {
       avgDist,
       avgSpeed,
       avgStability,
+      avgStumbles,
+      avgSpin,
+      avgSlip,
+      avgActuation,
       evoScore,
       bestFitness: winnerFitness,
-      championFitness: this.championFitness
+      championFitness: this.championFitness,
+      mutationRate: this.effectiveMutationRate(),
+      stagnantGens: this.stagnantGens,
+      championAwards: this.championAwards,
+      populationSize: this.creatures.length
     });
     if (this.progressHistory.length > 300) this.progressHistory.shift();
 
