@@ -419,6 +419,7 @@ const sandboxExitBtn = document.getElementById('btn-sandbox-exit');
 if (sandboxExitBtn) {
   sandboxExitBtn.onclick = () => {
     sim.exitSandboxMode();
+    startTrainingNow();
     updateSandboxUI();
     renderBrainLibrary();
   };

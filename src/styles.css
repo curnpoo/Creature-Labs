@@ -70,6 +70,34 @@ canvas {
     z-index: 5;
 }
 
+/* Simulation screen uses grid to layout tabs + content */
+#screen-sim {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+        ".          top-tab     ."
+        "left-tab   content     right-tab"
+        ".          bottom-tab  .";
+}
+
+#screen-sim canvas#world {
+    grid-area: content;
+    z-index: 0;
+}
+
+#screen-sim #sim-chrome {
+    grid-area: content;
+    position: relative;
+    inset: unset;
+}
+
+#screen-sim #gen-summary {
+    grid-area: content;
+    z-index: 20;
+    pointer-events: none;
+}
+
 /* ─── Glass Panel (shared utility) ─── */
 .glass-panel {
     background: var(--panel-bg);
@@ -169,8 +197,8 @@ canvas {
 }
 
 .sim-chrome {
-    position: absolute;
-    inset: 0;
+    width: 100%;
+    height: 100%;
     z-index: 10;
     display: grid;
     grid-template-columns: min-content 1fr min-content;
@@ -296,36 +324,30 @@ canvas {
 
 /* ─── Edge Tab Buttons (Full-width/height clickable tabs) ─── */
 .edge-tab-rail {
-    position: absolute;
     z-index: 30;
     pointer-events: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .edge-top-rail {
-    top: 0;
-    left: 0;
-    right: 0;
+    grid-area: top-tab;
     height: 24px;
 }
 
 .edge-left-rail {
-    left: 0;
-    top: 0;
-    bottom: 0;
+    grid-area: left-tab;
     width: 24px;
 }
 
 .edge-right-rail {
-    right: 0;
-    top: 0;
-    bottom: 0;
+    grid-area: right-tab;
     width: 24px;
 }
 
 .edge-bottom-rail {
-    bottom: 0;
-    left: 0;
-    right: 0;
+    grid-area: bottom-tab;
     height: 24px;
 }
 
