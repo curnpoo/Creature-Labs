@@ -7,7 +7,7 @@ export function createEngine(gravity = 1.0) {
   engine.world.gravity.y = gravity;
   engine.positionIterations = 10;
   engine.velocityIterations = 8;
-  engine.constraintIterations = 6;
+  engine.constraintIterations = 12;
   return engine;
 }
 

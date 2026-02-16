@@ -105,8 +105,8 @@ export class Creature {
       const c = Constraint.create({
         bodyA,
         bodyB,
-        stiffness: schema.type === 'bone' ? 0.92 : 0.78,
-        damping: schema.type === 'bone' ? 0.24 : 0.2,
+        stiffness: schema.type === 'bone' ? 1.0 : 0.78,
+        damping: schema.type === 'bone' ? 0.12 : 0.2,
         length: Vector.magnitude(Vector.sub(bodyA.position, bodyB.position))
       });
 
@@ -171,10 +171,11 @@ export class Creature {
             bodyA,
             bodyB,
             length: Vector.magnitude(Vector.sub(bodyA.position, bodyB.position)),
-            stiffness: currentStiffness,
-            damping: isFixed ? 0.1 : 0.06
+            stiffness: isFixed ? 1.0 : bendStiffness,
+            damping: isFixed ? 0.2 : 0.06
           });
           limiter.isAngleLimiter = true;
+          limiter.isFixedJoint = isFixed;
           this.angleLimiters.push(limiter);
           Composite.add(this.composite, limiter);
         }
@@ -260,7 +261,11 @@ export class Creature {
     const rigid = 1 - freedom;
     const bendStiffness = Math.max(0, Math.min(0.9, rigid * rigid * 0.9));
     this.angleLimiters.forEach(limiter => {
-      limiter.stiffness = bendStiffness;
+      if (!limiter.isFixedJoint) {
+        limiter.stiffness = bendStiffness;
+      } else {
+        limiter.stiffness = 1.0; // Ensure fixed stays fixed
+      }
     });
 
     if (this.muscles.length === 0) return;
