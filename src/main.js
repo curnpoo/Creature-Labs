@@ -152,14 +152,6 @@ controls.bind({
     sim.constraints = design.constraints;
     sim.startSimulation();
   },
-  onOverlapChange: () => {
-    if (currentScreen === 'sim') {
-      const design = designer.getDesign();
-      sim.nodes = design.nodes;
-      sim.constraints = design.constraints;
-      sim.startSimulation();
-    }
-  },
   onPresetSelect: idx => {
     if (idx >= 0 && idx < PRESETS.length) {
       const preset = PRESETS[idx];

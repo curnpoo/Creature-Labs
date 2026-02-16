@@ -57,7 +57,8 @@ export class Designer {
 
   isValid() {
     const hasBone = this.constraints.some(c => c.type === 'bone');
-    return this.nodes.length >= 2 && this.constraints.length >= 1 && hasBone;
+    const hasMuscle = this.constraints.some(c => c.type === 'muscle');
+    return this.nodes.length >= 2 && hasBone && hasMuscle;
   }
 
   getDesign() {
@@ -89,14 +90,16 @@ export class Designer {
       const b = Math.max(c.n1, c.n2);
       const key = `${a}:${b}`;
       const prev = deduped.get(key);
-      if (!prev || (prev.type === 'bone' && c.type === 'muscle')) {
+      if (!prev || (prev.type === 'muscle' && c.type === 'bone')) {
         deduped.set(key, { type: c.type, n1: a, n2: b });
       }
     });
     const constraints = Array.from(deduped.values());
 
-    if (nodes.length < 2 || constraints.length < 1) {
-      throw new Error('Design needs at least 2 nodes and 1 constraint.');
+    const hasBone = constraints.some(c => c.type === 'bone');
+    const hasMuscle = constraints.some(c => c.type === 'muscle');
+    if (nodes.length < 2 || !hasBone || !hasMuscle) {
+      throw new Error('Design needs at least 2 nodes, 1 bone, and 1 muscle.');
     }
 
     this._pushUndo();

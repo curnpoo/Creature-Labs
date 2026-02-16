@@ -14,7 +14,7 @@ export class Controls {
     const ids = [
       'val-speed', 'val-duration', 'val-pop', 'val-strength',
       'val-jointspeed', 'val-joint', 'val-gravity', 'val-mut',
-      'val-mutsize', 'val-overlap', 'val-zoom', 'val-cam',
+      'val-mutsize', 'val-zoom', 'val-cam',
       'val-hidden', 'val-neurons', 'val-elites', 'val-tournament',
       'cam-lock', 'cam-free', 'icon-pause',
       'replay-label', 'replay-play-icon',
@@ -68,20 +68,6 @@ export class Controls {
     this._bindSlider('inp-neurons', v => { this.sim.neuronsPerLayer = v; });
     this._bindSlider('inp-elites', v => { this.sim.eliteCount = v; });
     this._bindSlider('inp-tournament', v => { this.sim.tournamentSize = v; });
-
-    // Overlap buttons
-    const overlapAllow = document.getElementById('overlap-allow');
-    const overlapPrevent = document.getElementById('overlap-prevent');
-    if (overlapAllow) overlapAllow.onclick = () => {
-      this.sim.allowOverlap = true;
-      this._updateOverlap();
-      if (callbacks.onOverlapChange) callbacks.onOverlapChange();
-    };
-    if (overlapPrevent) overlapPrevent.onclick = () => {
-      this.sim.allowOverlap = false;
-      this._updateOverlap();
-      if (callbacks.onOverlapChange) callbacks.onOverlapChange();
-    };
 
     // Camera buttons
     const camLock = document.getElementById('cam-lock');
@@ -185,7 +171,6 @@ export class Controls {
       });
     }
 
-    this._updateOverlap();
     this.setCameraMode('lock');
     this.updateLabels();
     this.setReplayIndex(-1);
@@ -209,14 +194,6 @@ export class Controls {
     if (camLock) camLock.classList.toggle('active', mode === 'lock');
     if (camFree) camFree.classList.toggle('active', mode === 'free');
     if (this.els['val-cam']) this.els['val-cam'].textContent = mode.toUpperCase();
-  }
-
-  _updateOverlap() {
-    const allowBtn = document.getElementById('overlap-allow');
-    const preventBtn = document.getElementById('overlap-prevent');
-    if (allowBtn) allowBtn.classList.toggle('active', this.sim.allowOverlap);
-    if (preventBtn) preventBtn.classList.toggle('active', !this.sim.allowOverlap);
-    if (this.els['val-overlap']) this.els['val-overlap'].textContent = this.sim.allowOverlap ? 'ALLOW' : 'PREVENT';
   }
 
   setReplayIndex(index) {

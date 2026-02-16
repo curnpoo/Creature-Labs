@@ -50,7 +50,7 @@ export class Simulation {
     this.muscleStrength = CONFIG.defaultMuscleStrength;
     this.jointMoveSpeed = CONFIG.defaultJointMoveSpeed;
     this.jointFreedom = CONFIG.defaultJointFreedom;
-    this.allowOverlap = false;
+    this.spawnX = 60;
     this.mutationRate = CONFIG.defaultMutationRate;
     this.mutationSize = CONFIG.defaultMutationSize;
     this.zoom = CONFIG.defaultZoom;
@@ -86,7 +86,6 @@ export class Simulation {
 
   getSimConfig() {
     return {
-      allowOverlap: this.allowOverlap,
       jointFreedom: this.jointFreedom,
       muscleStrength: this.muscleStrength,
       jointMoveSpeed: this.jointMoveSpeed,
@@ -101,7 +100,7 @@ export class Simulation {
 
     const bounds = this.designBounds();
     const relMaxY = bounds.maxY - bounds.minY;
-    const startX = 60;
+    const startX = this.spawnX;
     const startY = this.getGroundY() - CONFIG.spawnClearance - CONFIG.nodeRadius - relMaxY;
 
     for (let i = 0; i < this.popSize; i++) {
@@ -180,19 +179,23 @@ export class Simulation {
   }
 
   distMetersFromX(x) {
-    return Math.max(0, Math.floor(x / 100));
+    return Math.max(0, Math.floor((x - this.spawnX) / 100));
+  }
+
+  distMetersContinuousFromX(x) {
+    return Math.max(0, (x - this.spawnX) / 100);
   }
 
   creatureScore(creature) {
     const fitness = creature.getFitnessSnapshot();
-    const distance = this.distMetersFromX(creature.getX());
+    const distance = this.distMetersContinuousFromX(creature.getX());
     return (
-      distance * 120 +
-      fitness.speed * 0.12 +
-      fitness.stability * 1.3 -
+      distance * 220 +
+      fitness.speed * 0.45 +
+      fitness.stability * 0.7 -
       fitness.airtimePct * 0.25 -
       fitness.stumbles * 10 -
-      fitness.spin * 42
+      fitness.spin * 30
     );
   }
 
@@ -212,7 +215,7 @@ export class Simulation {
     const genBest = this.distMetersFromX(winner.getX());
     this.genBestDist = genBest;
 
-    const popDistances = this.creatures.map(c => this.distMetersFromX(c.getX()));
+    const popDistances = this.creatures.map(c => this.distMetersContinuousFromX(c.getX()));
     const popFitness = this.creatures.map(c => c.getFitnessSnapshot());
     const avgDist = popDistances.reduce((a, b) => a + b, 0) / Math.max(1, popDistances.length);
     const avgSpeed = popFitness.reduce((a, f) => a + f.speed, 0) / Math.max(1, popFitness.length);

@@ -16,7 +16,7 @@ export class Creature {
    * @param {Float32Array|null} dna - NN weights, null for random init
    * @param {number} minX
    * @param {number} minY
-   * @param {object} simConfig - { allowOverlap, jointFreedom, muscleStrength, jointMoveSpeed }
+   * @param {object} simConfig - { jointFreedom, muscleStrength, jointMoveSpeed }
    */
   constructor(engine, originX, originY, schemaNodes, schemaConstraints, dna, minX, minY, simConfig = {}) {
     this.engine = engine;
@@ -42,7 +42,7 @@ export class Creature {
     // Create physics bodies
     const bodyMap = {};
     const category = 0x0002;
-    const mask = simConfig.allowOverlap ? 0x0001 : (0x0001 | category);
+    const mask = 0x0001; // Always allow self-overlap to prevent self-collision lockups.
 
     schemaNodes.forEach(n => {
       const b = Bodies.circle(
@@ -51,9 +51,9 @@ export class Creature {
         CONFIG.nodeRadius,
         {
           collisionFilter: { category, mask },
-          friction: 1.1,
-          frictionStatic: 2,
-          frictionAir: 0.05,
+          friction: 1.2,
+          frictionStatic: 2.6,
+          frictionAir: 0.04,
           density: 0.005,
           restitution: 0
         }
