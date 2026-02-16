@@ -87,7 +87,7 @@ function worldPointFromEvent(e) {
   const sy = e.clientY - rect.top;
   return {
     x: sx / sim.zoom + sim.cameraX,
-    y: sy / sim.zoom
+    y: sy / sim.zoom + sim.cameraY
   };
 }
 
@@ -332,16 +332,17 @@ function renderWorld(leader) {
   if (leader && sim.cameraMode === 'lock') {
     const target = Math.max(0, leader.getX() - viewW * 0.3);
     sim.cameraX += (target - sim.cameraX) * 0.09;
+    sim.cameraY += (0 - sim.cameraY) * 0.12;
   }
 
   ctx.clearRect(0, 0, worldCanvas.width, worldCanvas.height);
   ctx.save();
   ctx.scale(zoom, zoom);
-  ctx.translate(-sim.cameraX, 0);
+  ctx.translate(-sim.cameraX, -sim.cameraY);
 
   // Background
   ctx.fillStyle = '#090a11';
-  ctx.fillRect(sim.cameraX, 0, viewW, viewH);
+  ctx.fillRect(sim.cameraX, sim.cameraY, viewW, viewH);
   ctx.fillStyle = '#1a1a25';
   ctx.fillRect(sim.cameraX, gY, viewW, 420);
 
@@ -407,7 +408,7 @@ function renderWorld(leader) {
     ctx.fillText(
       challengeTool === 'ground' ? 'Ground draw ON: click to add points' : 'Obstacle mode ON: click to place box',
       sim.cameraX + 18,
-      24
+      sim.cameraY + 24
     );
   }
 

@@ -121,6 +121,7 @@ export class Controls {
     if (camFree) camFree.onclick = () => this.setCameraMode('free');
     if (camReset) camReset.onclick = () => {
       this.sim.cameraX = 0;
+      this.sim.cameraY = 0;
       this.setCameraMode('lock');
     };
 
@@ -139,15 +140,33 @@ export class Controls {
         if (this.sim.cameraMode !== 'free') return;
         this.sim.panning = true;
         this.sim.panX = e.clientX;
+        this.sim.panY = e.clientY;
       });
       world.addEventListener('wheel', e => {
-        if (e.shiftKey && this.sim.cameraMode === 'free') {
-          this.sim.cameraX = Math.max(0, this.sim.cameraX + e.deltaY * 0.3 / this.sim.zoom);
+        const rect = world.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+
+        // In free mode, hold Shift for horizontal pan and Alt for vertical pan.
+        if (this.sim.cameraMode === 'free' && e.shiftKey) {
+          this.sim.cameraX = Math.max(0, this.sim.cameraX + e.deltaY * 0.4 / this.sim.zoom);
           e.preventDefault();
           return;
         }
+        if (this.sim.cameraMode === 'free' && e.altKey) {
+          this.sim.cameraY += e.deltaY * 0.4 / this.sim.zoom;
+          e.preventDefault();
+          return;
+        }
+
+        // Zoom around cursor so the point under mouse stays fixed.
+        const worldX = sx / this.sim.zoom + this.sim.cameraX;
+        const worldY = sy / this.sim.zoom + this.sim.cameraY;
         const dir = e.deltaY > 0 ? -0.08 : 0.08;
-        this.sim.zoom = Math.max(0.35, Math.min(2.5, this.sim.zoom + dir));
+        const nextZoom = Math.max(0.35, Math.min(2.5, this.sim.zoom + dir));
+        this.sim.cameraX = Math.max(0, worldX - sx / nextZoom);
+        this.sim.cameraY = worldY - sy / nextZoom;
+        this.sim.zoom = nextZoom;
         const zoomSlider = document.getElementById('inp-zoom');
         if (zoomSlider) zoomSlider.value = String(Math.round(this.sim.zoom * 100));
         this.updateLabels();
@@ -158,25 +177,44 @@ export class Controls {
     window.addEventListener('mousemove', e => {
       if (!this.sim.panning || this.sim.cameraMode !== 'free') return;
       const dx = e.clientX - this.sim.panX;
+      const dy = e.clientY - this.sim.panY;
       this.sim.panX = e.clientX;
+      this.sim.panY = e.clientY;
       this.sim.cameraX = Math.max(0, this.sim.cameraX - dx / this.sim.zoom);
+      this.sim.cameraY -= dy / this.sim.zoom;
     });
     window.addEventListener('mouseup', () => { this.sim.panning = false; });
 
     // Keyboard shortcuts
     window.addEventListener('keydown', e => {
       if (e.key === '+' || e.key === '=') {
+        const cx = window.innerWidth * 0.5;
+        const cy = window.innerHeight * 0.5;
+        const wx = cx / this.sim.zoom + this.sim.cameraX;
+        const wy = cy / this.sim.zoom + this.sim.cameraY;
         this.sim.zoom = Math.min(2.5, this.sim.zoom + 0.08);
+        this.sim.cameraX = Math.max(0, wx - cx / this.sim.zoom);
+        this.sim.cameraY = wy - cy / this.sim.zoom;
         const zoomSlider = document.getElementById('inp-zoom');
         if (zoomSlider) zoomSlider.value = String(Math.round(this.sim.zoom * 100));
         this.updateLabels();
       }
       if (e.key === '-' || e.key === '_') {
+        const cx = window.innerWidth * 0.5;
+        const cy = window.innerHeight * 0.5;
+        const wx = cx / this.sim.zoom + this.sim.cameraX;
+        const wy = cy / this.sim.zoom + this.sim.cameraY;
         this.sim.zoom = Math.max(0.35, this.sim.zoom - 0.08);
+        this.sim.cameraX = Math.max(0, wx - cx / this.sim.zoom);
+        this.sim.cameraY = wy - cy / this.sim.zoom;
         const zoomSlider = document.getElementById('inp-zoom');
         if (zoomSlider) zoomSlider.value = String(Math.round(this.sim.zoom * 100));
         this.updateLabels();
       }
+      if (this.sim.cameraMode === 'free' && e.key === 'ArrowUp') this.sim.cameraY -= 30 / this.sim.zoom;
+      if (this.sim.cameraMode === 'free' && e.key === 'ArrowDown') this.sim.cameraY += 30 / this.sim.zoom;
+      if (this.sim.cameraMode === 'free' && e.key === 'ArrowLeft') this.sim.cameraX = Math.max(0, this.sim.cameraX - 30 / this.sim.zoom);
+      if (this.sim.cameraMode === 'free' && e.key === 'ArrowRight') this.sim.cameraX += 30 / this.sim.zoom;
       if (e.code === 'Space' && callbacks.isSimScreen && callbacks.isSimScreen()) {
         onPause();
       }

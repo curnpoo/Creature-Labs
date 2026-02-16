@@ -56,6 +56,7 @@ export class Creature {
           friction: simConfig.bodyFriction ?? 2,
           frictionStatic: simConfig.bodyStaticFriction ?? 8,
           frictionAir: simConfig.bodyAirFriction ?? 0.07,
+          isBullet: true,
           density: 0.0035,
           restitution: 0
         }

@@ -70,9 +70,11 @@ export class Simulation {
     this.mutationSize = CONFIG.defaultMutationSize;
     this.zoom = CONFIG.defaultZoom;
     this.cameraX = 0;
+    this.cameraY = 0;
     this.cameraMode = 'lock';
     this.panning = false;
     this.panX = 0;
+    this.panY = 0;
 
     // NN config
     this.hiddenLayers = CONFIG.defaultHiddenLayers;
@@ -260,7 +262,7 @@ export class Simulation {
         (p1.x + p2.x) * 0.5,
         (p1.y + p2.y) * 0.5,
         length,
-        16,
+        40,
         {
           isStatic: true,
           angle,

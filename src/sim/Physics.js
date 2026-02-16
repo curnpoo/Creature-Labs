@@ -12,7 +12,8 @@ export function createEngine(gravity = 1.0) {
 }
 
 export function createGround(engine, groundY, options = {}) {
-  const ground = Bodies.rectangle(0, groundY + 100, 1000000, 200, {
+  const groundHeight = 800;
+  const ground = Bodies.rectangle(0, groundY + groundHeight / 2, 1000000, groundHeight, {
     isStatic: true,
     friction: options.friction ?? 2,
     frictionStatic: options.frictionStatic ?? 8,
