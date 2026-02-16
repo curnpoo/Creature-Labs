@@ -391,7 +391,8 @@ export class Creature {
       this.energy.totalUsed += energyUsedThisFrame;
 
       // Regenerate energy based on inactivity (less actuation = more regen)
-      const regenMultiplier = Math.max(0, 1.0 - avgAct); // Low actuation = high regen
+      // Always have minimum 20% regen (even when fully active) so creatures can recover
+      const regenMultiplier = 0.2 + (1.0 - avgAct) * 0.8; // 20% to 100% based on activity
       const dtSec = 1 / CONFIG.fixedStepHz; // Time per physics step
       const regenAmount = this.energy.regenRate * regenMultiplier * dtSec;
       this.energy.current = Math.min(this.energy.max, this.energy.current + regenAmount);
@@ -441,11 +442,21 @@ export class Creature {
     this.stats.spin = this.stats.spin * 0.9 + avgOmega * 0.1; // Keep for display
     this.stats.spinAccumulated += Math.abs(avgOmega) * dtSec; // Cumulative budget
 
+    // Measure upright posture: reward height above ground
+    const centerHeight = groundY - center.y;
+    const heightRatio = Math.max(0, Math.min(1, centerHeight / 80)); // Normalize to 0-1 (80px = good height)
+
+    // Measure compactness: bodies close together vertically
     const yAvg = ys.reduce((a, b) => a + b, 0) / Math.max(1, ys.length);
     const variance = ys.reduce((s, y) => s + (y - yAvg) * (y - yAvg), 0) / Math.max(1, ys.length);
     const ySpread = Math.sqrt(variance);
-    const instability = Math.min(1, avgVy * 0.04 + ySpread * 0.015);
-    const targetStability = (1 - instability) * 100;
+
+    // Combined stability: upright posture (60%) + compactness (20%) + low bounce (20%)
+    const uprightScore = heightRatio * 60; // 0-60 points for being elevated
+    const compactScore = Math.max(0, 20 - ySpread * 0.3); // 0-20 points for compactness
+    const bounceScore = Math.max(0, 20 - avgVy * 0.8); // 0-20 points for low vertical velocity
+
+    const targetStability = uprightScore + compactScore + bounceScore; // 0-100
     this.stats.stability = this.stats.stability * 0.9 + targetStability * 0.1;
 
     const lowToGround = center.y > (groundY - CONFIG.nodeRadius * 2.2);

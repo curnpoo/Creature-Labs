@@ -13,8 +13,9 @@ export const ENERGY_CONFIG = {
   minEnergyForActuation: 0,     // Minimum energy required to actuate muscles (0 = always allow)
 
   // Energy Regeneration
-  regenRate: 25,                // Base energy regeneration per second when idle
+  regenRate: 35,                // Base energy regeneration per second (35 = recovers in ~3 seconds)
   regenInactivityBonus: true,   // Bonus regen when muscles are inactive
+  regenMinMultiplier: 0.2,      // Minimum regen even when fully active (20% of regenRate)
   regenWhileGrounded: 1.0,      // Regen multiplier when grounded (1.0 = normal)
   regenWhileAirborne: 0.5,      // Regen multiplier when airborne (0.5 = half speed)
 

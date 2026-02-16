@@ -6,7 +6,7 @@ export const FITNESS_CONFIG = {
   // Primary Rewards
   distanceWeight: 250,          // Reward for distance traveled (primary objective)
   speedWeight: 0.25,            // Reward for movement speed
-  stabilityWeight: 0.9,         // Reward for stable posture
+  stabilityWeight: 5.0,         // Reward for upright/stable posture (5 points per % stability)
   rewardStability: true,        // Enable stability rewards
 
   // Gait Quality Penalties
