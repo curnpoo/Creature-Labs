@@ -338,6 +338,130 @@ export class Designer {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(this.canvas.width, y); ctx.stroke();
     }
 
+    // GROUND REFERENCE LINE - Shows where creature will spawn
+    const groundY = 410;
+    ctx.strokeStyle = 'rgba(0, 242, 255, 0.4)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 5]);
+    ctx.beginPath();
+    ctx.moveTo(0, groundY);
+    ctx.lineTo(this.canvas.width, groundY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Ground label
+    ctx.fillStyle = 'rgba(0, 242, 255, 0.7)';
+    ctx.font = 'bold 11px "JetBrains Mono", monospace';
+    ctx.fillText('GROUND', 10, groundY - 8);
+    ctx.fillText('↓', this.canvas.width - 20, groundY + 20);
+
+    // SCALE REFERENCE - Shows size
+    const scaleY = this.canvas.height - 30;
+    const scaleX = this.canvas.width - 150;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(scaleX, scaleY);
+    ctx.lineTo(scaleX + 100, scaleY);
+    ctx.moveTo(scaleX, scaleY - 5);
+    ctx.lineTo(scaleX, scaleY + 5);
+    ctx.moveTo(scaleX + 100, scaleY - 5);
+    ctx.lineTo(scaleX + 100, scaleY + 5);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.font = '10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('100px', scaleX + 50, scaleY - 10);
+    ctx.textAlign = 'left';
+
+    // BOUNDING BOX & CENTER OF MASS - Shows creature size and balance
+    if (this.nodes.length > 0) {
+      const xs = this.nodes.map(n => n.x);
+      const ys = this.nodes.map(n => n.y);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      const width = maxX - minX;
+      const height = maxY - minY;
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+
+      // Bounding box
+      ctx.strokeStyle = 'rgba(168, 85, 247, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 5]);
+      ctx.strokeRect(minX - 5, minY - 5, width + 10, height + 10);
+      ctx.setLineDash([]);
+
+      // Size label
+      ctx.fillStyle = 'rgba(168, 85, 247, 0.7)';
+      ctx.font = '10px "JetBrains Mono", monospace';
+      ctx.fillText(`${width.toFixed(0)}×${height.toFixed(0)}px`, minX, minY - 10);
+
+      // Center of mass indicator
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.6)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Distance from ground indicator
+      const distFromGround = groundY - maxY;
+      if (distFromGround > 5) {
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(centerX, maxY);
+        ctx.lineTo(centerX, groundY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
+        ctx.font = 'bold 11px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`↓ ${distFromGround.toFixed(0)}px to ground`, centerX, (maxY + groundY) / 2);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    // INFO PANEL - Top left helper text
+    ctx.fillStyle = 'rgba(10, 14, 24, 0.85)';
+    ctx.fillRect(10, 10, 280, 85);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(10, 10, 280, 85);
+
+    ctx.fillStyle = 'rgba(0, 242, 255, 0.9)';
+    ctx.font = 'bold 11px "JetBrains Mono", monospace';
+    ctx.fillText('CREATURE DESIGNER', 15, 25);
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.font = '10px "JetBrains Mono", monospace';
+    ctx.fillText(`Nodes: ${this.nodes.length} | Constraints: ${this.constraints.length}`, 15, 42);
+
+    const fixedCount = this.nodes.filter(n => n.fixed).length;
+    const muscleCount = this.constraints.filter(c => c.type === 'muscle').length;
+    const boneCount = this.constraints.filter(c => c.type === 'bone').length;
+
+    ctx.fillStyle = 'rgba(255, 170, 0, 0.8)';
+    ctx.fillText(`⬛ Fixed: ${fixedCount}`, 15, 56);
+    ctx.fillStyle = 'rgba(192, 199, 205, 0.8)';
+    ctx.fillText(`▬ Bones: ${boneCount}`, 100, 56);
+    ctx.fillStyle = 'rgba(255, 0, 85, 0.8)';
+    ctx.fillText(`▬ Muscles: ${muscleCount}`, 185, 56);
+
+    const isValid = this.isValid();
+    ctx.fillStyle = isValid ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)';
+    ctx.fillText(isValid ? '✓ Ready to evolve!' : '✗ Need 2+ nodes, 1 bone, 1 muscle', 15, 75);
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.font = '9px "JetBrains Mono", monospace';
+    ctx.fillText('TIP: Keep feet near ground line for best results', 15, 88);
+
     // Constraints
     this.constraints.forEach(c => {
       const n1 = this.nodes.find(n => n.id === c.n1);
@@ -370,7 +494,6 @@ export class Designer {
     }
 
     // Nodes
-    // Nodes
     this.nodes.forEach(n => {
       ctx.beginPath();
       if (n.fixed) {
@@ -395,5 +518,39 @@ export class Designer {
       ctx.fillStyle = '#fff';
       ctx.fill();
     });
+
+    // HOVER TOOLTIP - Show node details on hover
+    if (this.mousePos) {
+      const hoverNode = this._findNodeAt(this.mousePos.x, this.mousePos.y, 16);
+      if (hoverNode) {
+        const connectedConstraints = this.constraints.filter(c =>
+          c.n1 === hoverNode.id || c.n2 === hoverNode.id
+        );
+        const muscles = connectedConstraints.filter(c => c.type === 'muscle').length;
+        const bones = connectedConstraints.filter(c => c.type === 'bone').length;
+
+        const tooltipX = hoverNode.x + 20;
+        const tooltipY = hoverNode.y - 30;
+        const tooltipW = 160;
+        const tooltipH = 60;
+
+        // Tooltip background
+        ctx.fillStyle = 'rgba(10, 14, 24, 0.95)';
+        ctx.fillRect(tooltipX, tooltipY, tooltipW, tooltipH);
+        ctx.strokeStyle = hoverNode.fixed ? 'rgba(255, 170, 0, 0.8)' : 'rgba(0, 242, 255, 0.8)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(tooltipX, tooltipY, tooltipW, tooltipH);
+
+        // Tooltip text
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.font = 'bold 10px "JetBrains Mono", monospace';
+        ctx.fillText(`Node #${hoverNode.id}`, tooltipX + 8, tooltipY + 16);
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = '9px "JetBrains Mono", monospace';
+        ctx.fillText(`Type: ${hoverNode.fixed ? 'Fixed (Ground)' : 'Free'}`, tooltipX + 8, tooltipY + 32);
+        ctx.fillText(`Connections: ${bones}B + ${muscles}M`, tooltipX + 8, tooltipY + 46);
+      }
+    }
   }
 }
