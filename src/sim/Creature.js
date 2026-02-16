@@ -36,6 +36,7 @@ export class Creature {
       actuationJerk: 0,
       frames: 0,
       airFrames: 0,
+      maxX: -Infinity,
       prevCenter: null,
       stumbleLatched: false
     };
@@ -54,8 +55,8 @@ export class Creature {
           collisionFilter: { category, mask },
           friction: 2,
           frictionStatic: 8,
-          frictionAir: 0.06,
-          density: 0.005,
+          frictionAir: 0.07,
+          density: 0.0035,
           restitution: 0
         }
       );
@@ -101,8 +102,8 @@ export class Creature {
       const c = Constraint.create({
         bodyA,
         bodyB,
-        stiffness: schema.type === 'bone' ? 0.85 : 0.7,
-        damping: schema.type === 'bone' ? 0.2 : 0.16,
+        stiffness: schema.type === 'bone' ? 0.92 : 0.78,
+        damping: schema.type === 'bone' ? 0.24 : 0.2,
         length: Vector.magnitude(Vector.sub(bodyA.position, bodyB.position))
       });
 
@@ -242,8 +243,8 @@ export class Creature {
 
     // Apply NN outputs to muscles (tanh output in [-1, 1])
     const strength = this.simConfig.muscleStrength || 1.2;
-    const moveSpeed = Math.max(0.2, Math.min(1.5, this.simConfig.jointMoveSpeed || 1.0));
-    const amplitude = Math.min(0.2, Math.max(0.05, 0.12 * strength));
+    const moveSpeed = Math.max(0.2, Math.min(2.2, this.simConfig.jointMoveSpeed || 1.0));
+    const amplitude = Math.min(0.32, Math.max(0.08, 0.18 * strength));
     const smoothing = Math.min(0.35, 0.1 + 0.12 * moveSpeed);
     let totalJerk = 0;
     this.muscles.forEach((m, i) => {
@@ -255,7 +256,7 @@ export class Creature {
 
       const targetLength = m.c.baseLength * (1 + smoothSignal * amplitude);
       const currentLength = m.c.currentLength || m.c.length;
-      const maxDelta = m.c.baseLength * 0.012 * moveSpeed;
+      const maxDelta = m.c.baseLength * 0.02 * moveSpeed;
       const nextLength = currentLength + Math.max(-maxDelta, Math.min(maxDelta, targetLength - currentLength));
       m.c.currentLength = nextLength;
       m.c.length = nextLength;
@@ -269,6 +270,7 @@ export class Creature {
     if (dtSec <= 0) return;
     const center = this.getCenter();
     this.stats.frames++;
+    this.stats.maxX = Math.max(this.stats.maxX, center.x);
 
     if (this.stats.prevCenter) {
       const dx = center.x - this.stats.prevCenter.x;
@@ -316,7 +318,8 @@ export class Creature {
       airtimePct: Math.max(0, Math.min(100, this.stats.airtimePct)),
       stumbles: this.stats.stumbles,
       spin: this.stats.spin,
-      actuationJerk: this.stats.actuationJerk
+      actuationJerk: this.stats.actuationJerk,
+      maxX: this.stats.maxX
     };
   }
 

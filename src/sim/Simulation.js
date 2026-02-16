@@ -188,15 +188,16 @@ export class Simulation {
 
   creatureScore(creature) {
     const fitness = creature.getFitnessSnapshot();
-    const distance = this.distMetersContinuousFromX(creature.getX());
+    const progressX = Number.isFinite(fitness.maxX) ? fitness.maxX : creature.getX();
+    const distance = this.distMetersContinuousFromX(progressX);
     return (
-      distance * 220 +
-      fitness.speed * 0.25 +
-      fitness.stability * 0.7 -
-      fitness.airtimePct * 0.25 -
+      distance * 320 +
+      fitness.speed * 0.35 +
+      fitness.stability * 0.5 -
+      fitness.airtimePct * 0.2 -
       fitness.stumbles * 10 -
       fitness.spin * 30 -
-      (fitness.actuationJerk || 0) * 120
+      (fitness.actuationJerk || 0) * 40
     );
   }
 
@@ -319,6 +320,14 @@ export class Simulation {
         // Anti-spin stabilization
         this.creatures.forEach(c => {
           c.bodies.forEach(b => {
+            const grounded = (b.position.y + CONFIG.nodeRadius) >= (groundY - 1.5);
+            if (grounded) {
+              // Add explicit horizontal traction to kill jitter-slide exploits.
+              Body.setVelocity(b, {
+                x: b.velocity.x * 0.8,
+                y: b.velocity.y
+              });
+            }
             const damped = b.angularVelocity * 0.96;
             Body.setAngularVelocity(b, Math.max(-3, Math.min(3, damped)));
           });

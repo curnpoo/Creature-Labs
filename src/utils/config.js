@@ -24,8 +24,8 @@ export const CONFIG = {
   defaultSimDuration: 8,
   defaultSimSpeed: 1,
   defaultGravity: 1.0,
-  defaultMuscleStrength: 1.2,
-  defaultJointMoveSpeed: 1.0,
+  defaultMuscleStrength: 1.4,
+  defaultJointMoveSpeed: 1.1,
   defaultJointFreedom: 1.0,
   defaultZoom: 1.0,
 };
