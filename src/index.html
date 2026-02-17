@@ -169,6 +169,20 @@
                 </div>
             </div>
 
+            <!-- Panel Toggle Buttons (Outside panels so they stay visible) -->
+            <button class="panel-toggle-btn" id="toggle-top" data-panel="panel-top-bar" title="Toggle Top Panel" style="position: fixed; top: 8px; right: 50%; transform: translateX(50%); z-index: 100;">
+                <i class="fas fa-chevron-up"></i>
+            </button>
+            <button class="panel-toggle-btn" id="toggle-left" data-panel="panel-progress-left" title="Toggle Left Panel" style="position: fixed; left: 8px; top: 50%; transform: translateY(-50%); z-index: 100;">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <button class="panel-toggle-btn" id="toggle-right" data-panel="panel-controls" title="Toggle Right Panel" style="position: fixed; right: 8px; top: 50%; transform: translateY(-50%); z-index: 100;">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+            <button class="panel-toggle-btn" id="toggle-bottom" data-panel="panel-scorecard" title="Toggle Bottom Panel" style="position: fixed; bottom: 8px; right: 50%; transform: translateX(50%); z-index: 100;">
+                <i class="fas fa-chevron-down"></i>
+            </button>
+
             <!-- ─── Grid Chrome ─── -->
             <div id="sim-chrome" class="sim-chrome">
                 <!-- ═══ TOP BAR: HUD + Neural ═══ -->
@@ -177,9 +191,6 @@
                     class="sim-panel"
                     style="grid-area: top-bar; display: flex; border-bottom: 1px solid var(--border-color); border-radius: 0"
                 >
-                    <button class="panel-toggle-btn" data-panel="panel-top-bar" title="Hide Top Panel">
-                        <i class="fas fa-chevron-up"></i>
-                    </button>
                     <!-- HUD Panel -->
                     <div
                         id="panel-hud"
@@ -324,9 +335,6 @@
                     class="sim-panel"
                     style="grid-area: left; width: 320px; border-right: 1px solid var(--border-color); border-radius: 0; overflow-y: auto; max-height: 100%"
                 >
-                    <button class="panel-toggle-btn" data-panel="panel-progress-left" title="Hide Left Panel">
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
                     <div
                         class="sim-panel-title"
                         style="border-color: rgba(0, 242, 255, 0.3)"
@@ -464,9 +472,6 @@
                     class="sim-panel"
                     style="grid-area: right; width: 340px; border-left: 1px solid var(--border-color); border-radius: 0; overflow-y: auto; max-height: 100%; padding: 10px"
                 >
-                    <button class="panel-toggle-btn" data-panel="panel-controls" title="Hide Right Panel">
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
                     <!-- Action Buttons -->
                     <div class="flex justify-between gap-2">
                         <button
@@ -1226,9 +1231,6 @@
                     class="sim-panel"
                     style="grid-area: bottom; border-top: 1px solid var(--border-color); border-radius: 0; overflow-y: auto; max-height: 260px; padding: 0 12px 10px"
                 >
-                    <button class="panel-toggle-btn" data-panel="panel-scorecard" title="Hide Bottom Panel">
-                        <i class="fas fa-chevron-down"></i>
-                    </button>
                     <!-- TRAINING MODE DETAILS -->
                     <div id="training-details" class="h-full flex flex-col">
                         <div class="sim-panel-title" style="border: none; padding: 4px 0 2px">
