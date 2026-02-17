@@ -224,6 +224,7 @@ export class EvolutionMonitor {
 
   /**
    * Apply automatic parameter adjustments
+   * Now adjusts incrementally rather than setting absolute values
    */
   autoAdapt(sim) {
     if (!this.autoAdaptEnabled) return null;
@@ -237,14 +238,49 @@ export class EvolutionMonitor {
     const suggestion = this.selectBestSuggestion(health.suggestions, sim);
     if (!suggestion || !suggestion.autoParams) return null;
 
-    // Apply parameters
+    // Apply parameters with incremental adjustments
     const changes = [];
-    for (const [key, value] of Object.entries(suggestion.autoParams)) {
+    for (const [key, adjustment] of Object.entries(suggestion.autoParams)) {
       if (key in sim) {
-        const oldValue = sim[key];
-        sim[key] = value;
-        changes.push({ param: key, from: oldValue, to: value });
+        const currentValue = sim[key];
+        let newValue;
+
+        // Check if adjustment is a relative multiplier (e.g., 1.2 for +20%)
+        // or an absolute value (e.g., 0.18 for 18%)
+        if (typeof adjustment === 'object' && adjustment !== null) {
+          // New format: { relative: 1.2, min: 0.01, max: 1.0 }
+          const multiplier = adjustment.relative || 1;
+          newValue = currentValue * multiplier;
+          if (adjustment.min !== undefined) newValue = Math.max(adjustment.min, newValue);
+          if (adjustment.max !== undefined) newValue = Math.min(adjustment.max, newValue);
+        } else if (typeof adjustment === 'number' && adjustment > 0 && adjustment < 2) {
+          // Treat values between 0 and 2 as multipliers for small adjustments
+          // This helps with backward compatibility while enabling relative adjustments
+          newValue = currentValue * adjustment;
+        } else {
+          // Absolute value - only use if significantly different
+          newValue = adjustment;
+        }
+
+        // Round to avoid floating point issues
+        if (Math.abs(newValue) < 10) {
+          newValue = Math.round(newValue * 1000) / 1000;
+        } else {
+          newValue = Math.round(newValue);
+        }
+
+        // Only apply if the change is meaningful (>5% difference)
+        const relativeChange = Math.abs(newValue - currentValue) / (Math.abs(currentValue) + 0.001);
+        if (relativeChange > 0.05) {
+          sim[key] = newValue;
+          changes.push({ param: key, from: currentValue, to: newValue });
+        }
       }
+    }
+
+    // If no meaningful changes were made, don't record this adaptation
+    if (changes.length === 0) {
+      return null;
     }
 
     // Record adaptation
