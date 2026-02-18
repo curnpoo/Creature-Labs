@@ -965,3 +965,22 @@ input:checked + .toggle-slider:before {
     border-color: rgba(239, 68, 68, 0.5);
     color: #fca5a5;
 }
+
+/* ═══ Enhanced Neural Network Panel ═══ */
+#nn-canvas {
+    display: block;
+    width: 100%;
+}
+
+#state-canvas {
+    display: block;
+    width: 100%;
+}
+
+/* Ensure proper canvas sizing in neural panel */
+#panel-neural canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    image-rendering: crisp-edges;
+}

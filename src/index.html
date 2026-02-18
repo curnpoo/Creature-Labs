@@ -307,24 +307,30 @@
                     >
                         <div
                             class="sim-panel-title"
-                            style="border-color: var(--secondary); flex-shrink: 0;"
+                            style="border-color: var(--secondary); flex-shrink: 0; z-index: 10;"
                         >
                             <span><i class="fas fa-brain mr-1"></i> Neural
                                 Network</span>
                             <span class="text-[var(--secondary)]">LIVE</span>
                         </div>
                         <div style="display: flex; flex: 1; min-height: 0;">
-                            <div style="flex: 0 0 380px; min-width: 0">
+                            <!-- Left: NN Visualization -->
+                            <div style="flex: 1.8; min-width: 0; position: relative;">
                                 <canvas
                                     id="nn-canvas"
-                                    width="380"
-                                    height="92"
-                                    class="w-full h-full"
+                                    style="width: 100%; height: 300px;"
                                 ></canvas>
                             </div>
-                            <div id="top-metrics-container" style="flex: 1; min-width: 0; border-left: 1px solid var(--border-color); display: flex; gap: 0; padding: 4px;">
-                                <!-- Individual metric mini-graphs will be inserted here -->
+                            <!-- Right: Creature State -->
+                            <div style="flex: 1; min-width: 0; border-left: 1px solid var(--border-color); position: relative;">
+                                <canvas
+                                    id="state-canvas"
+                                    style="width: 100%; height: 300px;"
+                                ></canvas>
                             </div>
+                        </div>
+                        <div id="top-metrics-container" style="flex: 0 0 auto; min-height: 0; border-top: 1px solid var(--border-color); display: flex; gap: 0; padding: 4px; height: 80px;">
+                            <!-- Individual metric mini-graphs will be inserted here -->
                         </div>
                     </div>
                 </div>
@@ -381,7 +387,7 @@
                             <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 8px; margin-bottom: 8px">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
                                     <div class="text-xs font-bold text-amber-400" style="font-family: 'JetBrains Mono', monospace">
-                                        ⚠ SUGGESTIONS
+                                        [!] SUGGESTIONS
                                     </div>
                                     <button onclick="window.evolutionFeedback?.dismissSuggestions()" class="text-xs text-gray-400 hover:text-white">
                                         <i class="fas fa-times"></i>
