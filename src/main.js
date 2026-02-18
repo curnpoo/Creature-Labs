@@ -1,5 +1,20 @@
-    opt.textContent = `${item.name || 'Brain'} · ${gen} · ${dist}`;
-  meta.textContent = `${mode} · ${selected.name || 'Brain'} · ${selected.distance || 0}m · ${new Date(selected.createdAt).toLocaleString()}`;
-    if (fitnessTag) fitnessTag.textContent = `LIVE · A${sim.championAwards}`;
-  if (fitnessTag) fitnessTag.textContent = sim.replayPlaying ? 'REPLAY ▶' : 'REPLAY ⏸';
-  // Camera follow — center creature in visible canvas area (between panels)
+// Entry point for the application.
+import { Simulation } from './sim/Simulation.js';
+import { EvolutionMonitor } from './utils/EvolutionMonitor.js';
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Start button to move from splash to design screen
+  const startBtn = document.getElementById('btn-start-draw');
+  if (startBtn) {
+    startBtn.addEventListener('click', () => {
+      const splash = document.getElementById('screen-splash');
+      const draw = document.getElementById('screen-draw');
+      if (splash) splash.classList.remove('active');
+      if (draw) draw.classList.add('active');
+    });
+  }
+
+  // Placeholder: Initialize simulation and UI components if needed
+  // const sim = new Simulation();
+  // const monitor = new EvolutionMonitor();
+});
