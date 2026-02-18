@@ -66,15 +66,16 @@ export function createNode(world, x, y, radius, options = {}) {
 
 // Create a rigid bone (distance joint)
 export function createBone(world, bodyA, bodyAOffset, bodyB, bodyBOffset, length, options = {}) {
-  const joint = DistanceJoint({
-    frequencyHz: options.frequencyHz ?? 15,  // High frequency = stiff
+  const joint = world.createJoint(DistanceJoint({
+    bodyA: bodyA,
+    bodyB: bodyB,
+    frequencyHz: options.frequencyHz ?? 15, // High frequency = stiff
     dampingRatio: options.dampingRatio ?? 0.5,
     length: length / SCALE,
     localAnchorA: bodyAOffset ? Vec2(bodyAOffset.x / SCALE, bodyAOffset.y / SCALE) : Vec2(0, 0),
     localAnchorB: bodyBOffset ? Vec2(bodyBOffset.x / SCALE, bodyBOffset.y / SCALE) : Vec2(0, 0)
-  });
-  
-  world.createJoint(joint);
+  }));
+
   return joint;
 }
 
@@ -128,7 +129,7 @@ export function createRevoluteJoint(world, bodyA, bodyB, anchor, options = {}) {
     upperAngle: options.upperAngle ?? Math.PI / 4,
     enableMotor: false
   }));
-  
+
   return joint;
 }
 
