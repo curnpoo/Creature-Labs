@@ -1,0 +1,10 @@
+/**
+ * Tailwind CSS configuration
+ */
+module.exports = {
+  content: ['./src/**/*.html', './src/**/*.js'],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+};

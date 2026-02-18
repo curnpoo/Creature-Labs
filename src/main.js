@@ -1,6 +1,5 @@
 // Entry point for the application.
-import { Simulation } from './sim/Simulation.js';
-import { EvolutionMonitor } from './utils/EvolutionMonitor.js';
+import './styles.css';
 
 document.addEventListener('DOMContentLoaded', () => {
   // Start button to move from splash to design screen
