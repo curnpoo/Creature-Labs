@@ -17,7 +17,7 @@ export const EVOLUTION_CONFIG = {
   stagnantMutBonus: 0.015,      // Mutation rate increase per stagnant generation
 
   // Simulation Duration
-  generationDuration: 8,        // Seconds per generation
+  generationDuration: 60,       // Seconds per generation
   simulationSpeed: 1,           // Speed multiplier (1=normal, higher=faster evolution)
 
   // Neural Network Architecture
