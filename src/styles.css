@@ -1,7 +1,4 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 :root {
     --primary: #00f2ff;
@@ -967,23 +964,4 @@ input:checked + .toggle-slider:before {
 .evo-notification-error {
     border-color: rgba(239, 68, 68, 0.5);
     color: #fca5a5;
-}
-
-/* ═══ Enhanced Neural Network Panel ═══ */
-#nn-canvas {
-    display: block;
-    width: 100%;
-}
-
-#state-canvas {
-    display: block;
-    width: 100%;
-}
-
-/* Ensure proper canvas sizing in neural panel */
-#panel-neural canvas {
-    display: block;
-    width: 100% !important;
-    height: 100% !important;
-    image-rendering: crisp-edges;
 }
