@@ -153,9 +153,8 @@ export class Controls {
     this._bindSlider('inp-mut', v => { this.sim.mutationRate = v / 100; });
     this._bindSlider('inp-mutsize', v => { this.sim.mutationSize = v / 100; });
 
-    // NN config sliders
-    this._bindSlider('inp-hidden', v => { this.sim.hiddenLayers = v; });
-    this._bindSlider('inp-neurons', v => { this.sim.neuronsPerLayer = v; });
+    // NN architecture is auto-evolving - no manual controls
+    // Evolution controls only
     this._bindSlider('inp-elites', v => { this.sim.eliteCount = v; });
     this._bindSlider('inp-tournament', v => { this.sim.tournamentSize = v; });
 
@@ -406,10 +405,16 @@ export class Controls {
     set('val-mut', `${Math.round(s.mutationRate * 100)}%`);
     set('val-mutsize', `${s.mutationSize.toFixed(2)}x`);
     set('val-zoom', `${s.zoom.toFixed(2)}x`);
-    set('val-hidden', `${s.hiddenLayers}`);
-    set('val-neurons', `${s.neuronsPerLayer}`);
     set('val-elites', `${s.eliteCount}`);
     set('val-tournament', `${s.tournamentSize}`);
+    
+    // Update NN architecture display
+    const leader = s.getLeader ? s.getLeader() : null;
+    if (leader && leader.brain) {
+      const layers = leader.brain.layerSizes;
+      const archText = `${layers.length - 2}h × ${layers[1]}n`;
+      set('val-nn-arch', archText);
+    }
   }
 
   updateFitnessPanel(fitness, creature) {
@@ -457,8 +462,7 @@ export class Controls {
     s.spinPenaltyWeight = CONFIG.defaultSpinPenaltyWeight;
     s.mutationRate = CONFIG.defaultMutationRate;
     s.mutationSize = CONFIG.defaultMutationSize;
-    s.hiddenLayers = CONFIG.defaultHiddenLayers;
-    s.neuronsPerLayer = CONFIG.defaultNeuronsPerLayer;
+    // NN architecture is auto-evolving - no reset needed
     s.eliteCount = CONFIG.defaultEliteCount;
     s.tournamentSize = CONFIG.defaultTournamentSize;
     s.zoom = CONFIG.defaultZoom;
@@ -489,8 +493,7 @@ export class Controls {
       'inp-spinpen': String(Math.round(s.spinPenaltyWeight)),
       'inp-mut': String(Math.round(s.mutationRate * 100)),
       'inp-mutsize': String(Math.round(s.mutationSize * 100)),
-      'inp-hidden': String(Math.round(s.hiddenLayers)),
-      'inp-neurons': String(Math.round(s.neuronsPerLayer)),
+      // NN architecture auto-evolves - no sliders
       'inp-elites': String(Math.round(s.eliteCount)),
       'inp-tournament': String(Math.round(s.tournamentSize)),
       'inp-zoom': String(Math.round(s.zoom * 100)),

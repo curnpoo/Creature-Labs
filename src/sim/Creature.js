@@ -89,11 +89,34 @@ export class Creature {
     // Count muscles for NN output size
     const muscleCount = schemaConstraints.filter(c => c.type === 'muscle').length;
 
-    // Compute NN layer sizes
+    // Compute NN layer sizes - Auto-evolving architecture
     const numInputs = this.bodies.length * 5 + 4;
     const numOutputs = muscleCount;
-    const hiddenLayers = simConfig.hiddenLayers || CONFIG.defaultHiddenLayers;
-    const neuronsPerLayer = simConfig.neuronsPerLayer || CONFIG.defaultNeuronsPerLayer;
+    
+    // Determine complexity based on generation (stored in creatureId as generation indicator)
+    // Or use a simple scheme: start minimal, grow with evolution
+    const generation = simConfig.currentGeneration || 1;
+    const baseFitness = simConfig.baseFitness || 0;
+    
+    // Auto-evolving architecture:
+    // Gen 1-5: Very simple (0-1 hidden layers)
+    // Gen 6-15: Medium (1-2 hidden layers)  
+    // Gen 16+: Complex (2-3 hidden layers)
+    let hiddenLayers, neuronsPerLayer;
+    
+    if (generation <= 5) {
+      // Early generations: very simple
+      hiddenLayers = Math.min(1, simConfig.hiddenLayers || 0);
+      neuronsPerLayer = Math.min(8, simConfig.neuronsPerLayer || 6);
+    } else if (generation <= 15) {
+      // Middle generations: moderate
+      hiddenLayers = Math.min(2, simConfig.hiddenLayers || 1);
+      neuronsPerLayer = Math.min(12, simConfig.neuronsPerLayer || 8);
+    } else {
+      // Late generations: full complexity
+      hiddenLayers = simConfig.hiddenLayers || CONFIG.defaultHiddenLayers;
+      neuronsPerLayer = simConfig.neuronsPerLayer || CONFIG.defaultNeuronsPerLayer;
+    }
 
     const layers = [numInputs];
     for (let i = 0; i < hiddenLayers; i++) {
@@ -378,13 +401,29 @@ export class Creature {
       m.currentLength = nextLength;
       
       // Calculate motor speed to reach target length
-      // Positive motor speed extends, negative contracts
-      const lengthDiff = nextLength - currentLength;
-      const motorSpeed = lengthDiff * 10; // Scale factor for responsiveness
+      // Convert from pixels to meters for Planck.js
+      const lengthDiffMeters = (nextLength - currentLength) / SCALE;
+      // Scale motor speed - much gentler for stable movement
+      const motorSpeed = lengthDiffMeters * 2; // Reduced from 10 for smoother motion
+      
+      // Calculate max force based on energy
+      const maxForce = (this.simConfig.muscleStrength || 1.2) * 100 * muscleStrengthMultiplier * energyMultiplier;
       
       // Apply to prismatic joint
-      m.joint.setMotorSpeed(motorSpeed);
-      m.joint.setMaxMotorForce((this.simConfig.muscleStrength || 1.2) * 100 * muscleStrengthMultiplier * energyMultiplier);
+      if (maxForce > 0.1) {
+        // Normal operation - apply motor control
+        m.joint.setMotorSpeed(motorSpeed);
+        m.joint.setMaxMotorForce(maxForce);
+        m.joint.enableMotor(true);
+      } else {
+        // Energy depleted - disable motor entirely to prevent glitching
+        m.joint.enableMotor(false);
+        m.joint.setMotorSpeed(0);
+        m.joint.setMaxMotorForce(0.01); // Minimum force to prevent joint lockup
+      }
+      
+      // Debug logging
+      // console.log(`Muscle ${m.index}: motorSpeed=${motorSpeed}, force=${(this.simConfig.muscleStrength || 1.2) * 100 * muscleStrengthMultiplier * energyMultiplier}`);
 
       m.currentSignal = smoothSignal;
       totalActuation += Math.abs(smoothSignal);
@@ -656,12 +695,11 @@ export class Creature {
     
     // Update collision filter for all bodies
     this.bodies.forEach(b => {
-      const fixture = b.getFixtureList();
-      if (fixture) {
-        const filter = fixture.getFilterData();
-        filter.groupIndex = group;
-        filter.maskBits = 0x0001;
-        fixture.setFilterData(filter);
+      let fixture = b.getFixtureList();
+      while (fixture) {
+        fixture.setFilterGroupIndex(group);
+        fixture.setFilterMaskBits(0x0001);
+        fixture = fixture.getNext();
       }
     });
   }

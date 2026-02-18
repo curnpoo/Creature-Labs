@@ -136,41 +136,56 @@ export class Simulation {
       maxEnergy: this.maxEnergy,
       energyRegenRate: this.energyRegenRate,
       energyUsagePerActuation: this.energyUsagePerActuation,
-      minEnergyForActuation: this.minEnergyForActuation
+      minEnergyForActuation: this.minEnergyForActuation,
+      // Auto-evolving NN architecture
+      currentGeneration: this.generation,
+      baseFitness: this.championFitness > 0 ? this.championFitness : 0
     };
   }
 
   spawnGeneration(dnaArray = null) {
+    // console.log('Spawning generation');
     this.creatures.forEach(c => c.destroy());
     this.creatures = [];
 
     const bounds = this.designBounds();
+    // console.log('Design bounds:', bounds);
     const relMaxY = bounds.maxY - bounds.minY;
     const startX = this.spawnX;
     const startY = this.getGroundY() - CONFIG.spawnClearance - CONFIG.nodeRadius - relMaxY;
+    // console.log(`Spawn position: (${startX}, ${startY})`);
 
     const creatureCount = this.sandboxMode ? 1 : this.popSize;
+    // console.log(`Spawning ${creatureCount} creatures`);
     for (let i = 0; i < creatureCount; i++) {
       const dna = dnaArray ? dnaArray[i] : null;
-      this.creatures.push(
-        new Creature(
-          this.world, startX, startY,
-          this.nodes, this.constraints,
-          dna, bounds.minX, bounds.minY,
-          this.getSimConfig(),
-          i
-        )
+      // console.log(`Creating creature ${i}`);
+      const creature = new Creature(
+        this.world, startX, startY,
+        this.nodes, this.constraints,
+        dna, bounds.minX, bounds.minY,
+        this.getSimConfig(),
+        i
       );
+      // console.log(`Created creature ${i} with ${creature.bodies.length} bodies and ${creature.muscles.length} muscles`);
+      this.creatures.push(creature);
     }
+    // console.log(`Spawned ${this.creatures.length} creatures`);
   }
 
   startSimulation() {
-    if (this.nodes.length < 2 || this.constraints.length < 1) return false;
+    // console.log(`Starting simulation: nodes=${this.nodes.length}, constraints=${this.constraints.length}`);
+    if (this.nodes.length < 2 || this.constraints.length < 1) {
+      // console.log('Not enough nodes or constraints');
+      return false;
+    }
 
     this.stopLoop();
     this.clearSimulation();
 
-    this.world = createEngine(this.gravity);
+    // console.log('Creating physics world');
+    this.world = createEngine(this.gravity * 10); // Scale gravity for Planck.js (10 m/s² base)
+    // console.log('Physics world created');
 
     // Set up collision filtering
     this.world.on('begin-contact', (contact) => {
@@ -237,7 +252,9 @@ export class Simulation {
       : null;
     this.spawnGeneration(seedDNA);
     this.rebuildChallengeBodies();
-    this.frameId = requestAnimationFrame(now => this.gameLoop(now));
+    // console.log('Setting up game loop');
+    this.frameId = requestAnimationFrame(timestamp => this.gameLoop(timestamp));
+    // console.log('Game loop started');
     return true;
   }
 
@@ -546,11 +563,12 @@ export class Simulation {
     }
   }
 
-  gameLoop(now) {
+  gameLoop(timestamp) {
+    // Game loop running - frame requested
     this.frameId = requestAnimationFrame(ts => this.gameLoop(ts));
 
-    const dtMs = Math.max(1, now - this.lastFrame);
-    this.lastFrame = now;
+    const dtMs = Math.max(1, timestamp - this.lastFrame);
+    this.lastFrame = timestamp;
     this.fpsSmoothed = this.fpsSmoothed * 0.88 + (1000 / dtMs) * 0.12;
 
     const fixedDtSec = 1 / CONFIG.fixedStepHz;
@@ -566,6 +584,7 @@ export class Simulation {
         this.creatures.forEach(c => c.update(time, groundY));
         
         // Step physics
+        // console.log(`Stepping physics: dt=${fixedDtSec}`);
         this.world.step(fixedDtSec);
 
         // Anti-spin stabilization
@@ -582,16 +601,22 @@ export class Simulation {
           });
         });
       }
-      simulatedSec = stepsToRun * fixedDtSec;
-      this.simTimeElapsed += simulatedSec;
-      this.timer -= simulatedSec;
+    simulatedSec = stepsToRun * fixedDtSec;
+    this.simTimeElapsed += simulatedSec;
+    this.timer -= simulatedSec;
+    
+    // Debug: log timer every second
+    if (Math.floor(this.simTimeElapsed) % 1 === 0 && Math.floor(this.simTimeElapsed) > 0) {
+      // console.log(`Timer: ${this.timer.toFixed(1)}s, Gen: ${this.generation}`);
     }
+  }
 
-    // Update ground position
+    // Update ground position (only X changes to follow camera, Y stays fixed)
     if (this.ground) {
+      const currentPos = this.ground.getPosition();
       this.ground.setPosition(Vec2(
         (this.cameraX + window.innerWidth / 2) / SCALE,
-        (groundY + 400) / SCALE
+        currentPos.y
       ));
     }
 
@@ -600,16 +625,16 @@ export class Simulation {
     if (rawLeader) {
       this.creatures.forEach(c => c.sampleFitness(simulatedSec, groundY));
 
-      if (!this.visualLeader || !this.creatures.includes(this.visualLeader)) {
+    if (!this.visualLeader || !this.creatures.includes(this.visualLeader)) {
+      this.visualLeader = rawLeader;
+      this.lastLeaderSwitchAt = timestamp;
+    } else {
+      const currentX = this.visualLeader.getX();
+      if (rawLeader.getX() > currentX + 25 && (timestamp - this.lastLeaderSwitchAt) > 400) {
         this.visualLeader = rawLeader;
-        this.lastLeaderSwitchAt = now;
-      } else {
-        const currentX = this.visualLeader.getX();
-        if (rawLeader.getX() > currentX + 25 && (now - this.lastLeaderSwitchAt) > 400) {
-          this.visualLeader = rawLeader;
-          this.lastLeaderSwitchAt = now;
-        }
+        this.lastLeaderSwitchAt = timestamp;
       }
+    }
     }
 
     const leader = this.visualLeader || rawLeader;
@@ -624,10 +649,12 @@ export class Simulation {
     }
 
     if (this.timer <= 0) {
+      console.log(`Generation ${this.generation} ended. Best: ${this.genBestDist}m`);
       if (this.sandboxMode) {
         this.restartSandboxRun();
       } else {
         this.endGeneration();
+        console.log(`Generation ${this.generation} started with ${this.creatures.length} creatures`);
       }
     }
 

@@ -19,11 +19,13 @@ export const ENERGY_CONFIG = {
   regenWhileGrounded: 1.0,      // Regen multiplier when grounded (1.0 = normal)
   regenWhileAirborne: 0.8,      // Regen multiplier when airborne - up from 0.5
 
-  // Energy-Based Strength Modifiers
-  strengthAtFullEnergy: 1.0,    // Strength multiplier at 100% energy
-  strengthAt50Energy: 0.9,      // Strength multiplier at 50% energy - up from 0.85
-  strengthAt20Energy: 0.7,      // Strength multiplier at 20% energy - up from 0.4
-  strengthAtZeroEnergy: 0.3,    // Strength multiplier at 0% energy - up from 0.0 (allow weak movement)
+  // Energy-Based Strength Modifiers - DRAMATIC falloff (energy is critical!)
+  strengthAtFullEnergy: 1.0, // Strength multiplier at 100% energy
+  strengthAt75Energy: 0.85, // Strength at 75% energy
+  strengthAt50Energy: 0.6, // Strength at 50% energy - significantly weaker
+  strengthAt25Energy: 0.3, // Strength at 25% energy - barely functional
+  strengthAt20Energy: 0.15, // Strength at 20% energy - nearly depleted
+  strengthAtZeroEnergy: 0.05, // Strength at 0% energy - almost no movement
 
   // Fitness Rewards
   efficiencyBonus: 0.5,         // Fitness bonus for energy efficiency (distance/energy)

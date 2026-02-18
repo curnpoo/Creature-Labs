@@ -4,10 +4,10 @@
  */
 export const MUSCLE_CONFIG = {
   // Base Muscle Properties
-  strength: 1.0,                // Base muscle strength (1.0 = balanced)
-  moveSpeed: 0.7,               // Joint movement speed (0.7 = controlled, prevents exploits)
-  range: 0.8,                   // Muscle contraction range (0.8 = ±80% from base length)
-  smoothing: 0.22,              // Muscle signal smoothing (0-1, higher = smoother)
+  strength: 1.5, // Base muscle strength (1.5 = strong actuation)
+  moveSpeed: 1.2, // Joint movement speed (1.2 = responsive)
+  range: 1.2, // Muscle contraction range (1.2 = ±120% from base length for full range)
+  smoothing: 0.15, // Muscle signal smoothing (0.15 = responsive but not jerky)
 
   // Ground-Dependent Strength (prevents air-pushing exploits)
   groundedBothBodies: 1.0,      // Strength when both bodies grounded (100%)

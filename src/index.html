@@ -740,46 +740,25 @@
                         >
                     </div>
 
-                    <div class="section-divider"></div>
-                    <div class="section-title text-purple-400">
-                        Neural Network
-                    </div>
+<!-- Neural Network Architecture - Auto-evolves, not manually controlled -->
+<div class="section-divider"></div>
+<div class="section-title text-purple-400">
+  Neural Network <span class="text-xs text-gray-400">(Auto-Evolving)</span>
+</div>
 
-                    <div class="control-group">
-                        <div class="control-label">
-                            Hidden Layers <span
-                                class="control-val"
-                                id="val-hidden"
-                            >1</span>
-                        </div>
-                        <input
-                            type="range"
-                            id="inp-hidden"
-                            min="1"
-                            max="3"
-                            value="1"
-                            step="1"
-                        >
-                    </div>
+<div class="control-group">
+  <div class="control-label">
+    Architecture <span
+    class="control-val"
+    id="val-nn-arch"
+    >Simple</span>
+  </div>
+  <div class="text-xs text-gray-400 mt-1" style="font-family: 'JetBrains Mono', monospace">
+    Starts minimal, grows with fitness
+  </div>
+</div>
 
-                    <div class="control-group">
-                        <div class="control-label">
-                            Neurons / Layer <span
-                                class="control-val"
-                                id="val-neurons"
-                            >12</span>
-                        </div>
-                        <input
-                            type="range"
-                            id="inp-neurons"
-                            min="4"
-                            max="32"
-                            value="12"
-                            step="1"
-                        >
-                    </div>
-
-                    <div class="control-group">
+<div class="control-group">
                         <div class="control-label">
                             Elite Count <span
                                 class="control-val"
