@@ -1,4 +1,5 @@
 import { STORAGE_KEYS, CONFIG } from '../utils/config.js';
+import { planck } from '../sim/Physics.js';
 
 /**
  * Right panel controls + bindings.
@@ -89,7 +90,7 @@ export class Controls {
     });
     this._bindSlider('inp-gravity', v => {
       this.sim.gravity = v;
-      if (this.sim.engine) this.sim.engine.world.gravity.y = v;
+      if (this.sim.world) this.sim.world.setGravity(planck.Vec2(0, v));
     }, true);
     this._bindSlider('inp-groundfric', v => {
       this.sim.groundFriction = v / 100;

@@ -8,6 +8,7 @@ import { Visualizer } from './ui/Visualizer.js';
 import { ProgressChart } from './ui/ProgressChart.js';
 import { EvolutionMonitor } from './utils/EvolutionMonitor.js';
 import { EvolutionFeedback } from './ui/EvolutionFeedback.js';
+import { Vec2 } from './sim/Physics.js';
 
 
 // --- State ---
@@ -319,8 +320,8 @@ controls.bind({
     startTrainingNow();
   },
   onResetSettings: () => {
-    if (sim.engine) {
-      sim.engine.world.gravity.y = sim.gravity;
+    if (sim.world) {
+      sim.world.setGravity(Vec2(0, sim.gravity));
       sim.syncCreatureRuntimeSettings();
     }
   },
@@ -727,11 +728,11 @@ window.addEventListener('applySuggestion', (e) => {
   // Update UI controls to reflect new values
   controls.updateLabels();
 
-  // Sync runtime settings for immediate effect
-  if (sim.engine) {
-    sim.engine.world.gravity.y = sim.gravity;
-    sim.syncCreatureRuntimeSettings();
-  }
+    // Sync runtime settings for immediate effect
+    if (sim.world) {
+      sim.world.setGravity(Vec2(0, sim.gravity));
+      sim.syncCreatureRuntimeSettings();
+    }
 });
 
 // --- Resize ---

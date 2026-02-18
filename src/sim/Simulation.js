@@ -1,14 +1,15 @@
 import { CONFIG } from '../utils/config.js';
-import { createEngine, createGround, cleanup, Engine, Body, Bodies, Composite, Vector, Matter } from './Physics.js';
+import { createEngine, createGround, cleanup, SCALE, planck, World, Vec2, Body, Circle, Box } from './Physics.js';
 import { Creature } from './Creature.js';
 import { Evolution } from '../nn/Evolution.js';
 
 /**
  * Simulation manager: game loop, generation lifecycle, evolution.
+ * Migrated to Planck.js physics engine.
  */
 export class Simulation {
   constructor() {
-    this.engine = null;
+    this.world = null;
     this.ground = null;
     this.creatures = [];
     this.generation = 1;
@@ -51,7 +52,7 @@ export class Simulation {
     this.onGenerationEnd = null;
     this.onFrame = null;
 
-    // Settings (mutable, read by UI)
+    // Settings
     this.simSpeed = CONFIG.defaultSimSpeed;
     this.simDuration = CONFIG.defaultSimDuration;
     this.popSize = CONFIG.defaultPopSize;
@@ -153,7 +154,7 @@ export class Simulation {
       const dna = dnaArray ? dnaArray[i] : null;
       this.creatures.push(
         new Creature(
-          this.engine, startX, startY,
+          this.world, startX, startY,
           this.nodes, this.constraints,
           dna, bounds.minX, bounds.minY,
           this.getSimConfig(),
@@ -169,31 +170,39 @@ export class Simulation {
     this.stopLoop();
     this.clearSimulation();
 
-    this.engine = createEngine(this.gravity);
+    this.world = createEngine(this.gravity);
 
-    // COLLISION JITTER FILTER
-    // Isolation from other creatures is now handled by Matter.js Categories and Masks.
-    // This handler only solves the 'jitter' caused by connected nodes fighting each other.
-    const collisionFilter = (e) => {
-      const pairs = e.pairs;
-      for (let i = 0; i < pairs.length; i++) {
-        const p = pairs[i];
-        
-        // If they are from the SAME creature and connected by a spine/muscle, skip collision.
-        if (p.bodyA.creatureId === p.bodyB.creatureId) {
-          if (p.bodyA.connectedBodies && p.bodyA.connectedBodies.has(p.bodyB.id)) {
-            p.isActive = false;
-          }
+    // Set up collision filtering
+    this.world.on('begin-contact', (contact) => {
+      const fixtureA = contact.getFixtureA();
+      const fixtureB = contact.getFixtureB();
+      const bodyA = fixtureA.getBody();
+      const bodyB = fixtureB.getBody();
+
+      // Skip collision between connected bodies from the same creature
+      if (bodyA.creatureId === bodyB.creatureId) {
+        if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB)) {
+          contact.setEnabled(false);
         }
       }
-    };
+    });
 
-    Matter.Events.on(this.engine, 'collisionStart', collisionFilter);
-    Matter.Events.on(this.engine, 'collisionActive', collisionFilter);
+    this.world.on('pre-solve', (contact) => {
+      const fixtureA = contact.getFixtureA();
+      const fixtureB = contact.getFixtureB();
+      const bodyA = fixtureA.getBody();
+      const bodyB = fixtureB.getBody();
 
-    this.ground = createGround(this.engine, this.getGroundY(), {
-      friction: this.groundFriction,
-      frictionStatic: this.groundStaticFriction
+      // Skip collision between connected bodies from the same creature
+      if (bodyA.creatureId === bodyB.creatureId) {
+        if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB)) {
+          contact.setEnabled(false);
+        }
+      }
+    });
+
+    this.ground = createGround(this.world, this.getGroundY(), {
+      friction: this.groundFriction
     });
 
     this.generation = 1;
@@ -243,9 +252,9 @@ export class Simulation {
     this.creatures.forEach(c => c.destroy());
     this.creatures = [];
     this.challengeBodies = [];
-    if (this.engine) {
-      cleanup(this.engine);
-      this.engine = null;
+    if (this.world) {
+      cleanup(this.world);
+      this.world = null;
     }
   }
 
@@ -293,47 +302,57 @@ export class Simulation {
   }
 
   rebuildChallengeBodies() {
-    if (!this.engine) return;
-    if (this.challengeBodies.length) {
-      Composite.remove(this.engine.world, this.challengeBodies);
-      this.challengeBodies = [];
-    }
+    if (!this.world) return;
+    
+    // Remove existing challenge bodies
+    this.challengeBodies.forEach(body => {
+      this.world.destroyBody(body);
+    });
+    this.challengeBodies = [];
 
+    // Create ground profile segments
     const bodies = [];
     for (let i = 1; i < this.groundProfile.length; i++) {
       const p1 = this.groundProfile[i - 1];
       const p2 = this.groundProfile[i];
-      const delta = Vector.sub(p2, p1);
-      const length = Vector.magnitude(delta);
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const length = Math.sqrt(dx * dx + dy * dy);
       if (length < 2) continue;
-      const angle = Math.atan2(delta.y, delta.x);
-      const seg = Bodies.rectangle(
-        (p1.x + p2.x) * 0.5,
-        (p1.y + p2.y) * 0.5,
-        length,
-        40,
-        {
-          isStatic: true,
-          angle,
-          friction: this.groundFriction,
-          frictionStatic: this.groundStaticFriction,
-          restitution: 0
-        }
-      );
-      bodies.push(seg);
+      const angle = Math.atan2(dy, dx);
+      
+      const body = this.world.createBody({
+        type: 'static',
+        position: Vec2((p1.x + p2.x) / 2 / SCALE, (p1.y + p2.y) / 2 / SCALE),
+        angle: angle
+      });
+      
+      body.createFixture({
+        shape: Box(length / 2 / SCALE, 20 / SCALE),
+        friction: this.groundFriction,
+        restitution: 0
+      });
+      
+      bodies.push(body);
     }
 
+    // Create obstacles
     this.obstacles.forEach(o => {
-      bodies.push(Bodies.rectangle(o.x, o.y, o.w, o.h, {
-        isStatic: true,
+      const body = this.world.createBody({
+        type: 'static',
+        position: Vec2(o.x / SCALE, o.y / SCALE)
+      });
+      
+      body.createFixture({
+        shape: Box(o.w / 2 / SCALE, o.h / 2 / SCALE),
         friction: this.groundFriction,
-        frictionStatic: this.groundStaticFriction,
         restitution: 0
-      }));
+      });
+      
+      bodies.push(body);
     });
 
     this.challengeBodies = bodies;
-    if (bodies.length) Composite.add(this.engine.world, bodies);
   }
 
   exportBrain() {
@@ -389,10 +408,8 @@ export class Simulation {
     const distance = this.distMetersContinuousFromX(progressX);
     const gaitPenaltyScale = this.rewardStability ? 1.5 : 1.0;
 
-    // Distance-dependent scaling: longer runs require better gaits
     const distanceScale = 1 + distance * 0.02;
 
-    // Energy efficiency bonus (distance per energy spent)
     const energyBonus = this.energyEnabled && fitness.energyEfficiency > 0
       ? fitness.energyEfficiency * this.energyEfficiencyBonus
       : 0;
@@ -401,12 +418,12 @@ export class Simulation {
       distance * this.distanceRewardWeight +
       fitness.speed * this.speedRewardWeight * (0.2 + (fitness.actuationLevel || 0) * 0.8) +
       (this.rewardStability ? fitness.stability * this.stabilityRewardWeight : 0) +
-      energyBonus -                                                           // Reward efficient movement
-      fitness.airtimePct * 0.3 * gaitPenaltyScale * distanceScale -           // Scales with distance
-      fitness.stumbles * 15 * gaitPenaltyScale -                              // Slightly increased
-      Math.pow(fitness.spin, 2) * this.spinPenaltyWeight * gaitPenaltyScale - // QUADRATIC!
-      (fitness.spinAccumulated || 0) * 150 -                                  // Cumulative spin budget
-      (fitness.energyViolations || 0) * 500 -                                 // Harsh penalty for free energy
+      energyBonus -
+      fitness.airtimePct * 0.3 * gaitPenaltyScale * distanceScale -
+      fitness.stumbles * 15 * gaitPenaltyScale -
+      Math.pow(fitness.spin, 2) * this.spinPenaltyWeight * gaitPenaltyScale -
+      (fitness.spinAccumulated || 0) * 150 -
+      (fitness.energyViolations || 0) * 500 -
       Math.pow(fitness.actuationJerk || 0, 1.5) * this.jitterPenaltyWeight * gaitPenaltyScale -
       (fitness.groundSlip || 0) * this.groundSlipPenaltyWeight * gaitPenaltyScale
     );
@@ -537,32 +554,31 @@ export class Simulation {
     this.fpsSmoothed = this.fpsSmoothed * 0.88 + (1000 / dtMs) * 0.12;
 
     const fixedDtSec = 1 / CONFIG.fixedStepHz;
-    const fixedDtMs = 1000 / CONFIG.fixedStepHz;
     const groundY = this.getGroundY();
 
     let simulatedSec = 0;
-    if (!this.paused && this.engine) {
+    if (!this.paused && this.world) {
       const stepsToRun = Math.min(CONFIG.maxPhysicsStepsPerFrame, Math.max(1, this.simSpeed));
 
       for (let i = 0; i < stepsToRun; i++) {
         this.syncCreatureRuntimeSettings();
-        const time = this.engine.timing.timestamp * 0.006;
+        const time = (this.simTimeElapsed + i * fixedDtSec) * 10;
         this.creatures.forEach(c => c.update(time, groundY));
-        Engine.update(this.engine, fixedDtMs);
+        
+        // Step physics
+        this.world.step(fixedDtSec);
 
         // Anti-spin stabilization
         this.creatures.forEach(c => {
           c.bodies.forEach(b => {
-            const grounded = (b.position.y + CONFIG.nodeRadius) >= (groundY - 1.5);
+            const pos = b.getPosition();
+            const grounded = (pos.y * SCALE + CONFIG.nodeRadius) >= (groundY - 1.5);
             if (grounded) {
-              // Add explicit horizontal traction to kill jitter-slide exploits.
-              Body.setVelocity(b, {
-                x: b.velocity.x * this.tractionDamping,
-                y: b.velocity.y
-              });
+              const vel = b.getLinearVelocity();
+              b.setLinearVelocity(Vec2(vel.x * this.tractionDamping, vel.y));
             }
-            const damped = b.angularVelocity * 0.96;
-            Body.setAngularVelocity(b, Math.max(-3, Math.min(3, damped)));
+            const damped = b.getAngularVelocity() * 0.96;
+            b.setAngularVelocity(Math.max(-3, Math.min(3, damped)));
           });
         });
       }
@@ -573,10 +589,10 @@ export class Simulation {
 
     // Update ground position
     if (this.ground) {
-      Body.setPosition(this.ground, {
-        x: this.cameraX + window.innerWidth / 2,
-        y: groundY + 400
-      });
+      this.ground.setPosition(Vec2(
+        (this.cameraX + window.innerWidth / 2) / SCALE,
+        (groundY + 400) / SCALE
+      ));
     }
 
     // Leader tracking
@@ -601,7 +617,7 @@ export class Simulation {
       this.genBestDist = Math.max(this.genBestDist, this.distMetersFromX(leader.getX()));
       const center = leader.getCenter();
       if (!this.currentGhostPath.length ||
-          Math.abs(center.x - this.currentGhostPath[this.currentGhostPath.length - 1].x) > 5) {
+        Math.abs(center.x - this.currentGhostPath[this.currentGhostPath.length - 1].x) > 5) {
         this.currentGhostPath.push({ x: center.x, y: center.y });
         if (this.currentGhostPath.length > 1500) this.currentGhostPath.shift();
       }
@@ -631,23 +647,33 @@ export class Simulation {
       c.simConfig.bodyFriction = this.bodyFriction;
       c.simConfig.bodyStaticFriction = this.bodyStaticFriction;
       c.simConfig.bodyAirFriction = this.bodyAirFriction;
-      
+
       c.updateRuntimeSettings();
 
+      // Update body friction
       c.bodies.forEach(b => {
-        b.friction = this.bodyFriction;
-        b.frictionStatic = this.bodyStaticFriction;
-        b.frictionAir = this.bodyAirFriction;
+        let fixture = b.getFixtureList();
+        while (fixture) {
+          fixture.setFriction(this.bodyFriction);
+          fixture = fixture.getNext();
+        }
       });
     });
 
     if (this.ground) {
-      this.ground.friction = this.groundFriction;
-      this.ground.frictionStatic = this.groundStaticFriction;
+      let fixture = this.ground.getFixtureList();
+      while (fixture) {
+        fixture.setFriction(this.groundFriction);
+        fixture = fixture.getNext();
+      }
     }
+    
     this.challengeBodies.forEach(b => {
-      b.friction = this.groundFriction;
-      b.frictionStatic = this.groundStaticFriction;
+      let fixture = b.getFixtureList();
+      while (fixture) {
+        fixture.setFriction(this.groundFriction);
+        fixture = fixture.getNext();
+      }
     });
   }
 

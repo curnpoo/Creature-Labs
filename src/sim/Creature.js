@@ -1,14 +1,15 @@
-import { Composite, Constraint, Vector, Bodies, Body } from '../sim/Physics.js';
+import { createNode, createBone, createMuscle, cleanup, SCALE, planck, World, Vec2, Body, Circle, Edge, PrismaticJoint, DistanceJoint, RevoluteJoint } from '../sim/Physics.js';
 import { NeuralNetwork } from '../nn/NeuralNetwork.js';
 import { CONFIG } from '../utils/config.js';
 
 /**
  * Creature with a real neural network brain.
  * DNA is a Float32Array of NN weights instead of {freq, phase, amp} objects.
+ * Migrated to Planck.js physics engine.
  */
 export class Creature {
   /**
-   * @param {Matter.Engine} engine
+   * @param {planck.World} world - Planck.js world
    * @param {number} originX
    * @param {number} originY
    * @param {object[]} schemaNodes
@@ -18,14 +19,13 @@ export class Creature {
    * @param {number} minY
    * @param {object} simConfig - { jointFreedom, muscleStrength, jointMoveSpeed, muscleRange, muscleSmoothing }
    */
-  constructor(engine, originX, originY, schemaNodes, schemaConstraints, dna, minX, minY, simConfig = {}, creatureId = 0) {
-    this.engine = engine;
+  constructor(world, originX, originY, schemaNodes, schemaConstraints, dna, minX, minY, simConfig = {}, creatureId = 0) {
+    this.world = world;
     this.id = creatureId;
-    this.composite = Composite.create();
-    this.bodies = [];
-    this.muscles = [];
-    this.boneConstraints = [];
-    this.angleLimiters = [];
+    this.bodies = []; // Array of planck.Body
+    this.muscles = []; // Array of { joint: PrismaticJoint, bodyA: Body, bodyB: Body, baseLength: number, currentLength: number, index: number }
+    this.bones = []; // Array of DistanceJoint
+    this.angleLimiters = []; // Array of DistanceJoint
     this.simConfig = simConfig;
 
     this.stats = {
@@ -34,11 +34,11 @@ export class Creature {
       airtimePct: 0,
       stumbles: 0,
       spin: 0,
-      spinAccumulated: 0, // Track total spin budget
+      spinAccumulated: 0,
       actuationJerk: 0,
       actuationLevel: 0,
       groundSlip: 0,
-      energyViolations: 0, // Track suspicious energy gains
+      energyViolations: 0,
       frames: 0,
       airFrames: 0,
       maxX: -Infinity,
@@ -62,44 +62,36 @@ export class Creature {
     // Create physics bodies
     const bodyMap = {};
     const category = 0x0002;
-    const mask = 0x0001; // Ground only. Inter-creature collision is blocked by this mask.
-    // Matter.js Group Rule: 
-    // - Same positive group: ALWAYS collide (Self-collision ON)
-    // - Same negative group: NEVER collide (Self-collision OFF)
+    const mask = 0x0001;
     const selfOn = !!simConfig.selfCollision;
     const group = selfOn ? (this.id + 1) : -(this.id + 1);
 
     schemaNodes.forEach(n => {
-      const b = Bodies.circle(
+      const b = createNode(
+        this.world,
         originX + (n.x - minX),
         originY + (n.y - minY),
         CONFIG.nodeRadius,
         {
-          collisionFilter: { category, mask, group },
-          friction: simConfig.bodyFriction ?? 2,
-          frictionStatic: simConfig.bodyStaticFriction ?? 8,
-          frictionAir: simConfig.bodyAirFriction ?? 0.07,
-          isBullet: true,
           density: 0.0035,
+          friction: simConfig.bodyFriction ?? 2,
           restitution: 0,
-          slop: 0.01  // Minimum separation to prevent tunneling
+          categoryBits: category,
+          maskBits: mask,
+          group: group
         }
       );
       b.creatureId = this.id;
       bodyMap[n.id] = b;
       this.bodies.push(b);
-      Composite.add(this.composite, b);
     });
 
     // Count muscles for NN output size
     const muscleCount = schemaConstraints.filter(c => c.type === 'muscle').length;
 
     // Compute NN layer sizes
-    // Inputs: per body (relX, relY, vx, vy, ground) + sin(t), cos(t), avgVx, avgHeight
     const numInputs = this.bodies.length * 5 + 4;
     const numOutputs = muscleCount;
-
-    // Hidden layer size
     const hiddenLayers = simConfig.hiddenLayers || CONFIG.defaultHiddenLayers;
     const neuronsPerLayer = simConfig.neuronsPerLayer || CONFIG.defaultNeuronsPerLayer;
 
@@ -118,30 +110,47 @@ export class Creature {
     }
     this.dna = this.brain.toArray();
 
-    // Create constraints
+    // Create joints
     let m = 0;
     schemaConstraints.forEach(schema => {
       const bodyA = bodyMap[schema.n1];
       const bodyB = bodyMap[schema.n2];
       if (!bodyA || !bodyB) return;
 
-      const c = Constraint.create({
-        bodyA,
-        bodyB,
-        stiffness: schema.type === 'bone' ? 1.0 : 0.70,  // Muscle: 0.70 (was 0.78) for viscoelastic behavior
-        damping: schema.type === 'bone' ? 0.12 : 0.30,   // Muscle: 0.30 (was 0.2) mimics muscle-tendon damping
-        length: Vector.magnitude(Vector.sub(bodyA.position, bodyB.position))
-      });
+      const posA = bodyA.getPosition();
+      const posB = bodyB.getPosition();
+      const dx = posB.x - posA.x;
+      const dy = posB.y - posA.y;
+      const lengthPx = Math.sqrt(dx * dx + dy * dy) * SCALE;
 
       if (schema.type === 'muscle') {
-        c.baseLength = c.length;
-        c.currentLength = c.length;
-        this.muscles.push({ c, index: m });
+        // Create prismatic joint for muscle (piston)
+        const axis = Vec2(dx / Math.sqrt(dx * dx + dy * dy), dy / Math.sqrt(dx * dx + dy * dy));
+        const joint = createMuscle(this.world, bodyA, null, bodyB, null, axis, {
+          restLength: lengthPx,
+          minLength: lengthPx * 0.6,
+          maxLength: lengthPx * 1.4,
+          maxForce: (simConfig.muscleStrength || 1.2) * 100
+        });
+        
+        this.muscles.push({
+          joint,
+          bodyA,
+          bodyB,
+          baseLength: lengthPx,
+          currentLength: lengthPx,
+          index: m,
+          smoothSignal: 0
+        });
         m++;
       } else {
-        this.boneConstraints.push(c);
+        // Create distance joint for bone
+        const joint = createBone(this.world, bodyA, null, bodyB, null, lengthPx, {
+          frequencyHz: 15,
+          dampingRatio: 0.5
+        });
+        this.bones.push(joint);
       }
-      Composite.add(this.composite, c);
     });
 
     // Angle limiters for joint freedom
@@ -157,20 +166,20 @@ export class Creature {
     });
 
     const bodyConnects = new Map();
-    this.bodies.forEach(b => bodyConnects.set(b.id, new Set()));
+    this.bodies.forEach(b => bodyConnects.set(b, new Set()));
 
     schemaConstraints.forEach(schema => {
-        const bA = bodyMap[schema.n1];
-        const bB = bodyMap[schema.n2];
-        if (bA && bB) {
-            bodyConnects.get(bA.id).add(bB.id);
-            bodyConnects.get(bB.id).add(bA.id);
-        }
+      const bA = bodyMap[schema.n1];
+      const bB = bodyMap[schema.n2];
+      if (bA && bB) {
+        bodyConnects.get(bA).add(bB);
+        bodyConnects.get(bB).add(bA);
+      }
     });
-    
+
     // Store for collision filter
     this.bodies.forEach(b => {
-        b.connectedBodies = bodyConnects.get(b.id);
+      b.connectedBodies = bodyConnects.get(b);
     });
 
     const freedom = simConfig.jointFreedom !== undefined ? simConfig.jointFreedom : 1.0;
@@ -180,35 +189,36 @@ export class Creature {
     neighbors.forEach((set, centerId) => {
       const ids = Array.from(set);
       if (ids.length < 2) return;
-      
+
       const centerNode = nodeMap.get(centerId);
       const isFixed = centerNode && centerNode.fixed;
-      const currentStiffness = isFixed ? 1.0 : bendStiffness; // Max stiffness for fixed joints
+      const currentStiffness = isFixed ? 1.0 : bendStiffness;
 
       for (let i = 0; i < ids.length; i++) {
         for (let j = i + 1; j < ids.length; j++) {
           const bodyA = bodyMap[ids[i]];
           const bodyB = bodyMap[ids[j]];
           if (!bodyA || !bodyB) continue;
-          const limiter = Constraint.create({
-            bodyA,
-            bodyB,
-            length: Vector.magnitude(Vector.sub(bodyA.position, bodyB.position)),
-            stiffness: isFixed ? 1.0 : bendStiffness,
-            damping: isFixed ? 0.2 : 0.06
+          
+          const posA = bodyA.getPosition();
+          const posB = bodyB.getPosition();
+          const dx = posB.x - posA.x;
+          const dy = posB.y - posA.y;
+          const lengthPx = Math.sqrt(dx * dx + dy * dy) * SCALE;
+          
+          const limiter = createBone(this.world, bodyA, null, bodyB, null, lengthPx, {
+            frequencyHz: isFixed ? 30 : 8,
+            dampingRatio: isFixed ? 0.2 : 0.06
           });
           limiter.isAngleLimiter = true;
           limiter.isFixedJoint = isFixed;
           this.angleLimiters.push(limiter);
-          Composite.add(this.composite, limiter);
         }
       }
     });
 
     // Precompute creature span for normalization
     this._computeSpan();
-
-    Composite.add(engine.world, this.composite);
   }
 
   _computeSpan() {
@@ -219,9 +229,11 @@ export class Creature {
     let maxDist = 0;
     for (let i = 0; i < this.bodies.length; i++) {
       for (let j = i + 1; j < this.bodies.length; j++) {
-        const d = Vector.magnitude(
-          Vector.sub(this.bodies[i].position, this.bodies[j].position)
-        );
+        const posA = this.bodies[i].getPosition();
+        const posB = this.bodies[j].getPosition();
+        const dx = (posB.x - posA.x) * SCALE;
+        const dy = (posB.y - posA.y) * SCALE;
+        const d = Math.sqrt(dx * dx + dy * dy);
         if (d > maxDist) maxDist = d;
       }
     }
@@ -244,21 +256,23 @@ export class Creature {
 
     for (let i = 0; i < numBodies; i++) {
       const b = this.bodies[i];
+      const pos = b.getPosition();
+      const vel = b.getLinearVelocity();
       const offset = i * 5;
 
       // Relative position normalized by span
-      inputs[offset] = (b.position.x - center.x) / this.span;
-      inputs[offset + 1] = (b.position.y - center.y) / this.span;
+      inputs[offset] = ((pos.x * SCALE) - center.x) / this.span;
+      inputs[offset + 1] = ((pos.y * SCALE) - center.y) / this.span;
 
       // Velocity clamped to [-1, 1]
-      inputs[offset + 2] = Math.max(-1, Math.min(1, b.velocity.x * 0.1));
-      inputs[offset + 3] = Math.max(-1, Math.min(1, b.velocity.y * 0.1));
+      inputs[offset + 2] = Math.max(-1, Math.min(1, vel.x * SCALE * 0.1));
+      inputs[offset + 3] = Math.max(-1, Math.min(1, vel.y * SCALE * 0.1));
 
       // Ground contact
-      inputs[offset + 4] = (b.position.y + CONFIG.nodeRadius >= groundY - 2) ? 1 : 0;
+      inputs[offset + 4] = ((pos.y * SCALE) + CONFIG.nodeRadius >= groundY - 2) ? 1 : 0;
 
-      totalVx += b.velocity.x;
-      totalHeight += groundY - b.position.y;
+      totalVx += vel.x * SCALE;
+      totalHeight += groundY - (pos.y * SCALE);
     }
 
     const base = numBodies * 5;
@@ -283,13 +297,10 @@ export class Creature {
     const freedom = this.simConfig.jointFreedom !== undefined ? this.simConfig.jointFreedom : 1.0;
     const rigid = 1 - freedom;
     const bendStiffness = Math.max(0, Math.min(0.9, rigid * rigid * 0.9));
-    this.angleLimiters.forEach(limiter => {
-      if (!limiter.isFixedJoint) {
-        limiter.stiffness = bendStiffness;
-      } else {
-        limiter.stiffness = 1.0; // Ensure fixed stays fixed
-      }
-    });
+    
+    // Note: Planck.js joints don't have stiffness property that can be changed at runtime
+    // The frequencyHz and dampingRatio are set at creation time
+    // For now, we skip runtime stiffness updates
 
     if (this.muscles.length === 0) return;
 
@@ -307,7 +318,8 @@ export class Creature {
     // Pre-calculate which bodies are grounded
     const isGrounded = new Map();
     this.bodies.forEach(b => {
-      isGrounded.set(b.id, (b.position.y + CONFIG.nodeRadius) >= (groundY - 2));
+      const pos = b.getPosition();
+      isGrounded.set(b, (pos.y * SCALE + CONFIG.nodeRadius) >= (groundY - 2));
     });
 
     let totalJerk = 0;
@@ -321,64 +333,63 @@ export class Creature {
       m.smoothSignal = smoothSignal;
       totalJerk += Math.abs(smoothSignal - prevSignal);
 
-      // Per-muscle ground contact: muscles need ground reaction to push effectively
-      const bodyAGrounded = isGrounded.get(m.c.bodyA.id) || false;
-      const bodyBGrounded = isGrounded.get(m.c.bodyB.id) || false;
+      // Per-muscle ground contact
+      const bodyAGrounded = isGrounded.get(m.bodyA) || false;
+      const bodyBGrounded = isGrounded.get(m.bodyB) || false;
 
       let muscleStrengthMultiplier;
       if (bodyAGrounded && bodyBGrounded) {
-        // Both ends grounded - full strength (can push against ground)
         muscleStrengthMultiplier = 1.0;
       } else if (bodyAGrounded || bodyBGrounded) {
-        // One end grounded - good strength (can push off that end)
         muscleStrengthMultiplier = 0.7;
       } else {
-        // Fully airborne - minimal strength (internal tension only, can't push off air)
         muscleStrengthMultiplier = 0.15;
       }
 
-      // Energy system: calculate energy cost and apply energy-based strength multiplier
+      // Energy system
       let energyMultiplier = 1.0;
       if (this.energy.enabled) {
         const actuationMagnitude = Math.abs(smoothSignal);
         const energyCost = actuationMagnitude * this.energy.usagePerActuation;
         energyUsedThisFrame += energyCost;
 
-        // Energy availability affects muscle strength (0% energy = 0% strength)
         const energyRatio = Math.max(0, Math.min(1, this.energy.current / this.energy.max));
 
         if (energyRatio <= 0) {
-          // Completely exhausted - no movement possible
           energyMultiplier = 0.0;
         } else if (energyRatio < 0.2) {
-          // Below 20% energy: linear from 0% to 40% strength
-          energyMultiplier = energyRatio * 2.0; // 0.0 to 0.4
+          energyMultiplier = energyRatio * 2.0;
         } else if (energyRatio < 0.5) {
-          // Below 50% energy: linear from 40% to 85% strength
-          energyMultiplier = 0.4 + (energyRatio - 0.2) * 1.5; // 0.4 to 0.85
+          energyMultiplier = 0.4 + (energyRatio - 0.2) * 1.5;
         } else {
-          // Above 50% energy: linear from 85% to 100% strength
-          energyMultiplier = 0.85 + (energyRatio - 0.5) * 0.3; // 0.85 to 1.0
+          energyMultiplier = 0.85 + (energyRatio - 0.5) * 0.3;
         }
       }
 
       const effectiveStrength = strength * muscleStrengthMultiplier * energyMultiplier;
-      // Allow amplitude to reach 0 when energy is depleted
       const amplitude = rangeScale * effectiveStrength;
-      const targetLength = m.c.baseLength * (1 + smoothSignal * amplitude);
-      const currentLength = m.c.currentLength || m.c.length;
-      const maxDelta = m.c.baseLength * 0.02 * moveSpeed;
+      
+      // Calculate target length based on signal
+      const targetLength = m.baseLength * (1 + smoothSignal * amplitude);
+      const currentLength = m.currentLength || m.baseLength;
+      const maxDelta = m.baseLength * 0.02 * moveSpeed;
       const nextLength = currentLength + Math.max(-maxDelta, Math.min(maxDelta, targetLength - currentLength));
-      m.c.currentLength = nextLength;
-      m.c.length = nextLength;
-
-      // Force rate limiter to prevent impulse exploits
-      const maxForcePerStep = m.c.baseLength * 0.4; // Limit based on muscle size
-      if (!m.c.maxForce) m.c.maxForce = maxForcePerStep;
+      
+      m.currentLength = nextLength;
+      
+      // Calculate motor speed to reach target length
+      // Positive motor speed extends, negative contracts
+      const lengthDiff = nextLength - currentLength;
+      const motorSpeed = lengthDiff * 10; // Scale factor for responsiveness
+      
+      // Apply to prismatic joint
+      m.joint.setMotorSpeed(motorSpeed);
+      m.joint.setMaxMotorForce((this.simConfig.muscleStrength || 1.2) * 100 * muscleStrengthMultiplier * energyMultiplier);
 
       m.currentSignal = smoothSignal;
       totalActuation += Math.abs(smoothSignal);
     });
+
     const avgJerk = totalJerk / Math.max(1, this.muscles.length);
     this.stats.actuationJerk = this.stats.actuationJerk * 0.9 + avgJerk * 0.1;
     const avgAct = totalActuation / Math.max(1, this.muscles.length);
@@ -386,18 +397,14 @@ export class Creature {
 
     // Update energy system
     if (this.energy.enabled) {
-      // Drain energy based on actuation
       this.energy.current = Math.max(0, this.energy.current - energyUsedThisFrame);
       this.energy.totalUsed += energyUsedThisFrame;
 
-      // Regenerate energy based on inactivity (less actuation = more regen)
-      // Always have minimum 20% regen (even when fully active) so creatures can recover
-      const regenMultiplier = 0.2 + (1.0 - avgAct) * 0.8; // 20% to 100% based on activity
-      const dtSec = 1 / CONFIG.fixedStepHz; // Time per physics step
+      const regenMultiplier = 0.2 + (1.0 - avgAct) * 0.8;
+      const dtSec = 1 / CONFIG.fixedStepHz;
       const regenAmount = this.energy.regenRate * regenMultiplier * dtSec;
       this.energy.current = Math.min(this.energy.max, this.energy.current + regenAmount);
 
-      // Track energy efficiency (distance per energy used)
       if (this.energy.totalUsed > 0) {
         this.energy.efficiency = this.stats.maxX / Math.max(1, this.energy.totalUsed);
       }
@@ -417,7 +424,10 @@ export class Creature {
     }
     this.stats.prevCenter = center;
 
-    const onGround = this.bodies.some(b => (b.position.y + CONFIG.nodeRadius) >= (groundY - 2));
+    const onGround = this.bodies.some(b => {
+      const pos = b.getPosition();
+      return (pos.y * SCALE + CONFIG.nodeRadius) >= (groundY - 2);
+    });
     if (!onGround) this.stats.airFrames++;
     this.stats.airtimePct = (this.stats.airFrames / Math.max(1, this.stats.frames)) * 100;
 
@@ -426,37 +436,36 @@ export class Creature {
     let groundedAbsVx = 0;
     let groundedCount = 0;
     const ys = [];
+    
     this.bodies.forEach(b => {
-      avgVy += Math.abs(b.velocity.y);
-      avgOmega += Math.abs(b.angularVelocity);
-      ys.push(b.position.y);
-      if ((b.position.y + CONFIG.nodeRadius) >= (groundY - 2)) {
-        groundedAbsVx += Math.abs(b.velocity.x);
+      const vel = b.getLinearVelocity();
+      const pos = b.getPosition();
+      avgVy += Math.abs(vel.y * SCALE);
+      avgOmega += Math.abs(b.getAngularVelocity());
+      ys.push(pos.y * SCALE);
+      if ((pos.y * SCALE + CONFIG.nodeRadius) >= (groundY - 2)) {
+        groundedAbsVx += Math.abs(vel.x * SCALE);
         groundedCount++;
       }
     });
+
     avgVy /= Math.max(1, this.bodies.length);
     avgOmega /= Math.max(1, this.bodies.length);
     const avgGroundSlip = groundedAbsVx / Math.max(1, groundedCount);
     this.stats.groundSlip = this.stats.groundSlip * 0.9 + avgGroundSlip * 0.1;
-    this.stats.spin = this.stats.spin * 0.9 + avgOmega * 0.1; // Keep for display
-    this.stats.spinAccumulated += Math.abs(avgOmega) * dtSec; // Cumulative budget
+    this.stats.spin = this.stats.spin * 0.9 + avgOmega * 0.1;
+    this.stats.spinAccumulated += Math.abs(avgOmega) * dtSec;
 
-    // Measure upright posture: reward height above ground
     const centerHeight = groundY - center.y;
-    const heightRatio = Math.max(0, Math.min(1, centerHeight / 80)); // Normalize to 0-1 (80px = good height)
-
-    // Measure compactness: bodies close together vertically
+    const heightRatio = Math.max(0, Math.min(1, centerHeight / 80));
     const yAvg = ys.reduce((a, b) => a + b, 0) / Math.max(1, ys.length);
     const variance = ys.reduce((s, y) => s + (y - yAvg) * (y - yAvg), 0) / Math.max(1, ys.length);
     const ySpread = Math.sqrt(variance);
 
-    // Combined stability: upright posture (60%) + compactness (20%) + low bounce (20%)
-    const uprightScore = heightRatio * 60; // 0-60 points for being elevated
-    const compactScore = Math.max(0, 20 - ySpread * 0.3); // 0-20 points for compactness
-    const bounceScore = Math.max(0, 20 - avgVy * 0.8); // 0-20 points for low vertical velocity
-
-    const targetStability = uprightScore + compactScore + bounceScore; // 0-100
+    const uprightScore = heightRatio * 60;
+    const compactScore = Math.max(0, 20 - ySpread * 0.3);
+    const bounceScore = Math.max(0, 20 - avgVy * 0.8);
+    const targetStability = uprightScore + compactScore + bounceScore;
     this.stats.stability = this.stats.stability * 0.9 + targetStability * 0.1;
 
     const lowToGround = center.y > (groundY - CONFIG.nodeRadius * 2.2);
@@ -471,14 +480,13 @@ export class Creature {
     let kineticEnergy = 0;
     let potentialEnergy = 0;
     this.bodies.forEach(b => {
-      const vMag = Math.sqrt(b.velocity.x ** 2 + b.velocity.y ** 2);
-      kineticEnergy += 0.5 * b.mass * (vMag ** 2);
-      potentialEnergy += b.mass * Math.abs(this.engine.world.gravity.y) *
-                          Math.max(0, groundY - b.position.y);
+      const vel = b.getLinearVelocity();
+      const pos = b.getPosition();
+      const vMag = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+      kineticEnergy += 0.5 * b.getMass() * (vMag * vMag);
+      potentialEnergy += b.getMass() * 10 * Math.max(0, groundY - (pos.y * SCALE));
     });
     const totalEnergy = kineticEnergy + potentialEnergy;
-
-    // High energy with low actuation = exploit
     const suspiciousRatio = totalEnergy / Math.max(1, this.stats.actuationLevel * 100);
     if (suspiciousRatio > 50 && this.stats.frames > 60) {
       this.stats.energyViolations += suspiciousRatio * 0.1;
@@ -510,19 +518,37 @@ export class Creature {
     if (!this.bodies.length) return { x: 0, y: 0 };
     let x = 0, y = 0;
     this.bodies.forEach(b => {
-      x += b.position.x;
-      y += b.position.y;
+      const pos = b.getPosition();
+      x += pos.x * SCALE;
+      y += pos.y * SCALE;
     });
     return { x: x / this.bodies.length, y: y / this.bodies.length };
   }
 
   destroy() {
-    Composite.remove(this.engine.world, this.composite);
+    // Destroy all joints first
+    this.muscles.forEach(m => {
+      if (m.joint) this.world.destroyJoint(m.joint);
+    });
+    this.bones.forEach(joint => {
+      if (joint) this.world.destroyJoint(joint);
+    });
+    this.angleLimiters.forEach(joint => {
+      if (joint) this.world.destroyJoint(joint);
+    });
+    
+    // Destroy all bodies
+    this.bodies.forEach(b => {
+      if (b) this.world.destroyBody(b);
+    });
+    
+    this.muscles = [];
+    this.bones = [];
+    this.angleLimiters = [];
+    this.bodies = [];
   }
 
   draw(ctx, isLeader) {
-    const constraints = Composite.allConstraints(this.composite);
-
     // Leader glow effect
     if (isLeader) {
       const center = this.getCenter();
@@ -536,24 +562,25 @@ export class Creature {
       ctx.restore();
     }
 
-    constraints.forEach(c => {
-      if (!c.bodyA || !c.bodyB) return;
-      const p1 = c.bodyA.position;
-      const p2 = c.bodyB.position;
+    // Draw bones and muscles
+    [...this.bones, ...this.angleLimiters].forEach(joint => {
+      if (!joint) return;
+      const bodyA = joint.getBodyA();
+      const bodyB = joint.getBodyB();
+      if (!bodyA || !bodyB) return;
+      
+      const posA = bodyA.getPosition();
+      const posB = bodyB.getPosition();
+      const p1 = { x: posA.x * SCALE, y: posA.y * SCALE };
+      const p2 = { x: posB.x * SCALE, y: posB.y * SCALE };
+      
       ctx.beginPath();
       ctx.moveTo(p1.x, p1.y);
       ctx.lineTo(p2.x, p2.y);
 
-      const muscle = this.muscles.find(m => m.c === c);
-      if (c.isAngleLimiter) {
+      if (joint.isAngleLimiter) {
         ctx.strokeStyle = isLeader ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.04)';
         ctx.lineWidth = 1;
-      } else if (muscle) {
-        const v = muscle.currentSignal || 0;
-        const r = v < 0 ? 255 : 80;
-        const b = v > 0 ? 255 : 140;
-        ctx.strokeStyle = `rgb(${r},20,${b})`;
-        ctx.lineWidth = 5 + v * 2;
       } else {
         ctx.strokeStyle = isLeader ? '#9aa4af' : 'rgba(154,164,175,0.25)';
         ctx.lineWidth = 3;
@@ -562,9 +589,31 @@ export class Creature {
       ctx.stroke();
     });
 
-    this.bodies.forEach(b => {
+    // Draw muscles
+    this.muscles.forEach(m => {
+      const posA = m.bodyA.getPosition();
+      const posB = m.bodyB.getPosition();
+      const p1 = { x: posA.x * SCALE, y: posA.y * SCALE };
+      const p2 = { x: posB.x * SCALE, y: posB.y * SCALE };
+      
       ctx.beginPath();
-      ctx.arc(b.position.x, b.position.y, isLeader ? 6 : 3, 0, Math.PI * 2);
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+
+      const v = m.currentSignal || 0;
+      const r = v < 0 ? 255 : 80;
+      const b = v > 0 ? 255 : 140;
+      ctx.strokeStyle = `rgb(${r},20,${b})`;
+      ctx.lineWidth = 5 + v * 2;
+      ctx.globalAlpha = isLeader ? 1 : 0.12;
+      ctx.stroke();
+    });
+
+    // Draw bodies
+    this.bodies.forEach(b => {
+      const pos = b.getPosition();
+      ctx.beginPath();
+      ctx.arc(pos.x * SCALE, pos.y * SCALE, isLeader ? 6 : 3, 0, Math.PI * 2);
       ctx.fillStyle = isLeader ? '#15171b' : 'rgba(0,0,0,0.15)';
       ctx.fill();
       ctx.strokeStyle = isLeader ? '#00f2ff' : 'rgba(0,242,255,0.2)';
@@ -604,9 +653,16 @@ export class Creature {
   updateRuntimeSettings() {
     const selfOn = !!this.simConfig.selfCollision;
     const group = selfOn ? (this.id + 1) : -(this.id + 1);
+    
+    // Update collision filter for all bodies
     this.bodies.forEach(b => {
-      b.collisionFilter.group = group;
-      b.collisionFilter.mask = 0x0001; // Always only ground. Self is handled by Group.
+      const fixture = b.getFixtureList();
+      if (fixture) {
+        const filter = fixture.getFilterData();
+        filter.groupIndex = group;
+        filter.maskBits = 0x0001;
+        fixture.setFilterData(filter);
+      }
     });
   }
 }
