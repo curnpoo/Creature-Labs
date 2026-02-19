@@ -383,6 +383,11 @@
                             <button id="btn-sandbox-pause-panel" class="flex-1 py-3 rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-400/40 font-semibold text-sm">
                                 <i class="fas fa-pause mr-1"></i> Pause
                             </button>
+                            <button id="btn-sandbox-reset-panel" class="flex-1 py-3 rounded-lg bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 border border-blue-400/40 font-semibold text-sm">
+                                <i class="fas fa-redo mr-1"></i> Reset
+                            </button>
+                        </div>
+                        <div class="flex gap-2 mt-2">
                             <button id="btn-sandbox-exit-panel" class="flex-1 py-3 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-red-400/40 font-semibold text-sm">
                                 <i class="fas fa-sign-out-alt mr-1"></i> Exit
                             </button>
@@ -410,6 +415,29 @@
                                     <canvas id="sandbox-graph-actuation" width="320" height="100"></canvas>
                                     <div class="sandbox-graph-label">Actuation</div>
                                 </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Environment Controls (visible in sandbox) -->
+                        <div class="section-divider"></div>
+                        <div class="control-group">
+                            <div class="control-label">Environment</div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button id="btn-sandbox-ground" class="cam-btn">
+                                    Draw Ground
+                                </button>
+                                <button id="btn-sandbox-box" class="cam-btn">
+                                    Add Box
+                                </button>
+                                <button id="btn-sandbox-triangle" class="cam-btn">
+                                    Add Triangle
+                                </button>
+                                <button id="btn-sandbox-clear" class="cam-btn">
+                                    Clear All
+                                </button>
+                            </div>
+                            <div class="info-text mt-1" id="sandbox-tool-status">
+                                Click world to place
                             </div>
                         </div>
                     </div>
@@ -494,7 +522,7 @@
                     </div>
 
                     <!-- Brains -->
-                    <div class="control-group">
+                    <div class="control-group" id="brain-library-section">
                         <div class="control-label">Brains</div>
                         <div class="grid grid-cols-2 gap-2">
                             <button id="btn-brain-save" class="cam-btn">
@@ -512,7 +540,7 @@
                             <option value="">No saved brains</option>
                         </select>
                         <div class="grid grid-cols-2 gap-2 mt-2">
-                            <button id="btn-sandbox-exit" class="cam-btn cam-btn-big sandbox-exit-btn">
+                            <button id="btn-sandbox-exit" class="cam-btn cam-btn-big sandbox-exit-btn" style="display: none;">
                                 Exit Sandbox
                             </button>
                             <button id="btn-brain-delete" class="cam-btn">
@@ -943,12 +971,12 @@
                     </div>
                 </div>
 
-                <!-- ═══ BOTTOM PANEL: Training Details ═══ -->
-                <div
-                    id="panel-scorecard"
-                    class="sim-panel"
-                    style="grid-area: bottom; border-top: 1px solid var(--border-color); border-radius: 0; overflow-y: auto; max-height: 260px; padding: 0 12px 10px"
-                >
+<!-- ═══ BOTTOM PANEL: Training Details ═══ -->
+<div
+id="panel-scorecard"
+class="sim-panel"
+style="grid-area: bottom; border-top: 1px solid var(--border-color); border-radius: 0; overflow-y: auto; min-height: 140px; max-height: 260px; padding: 0 12px 10px; display: flex; flex-direction: column;"
+>
                     <!-- TRAINING MODE DETAILS -->
                     <div id="training-details" class="h-full flex flex-col">
                         <div class="sim-panel-title" style="border: none; padding: 4px 0 2px">
