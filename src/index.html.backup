@@ -66,9 +66,6 @@
                 <button class="btn-tool" id="tool-muscle" title="Add Muscle">
                     <i class="fas fa-dna"></i>
                 </button>
-                <button class="btn-tool" id="tool-polygon" title="Draw Polygon Body">
-                    <i class="fas fa-draw-polygon"></i>
-                </button>
                 <button class="btn-tool" id="tool-move" title="Move">
                     <i class="fas fa-up-down-left-right"></i>
                 </button>
@@ -332,103 +329,136 @@
                     </div>
                 </div>
 
+                <!-- ═══ LEFT PANEL: Evolution Progress ═══ -->
+                <div
+                    id="panel-progress-left"
+                    class="sim-panel"
+                    style="grid-area: left; width: 320px; border-right: 1px solid var(--border-color); border-radius: 0; overflow-y: auto; max-height: 100%"
+                >
+                    <div
+                        class="sim-panel-title"
+                        style="border-color: rgba(0, 242, 255, 0.3)"
+                    >
+                        <span><i class="fas fa-chart-area mr-1"></i> Metrics
+                            History</span>
+                        <span id="left-graph-meta" class="text-cyan-300"
+                        >G1</span>
+                    </div>
+
+                    <!-- Individual metric graphs container -->
+                    <div id="left-metrics-container" style="padding: 4px 8px 8px; display: flex; flex-direction: column; gap: 2px;"></div>
+
+                    <!-- ═══ EVOLUTION FEEDBACK ═══ -->
+                    <div id="evolution-feedback" style="padding: 0 10px">
+                        <div class="section-divider"></div>
+                        <div class="sim-panel-title" style="padding: 6px 0; border: none">
+                            <span><i class="fas fa-heartbeat mr-1"></i> Evolution Health</span>
+                            <span id="evo-status-badge" class="evo-status-badge severity-info">○ Starting</span>
+                        </div>
+
+                        <div style="padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px; margin-bottom: 8px">
+                            <div id="evo-message" class="text-xs text-gray-300" style="font-family: 'JetBrains Mono', monospace">
+                                Analyzing evolution progress...
+                            </div>
+                            <div id="evo-insights" class="text-xs mt-2 flex flex-wrap gap-2" style="font-family: 'JetBrains Mono', monospace">
+                            </div>
+                        </div>
+
+<!-- Suggestions Panel removed - user controls settings manually -->
+<div id="suggestions-panel" class="hidden">
+  <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 8px; margin-bottom: 8px">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
+      <div class="text-xs font-bold text-amber-400" style="font-family: 'JetBrains Mono', monospace">
+        ⚠ SUGGESTIONS
+      </div>
+      <button onclick="window.evolutionFeedback?.dismissSuggestions()" class="text-xs text-gray-400 hover:text-white">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div id="suggestions-list" style="display: flex; flex-direction: column; gap: 6px">
+      <!-- Suggestions will be inserted here -->
+    </div>
+  </div>
+</div>
+
+                    <!-- Sandbox Scorecard (hidden until sandbox mode) -->
+                    <div
+                        id="sandbox-scorecard-wrap"
+                        style="display: none; padding: 0 10px 10px"
+                    >
+                        <div class="section-divider"></div>
+                        <div
+                            class="sim-panel-title"
+                            style="padding: 6px 0; border: none"
+                        >
+                            <span><i class="fas fa-flask mr-1"></i> Sandbox
+                                Scorecard</span>
+                            <span
+                                id="sandbox-run-label"
+                                class="text-emerald-300"
+                            >Run 0</span>
+                        </div>
+                        <div class="sandbox-scorecard">
+                            <div class="sandbox-stat">
+                                <div class="sandbox-stat-label">Distance</div>
+                                <div
+                                    class="sandbox-stat-value text-cyan-300"
+                                    id="sandbox-distance"
+                                >
+                                    0.0m
+                                </div>
+                            </div>
+                            <div class="sandbox-stat">
+                                <div class="sandbox-stat-label">Max Speed</div>
+                                <div
+                                    class="sandbox-stat-value text-yellow-300"
+                                    id="sandbox-speed"
+                                >
+                                    0.0
+                                </div>
+                            </div>
+                            <div class="sandbox-stat">
+                                <div class="sandbox-stat-label">Stability</div>
+                                <div
+                                    class="sandbox-stat-value text-emerald-300"
+                                    id="sandbox-stability"
+                                >
+                                    0%
+                                </div>
+                            </div>
+                            <div class="sandbox-stat">
+                                <div class="sandbox-stat-label">Falls</div>
+                                <div
+                                    class="sandbox-stat-value text-rose-300"
+                                    id="sandbox-falls"
+                                >
+                                    0
+                                </div>
+                            </div>
+                            <div class="sandbox-stat">
+                                <div class="sandbox-stat-label">
+                                    Ground Slip
+                                </div>
+                                <div
+                                    class="sandbox-stat-value text-orange-300"
+                                    id="sandbox-slip"
+                                >
+                                    0.00
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Canvas area (invisible, just occupies grid space) -->
+                <div class="sim-canvas-area"></div>
+
                 <!-- ═══ RIGHT PANEL: Controls ═══ -->
                 <div
                     id="panel-controls"
                     class="sim-panel"
                     style="grid-area: right; width: 340px; border-left: 1px solid var(--border-color); border-radius: 0; overflow-y: auto; max-height: 100%; padding: 10px"
                 >
-                    <!-- SANDBOX MODE CONTROLS (shown only in sandbox) -->
-                    <div id="sandbox-panel-section" class="hidden">
-                        <div class="control-group">
-                            <div class="control-label" style="display: flex; justify-content: space-between; align-items: center;">
-                                <span><i class="fas fa-gamepad mr-1 text-emerald-400"></i> Sandbox Controls</span>
-                                <span class="text-emerald-400 text-[10px]" id="sandbox-mode-badge">RUN 1</span>
-                            </div>
-                        </div>
-                        
-                        <!-- Sim Speed Control -->
-                        <div class="control-group">
-                            <div class="control-label">Simulation Speed</div>
-                            <input type="range" id="inp-sandbox-speed" min="1" max="20" value="1" class="w-full" style="width: 100%;">
-                            <div class="flex justify-between text-[10px] text-gray-500 mt-1">
-                                <span>1x</span>
-                                <span id="val-sandbox-speed">1x</span>
-                                <span>20x</span>
-                            </div>
-                        </div>
-                        
-                        <!-- Sandbox Stats -->
-                        <div class="sandbox-stats-inline">
-                            <div class="sandbox-stat-inline">
-                                <span class="sandbox-stat-label-inline">Distance</span>
-                                <span class="sandbox-stat-value-inline text-cyan-300" id="sandbox-stat-dist">0.0m</span>
-                            </div>
-                            <div class="sandbox-stat-inline">
-                                <span class="sandbox-stat-label-inline">Speed</span>
-                                <span class="sandbox-stat-value-inline text-purple-300" id="sandbox-stat-speed">0.0 m/s</span>
-                            </div>
-                            <div class="sandbox-stat-inline">
-                                <span class="sandbox-stat-label-inline">Stability</span>
-                                <span class="sandbox-stat-value-inline text-emerald-300" id="sandbox-stat-stability">0%</span>
-                            </div>
-                            <div class="sandbox-stat-inline">
-                                <span class="sandbox-stat-label-inline">Falls</span>
-                                <span class="sandbox-stat-value-inline text-red-300" id="sandbox-stat-falls">0</span>
-                            </div>
-                        </div>
-                        
-                        <!-- Sandbox Action Buttons -->
-                        <div class="flex gap-2 mt-3">
-                            <button id="btn-sandbox-pause-panel" class="flex-1 py-3 rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-400/40 font-semibold text-sm">
-                                <i class="fas fa-pause mr-1"></i> Pause
-                            </button>
-                            <button id="btn-sandbox-exit-panel" class="flex-1 py-3 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-red-400/40 font-semibold text-sm">
-                                <i class="fas fa-sign-out-alt mr-1"></i> Exit
-                            </button>
-                        </div>
-                        
-                        <div class="section-divider"></div>
-                        
-                        <!-- Live Graphs -->
-                        <div class="control-group">
-                            <div class="control-label">Live Metrics (60s)</div>
-                            <div class="sandbox-graphs-grid">
-                                <div class="sandbox-graph-container">
-                                    <canvas id="sandbox-graph-distance" width="320" height="100"></canvas>
-                                    <div class="sandbox-graph-label">Distance</div>
-                                </div>
-                                <div class="sandbox-graph-container">
-                                    <canvas id="sandbox-graph-speed" width="320" height="100"></canvas>
-                                    <div class="sandbox-graph-label">Speed</div>
-                                </div>
-                                <div class="sandbox-graph-container">
-                                    <canvas id="sandbox-graph-stability" width="320" height="100"></canvas>
-                                    <div class="sandbox-graph-label">Stability</div>
-                                </div>
-                                <div class="sandbox-graph-container">
-                                    <canvas id="sandbox-graph-actuation" width="320" height="100"></canvas>
-                                    <div class="sandbox-graph-label">Actuation</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- TRAINING MODE CONTROLS (hidden in sandbox) -->
-                    <div id="training-sections">
-                    <!-- Ghost Population Controls -->
-                    <div class="control-group" style="margin-bottom: 8px;">
-                        <div class="control-label">Ghosts</div>
-                        <div class="flex gap-2">
-                            <button id="ghosts-on" class="toggle-btn active">
-                                <i class="fas fa-eye mr-1"></i>Show
-                            </button>
-                            <button id="ghosts-off" class="toggle-btn">
-                                <i class="fas fa-eye-slash mr-1"></i>Hide All
-                            </button>
-                        </div>
-                    </div>
-
                     <!-- Action Buttons -->
                     <div class="flex justify-between gap-2">
                         <button
@@ -471,6 +501,28 @@
 
                     <div class="section-divider"></div>
 
+                    <!-- Replay -->
+                    <div class="control-group">
+                        <div class="control-label">
+                            Replay <span class="control-val" id="replay-label"
+                            >G-</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="replay-prev" class="cam-btn">
+                                <i class="fas fa-backward-step"></i>
+                            </button>
+                            <button id="replay-play" class="cam-btn">
+                                <i
+                                    class="fas fa-play"
+                                    id="replay-play-icon"
+                                ></i>
+                            </button>
+                            <button id="replay-next" class="cam-btn">
+                                <i class="fas fa-forward-step"></i>
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Challenges -->
                     <div class="control-group">
                         <div class="control-label">Challenges</div>
@@ -498,9 +550,9 @@
                         <div class="control-label">Brains</div>
                         <div class="grid grid-cols-2 gap-2">
                             <button id="btn-brain-save" class="cam-btn">
-                                Save Best
+                                Save Last Gen Best
                             </button>
-                            <button id="btn-sandbox-run" class="cam-btn cam-btn-big sandbox-run-btn">
+                            <button id="btn-sandbox-run" class="cam-btn">
                                 Run Sandbox
                             </button>
                         </div>
@@ -512,7 +564,7 @@
                             <option value="">No saved brains</option>
                         </select>
                         <div class="grid grid-cols-2 gap-2 mt-2">
-                            <button id="btn-sandbox-exit" class="cam-btn cam-btn-big sandbox-exit-btn">
+                            <button id="btn-sandbox-exit" class="cam-btn">
                                 Exit Sandbox
                             </button>
                             <button id="btn-brain-delete" class="cam-btn">
@@ -585,16 +637,9 @@
 
                     <div class="section-divider"></div>
 
-                    <div class="control-group">
-                        <div class="control-label">Self Collision</div>
-                        <div class="flex gap-2">
-                            <button id="selfcol-on" class="toggle-btn active">
-                                <i class="fas fa-check mr-1"></i>On
-                            </button>
-                            <button id="selfcol-off" class="toggle-btn">
-                                <i class="fas fa-xmark mr-1"></i>Off
-                            </button>
-                        </div>
+                    <div class="control-group" style="flex-direction: row; justify-content: space-between; align-items: center;">
+                        <label for="check-self-collision" style="margin-bottom:0">Self Collision</label>
+                        <input type="checkbox" id="check-self-collision" style="width: auto;">
                     </div>
 
                     <!-- Camera -->
@@ -626,7 +671,7 @@
                             type="range"
                             id="inp-speed"
                             min="1"
-                            max="50"
+                            max="120"
                             value="1"
                             step="1"
                         >
@@ -660,7 +705,7 @@
                             type="range"
                             id="inp-duration"
                             min="4"
-                            max="60"
+                            max="20"
                             value="8"
                             step="1"
                         >
@@ -743,13 +788,12 @@
                                 class="control-val"
                                 id="val-strength"
                             >140%</span>
-                            <span class="text-xs text-gray-500">(contraction force)</span>
                         </div>
                         <input
                             type="range"
                             id="inp-strength"
-                            min="50"
-                            max="300"
+                            min="20"
+                            max="180"
                             value="140"
                             step="10"
                         >
@@ -757,15 +801,49 @@
 
                     <div class="control-group">
                         <div class="control-label">
+                            Joint Move Speed <span
+                                class="control-val"
+                                id="val-jointspeed"
+                            >1.10x</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-jointspeed"
+                            min="20"
+                            max="200"
+                            value="110"
+                            step="5"
+                        >
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Joint Freedom <span
+                                class="control-val"
+                                id="val-joint"
+                            >100%</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-joint"
+                            min="0"
+                            max="100"
+                            value="100"
+                            step="5"
+                        >
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
                             Gravity <span class="control-val" id="val-gravity"
-                            >9.8</span>
+                            >1.0</span>
                         </div>
                         <input
                             type="range"
                             id="inp-gravity"
-                            min="1.0"
-                            max="20.0"
-                            value="9.8"
+                            min="0.1"
+                            max="3.0"
+                            value="1.0"
                             step="0.1"
                         >
                     </div>
@@ -775,15 +853,100 @@
                             Ground Friction <span
                                 class="control-val"
                                 id="val-groundfric"
-                            >0.95</span>
+                            >3.00</span>
                         </div>
                         <input
                             type="range"
                             id="inp-groundfric"
-                            min="0.1"
-                            max="1.0"
-                            value="0.95"
-                            step="0.05"
+                            min="50"
+                            max="600"
+                            value="300"
+                            step="10"
+                        >
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Ground Static Friction <span
+                                class="control-val"
+                                id="val-groundstatic"
+                            >12.00</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-groundstatic"
+                            min="100"
+                            max="1600"
+                            value="1200"
+                            step="50"
+                        >
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Ground Velocity Keep <span
+                                class="control-val"
+                                id="val-traction"
+                            >65%</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-traction"
+                            min="40"
+                            max="100"
+                            value="65"
+                            step="1"
+                        >
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Body Friction <span
+                                class="control-val"
+                                id="val-bodyfric"
+                            >3.00</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-bodyfric"
+                            min="50"
+                            max="600"
+                            value="300"
+                            step="10"
+                        >
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Body Static Friction <span
+                                class="control-val"
+                                id="val-bodystatic"
+                            >12.00</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-bodystatic"
+                            min="100"
+                            max="1600"
+                            value="1200"
+                            step="50"
+                        >
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Body Air Friction <span
+                                class="control-val"
+                                id="val-bodyair"
+                            >0.080</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-bodyair"
+                            min="0"
+                            max="200"
+                            value="80"
+                            step="2"
                         >
                     </div>
 
@@ -792,15 +955,14 @@
                             Muscle Range <span
                                 class="control-val"
                                 id="val-musrange"
-                            >50%</span>
-                            <span class="text-xs text-gray-500">(50% = can shrink to half size)</span>
+                            >80%</span>
                         </div>
                         <input
                             type="range"
                             id="inp-musrange"
-                            min="20"
-                            max="80"
-                            value="50"
+                            min="30"
+                            max="150"
+                            value="80"
                             step="5"
                         >
                     </div>
@@ -812,34 +974,17 @@
                                 id="val-musmooth"
                             >22%</span>
                         </div>
-<input
-                type="range"
-                id="inp-musmooth"
-                min="2"
-                max="50"
-                value="22"
-                step="1"
-              >
-            </div>
+                        <input
+                            type="range"
+                            id="inp-musmooth"
+                            min="2"
+                            max="50"
+                            value="22"
+                            step="1"
+                        >
+                    </div>
 
-            <div class="control-group">
-              <div class="control-label">
-                Action Budget <span
-                  class="control-val"
-                  id="val-musbudget"
-                >3</span>
-              </div>
-              <input
-                type="range"
-                id="inp-musbudget"
-                min="1"
-                max="20"
-                value="3"
-                step="1"
-              >
-            </div>
-
-            <div class="section-divider"></div>
+                    <div class="section-divider"></div>
                     <div class="section-title text-violet-400">
                         Energy System
                     </div>
@@ -895,7 +1040,110 @@
                         >
                     </div>
 
-                    <!-- Fitness weights removed - now uses simplified distance-first system -->
+                    <div class="section-divider"></div>
+                    <div class="section-title text-cyan-400">
+                        Fitness Weights
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Stability Reward <span
+                                class="control-val"
+                                id="val-stabmode"
+                            >ON</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="stab-on" class="cam-btn active">
+                                On
+                            </button>
+                            <button id="stab-off" class="cam-btn">Off</button>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Distance Weight <span
+                                class="control-val"
+                                id="val-distreward"
+                            >320</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-distreward"
+                            min="100"
+                            max="700"
+                            value="320"
+                            step="10"
+                        >
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Speed Weight <span
+                                class="control-val"
+                                id="val-speedreward"
+                            >0.35</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-speedreward"
+                            min="0"
+                            max="150"
+                            value="35"
+                            step="1"
+                        >
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Jitter Penalty <span
+                                class="control-val"
+                                id="val-jitterpen"
+                            >40</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-jitterpen"
+                            min="0"
+                            max="250"
+                            value="40"
+                            step="5"
+                        >
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Ground Slip Penalty <span
+                                class="control-val"
+                                id="val-slippen"
+                            >20</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-slippen"
+                            min="0"
+                            max="40"
+                            value="20"
+                            step="1"
+                        >
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Spin Penalty <span
+                                class="control-val"
+                                id="val-spinpen"
+                            >10000</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-spinpen"
+                            min="0"
+                            max="20000"
+                            value="10000"
+                            step="500"
+                        >
+                    </div>
 
                     <div class="section-divider"></div>
                     <div class="section-title text-pink-400">Mutation</div>
@@ -992,131 +1240,6 @@
             </div>
 
             <!-- ─── Toggle Tab Buttons (Visible clickable tabs) ─── -->
-                <!-- Canvas area (invisible, just occupies grid space) -->
-                <div class="sim-canvas-area"></div>
-
-                <!-- ═══ LEFT PANEL: Evolution Progress ═══ -->
-                <div
-                    id="panel-progress-left"
-                    class="sim-panel"
-                    style="grid-area: left; width: 320px; border-right: 1px solid var(--border-color); border-radius: 0; overflow-y: auto; max-height: 100%"
-                >
-                    <div
-                        class="sim-panel-title"
-                        style="border-color: rgba(0, 242, 255, 0.3)"
-                    >
-                        <span><i class="fas fa-chart-area mr-1"></i> Metrics
-                            History</span>
-                        <span id="left-graph-meta" class="text-cyan-300"
-                        >G1</span>
-                    </div>
-
-                    <!-- Individual metric graphs container -->
-                    <div id="left-metrics-container" style="padding: 4px 8px 8px; display: flex; flex-direction: column; gap: 2px;"></div>
-
-                    <!-- ═══ EVOLUTION FEEDBACK ═══ -->
-                    <div id="evolution-feedback" style="padding: 0 10px">
-                        <div class="section-divider"></div>
-                        <div class="sim-panel-title" style="padding: 6px 0; border: none">
-                            <span><i class="fas fa-heartbeat mr-1"></i> Evolution Health</span>
-                            <span id="evo-status-badge" class="evo-status-badge severity-info">○ Starting</span>
-                        </div>
-
-                        <div style="padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px; margin-bottom: 8px">
-                            <div id="evo-message" class="text-xs text-gray-300" style="font-family: 'JetBrains Mono', monospace">
-                                Analyzing evolution progress...
-                            </div>
-                            <div id="evo-insights" class="text-xs mt-2 flex flex-wrap gap-2" style="font-family: 'JetBrains Mono', monospace">
-                            </div>
-                        </div>
-
-<!-- Suggestions Panel removed - user controls settings manually -->
-<div id="suggestions-panel" class="hidden">
-  <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 8px; margin-bottom: 8px">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
-      <div class="text-xs font-bold text-amber-400" style="font-family: 'JetBrains Mono', monospace">
-        ⚠ SUGGESTIONS
-      </div>
-      <button onclick="window.evolutionFeedback?.dismissSuggestions()" class="text-xs text-gray-400 hover:text-white">
-        <i class="fas fa-times"></i>
-      </button>
-    </div>
-    <div id="suggestions-list" style="display: flex; flex-direction: column; gap: 6px">
-      <!-- Suggestions will be inserted here -->
-    </div>
-  </div>
-</div>
-
-<!-- Sandbox Scorecard for Left Panel (hidden until sandbox mode) -->
-<div
-id="sandbox-scorecard-left-panel"
-style="display: none; padding: 0 10px 10px"
->
-<div class="section-divider"></div>
-<div
-class="sim-panel-title"
-style="padding: 6px 0; border: none"
->
-<span><i class="fas fa-flask mr-1"></i> Sandbox
-Scorecard</span>
-<span
-id="sandbox-run-label-left"
-class="text-emerald-300"
->Run 0</span>
-</div>
-<div class="sandbox-scorecard">
-<div class="sandbox-stat">
-<div class="sandbox-stat-label">Distance</div>
-<div
-class="sandbox-stat-value text-cyan-300"
-id="sandbox-distance-left"
->
-0.0m
-</div>
-</div>
-<div class="sandbox-stat">
-<div class="sandbox-stat-label">Max Speed</div>
-<div
-class="sandbox-stat-value text-yellow-300"
-id="sandbox-speed-left"
->
-0.0
-</div>
-</div>
-<div class="sandbox-stat">
-<div class="sandbox-stat-label">Stability</div>
-<div
-class="sandbox-stat-value text-emerald-300"
-id="sandbox-stability-left"
->
-0%
-</div>
-</div>
-<div class="sandbox-stat">
-<div class="sandbox-stat-label">Falls</div>
-<div
-class="sandbox-stat-value text-rose-300"
-id="sandbox-falls-left"
->
-0
-</div>
-</div>
-<div class="sandbox-stat">
-<div class="sandbox-stat-label">
-Ground Slip
-</div>
-<div
-class="sandbox-stat-value text-orange-300"
-id="sandbox-slip-left"
->
-0.00
-</div>
-</div>
-</div>
-</div>
-                    </div> <!-- End training-sections -->
-                </div>
-
             <div class="edge-tab-rail edge-top-rail pointer-events-auto">
                 <button
                     class="edge-tab active"
