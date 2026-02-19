@@ -264,12 +264,15 @@ canvas {
 
 /* ─── Bottom Panel ─── */
 #panel-scorecard {
-    grid-area: bottom;
-    border-top: 1px solid var(--border-color);
-    border-radius: 0;
-    overflow-y: auto;
-    max-height: 180px;
-    padding: 0 8px 6px;
+grid-area: bottom;
+border-top: 1px solid var(--border-color);
+border-radius: 0;
+overflow-y: auto;
+min-height: 140px;
+max-height: 260px;
+padding: 0 8px 6px;
+display: flex;
+flex-direction: column;
 }
 
 /* ─── Canvas Region ─── */
@@ -804,8 +807,14 @@ input[type="range"]::-moz-range-thumb {
 }
 
 #bottom-metrics-container {
-    min-height: 0;
-    overflow-y: auto;
+min-height: 100px;
+max-height: 220px;
+overflow-y: auto;
+padding: 8px;
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+gap: 8px;
+flex: 1;
 }
 
 /* Smooth scrolling for metrics */
