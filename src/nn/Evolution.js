@@ -25,10 +25,13 @@ export class Evolution {
     if (!sorted.length) return [];
     const nextGen = [];
 
-    // Elitism: copy top creatures unchanged
+    // Elitism: copy top creatures unchanged (with their architecture)
     const elites = Math.min(eliteCount, sorted.length);
     for (let i = 0; i < elites; i++) {
-      nextGen.push(new Float32Array(sorted[i].dna));
+      nextGen.push({
+        dna: new Float32Array(sorted[i].dna),
+        architecture: sorted[i].architecture || { hiddenLayers: 1, neuronsPerLayer: 8 }
+      });
     }
 
     // Adaptive mutation rate
@@ -37,20 +40,55 @@ export class Evolution {
       mutationRate + stagnantGens * 0.015
     );
     const dnaLength = sorted[0].dna.length;
-    const immigrantCount = Math.max(1, Math.floor(popSize * 0.12));
+    const immigrantCount = Math.max(1, Math.floor(popSize * 0.05)); // Reduced from 12% to 5%
 
     // Fill rest via tournament selection + crossover + mutation
     while (nextGen.length < popSize) {
       const slotsLeft = popSize - nextGen.length;
       if (slotsLeft <= immigrantCount) {
-        nextGen.push(Evolution.randomDNA(dnaLength));
+        // Random immigrant with random architecture
+        nextGen.push({
+          dna: Evolution.randomDNA(dnaLength),
+          architecture: {
+            hiddenLayers: Math.floor(Math.random() * 3),
+            neuronsPerLayer: 4 + Math.floor(Math.random() * 12)
+          }
+        });
         continue;
       }
-      const parentA = Evolution.tournamentSelect(sorted, tournamentSize);
-      const parentB = Evolution.tournamentSelect(sorted, tournamentSize);
-      let childDna = Evolution.crossover(parentA.dna, parentB.dna);
+      // Tournament from top 50% of population (preserve good genes)
+      const topHalf = sorted.slice(0, Math.ceil(sorted.length * 0.5));
+      const parentA = Evolution.tournamentSelect(topHalf, tournamentSize);
+      const parentB = Evolution.tournamentSelect(topHalf, tournamentSize);
+      // Crossover weighted by fitness (better parent contributes more)
+      let childDna = Evolution.crossover(parentA.dna, parentB.dna, parentA.fitness, parentB.fitness);
       childDna = Evolution.mutate(childDna, effectiveRate, mutationSize, stagnantGens);
-      nextGen.push(childDna);
+      
+      // Inherit architecture from fitter parent, with small mutation chance
+      let childArchitecture = parentA.fitness >= parentB.fitness ? 
+        (parentA.architecture || { hiddenLayers: 1, neuronsPerLayer: 8 }) :
+        (parentB.architecture || { hiddenLayers: 1, neuronsPerLayer: 8 });
+      
+      // 5% chance to mutate architecture (conservative)
+      if (Math.random() < 0.05) {
+        const newLayers = childArchitecture.hiddenLayers + (Math.random() < 0.5 ? -1 : 1);
+        childArchitecture = {
+          hiddenLayers: Math.max(0, Math.min(6, newLayers)),
+          neuronsPerLayer: childArchitecture.neuronsPerLayer
+        };
+      }
+      if (Math.random() < 0.05) {
+        const newNeurons = childArchitecture.neuronsPerLayer + (Math.floor(Math.random() * 4) - 2) * 2;
+        childArchitecture = {
+          hiddenLayers: childArchitecture.hiddenLayers,
+          neuronsPerLayer: Math.max(4, Math.min(32, newNeurons))
+        };
+      }
+      
+      nextGen.push({
+        dna: childDna,
+        architecture: childArchitecture
+      });
     }
 
     return nextGen;
@@ -72,12 +110,22 @@ export class Evolution {
   }
 
   /**
-   * Uniform crossover: for each weight, 50% chance from parent A or B.
+   * Winner-dominant crossover: fitter parent contributes 90% of DNA
+   * This preserves successful behavior while allowing small variations
    */
-  static crossover(dnaA, dnaB) {
+  static crossover(dnaA, dnaB, fitnessA = 1, fitnessB = 1) {
     const child = new Float32Array(dnaA.length);
+    // Determine which parent is fitter
+    const parentAIsFitter = fitnessA >= fitnessB;
+    const dominantWeight = 0.90; // Winner contributes 90%
+    
     for (let i = 0; i < child.length; i++) {
-      child[i] = Math.random() < 0.5 ? dnaA[i] : dnaB[i];
+      // 90% chance to pick from fitter parent, 10% from other
+      if (parentAIsFitter) {
+        child[i] = Math.random() < dominantWeight ? dnaA[i] : dnaB[i];
+      } else {
+        child[i] = Math.random() < dominantWeight ? dnaB[i] : dnaA[i];
+      }
     }
     return child;
   }

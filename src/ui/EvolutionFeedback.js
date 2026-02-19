@@ -1,27 +1,19 @@
-/**
- * Evolution Feedback UI
- * Displays evolution health, suggestions, and allows auto-adaptation
+/** 
+ * Evolution Feedback UI  
+ * Displays evolution health and insights
+ * Suggestions feature removed - user controls settings manually
  */
 export class EvolutionFeedback {
   constructor(monitor) {
     this.monitor = monitor;
     this.container = document.getElementById('evolution-feedback');
-    this.suggestionsPanelEl = document.getElementById('suggestions-panel');
-    this.autoAdaptToggle = document.getElementById('auto-adapt-toggle');
-
-    if (this.autoAdaptToggle) {
-      this.autoAdaptToggle.onchange = (e) => {
-        this.monitor.setAutoAdapt(e.target.checked);
-        this.showAutoAdaptStatus(e.target.checked);
-      };
-    }
-
+    // Suggestions feature removed
     this.lastDisplayedGen = -1;
   }
 
-  /**
-   * Update the evolution health indicator
-   */
+  /** 
+  * Update the evolution health indicator 
+  */
   update() {
     if (!this.container) return;
 
@@ -39,21 +31,12 @@ export class EvolutionFeedback {
     // Update main message
     const messageEl = document.getElementById('evo-message');
     if (messageEl && health.stats) {
-      if (health.severity === 'good') {
-        messageEl.textContent = health.message;
-        messageEl.style.color = indicator.color;
-      } else {
-        messageEl.textContent = health.message;
-        messageEl.style.color = indicator.color;
-      }
+      messageEl.textContent = health.message;
+      messageEl.style.color = indicator.color;
     }
 
-    // Show suggestions if needed
-    if (health.suggestions && health.suggestions.length > 0) {
-      this.showSuggestions(health);
-    } else {
-      this.hideSuggestions();
-    }
+    // Hide suggestions - feature removed
+    this.hideSuggestions();
 
     // Update insights
     const insights = this.monitor.getInsights();

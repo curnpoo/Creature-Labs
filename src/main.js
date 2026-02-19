@@ -77,6 +77,7 @@ function setScreen(name) {
     const design = designer.getDesign();
     sim.nodes = design.nodes;
     sim.constraints = design.constraints;
+    sim.polygons = design.polygons || [];
     resizeCanvases();
     worldCtx = worldCanvas.getContext('2d');
     simSessionStarted = false;
@@ -142,17 +143,329 @@ function updateStartSimUI() {
 function updateSandboxUI() {
   const training = document.getElementById('training-details');
   const sandbox = document.getElementById('sandbox-scorecard-wrap');
+  const panelTopBar = document.getElementById('panel-top-bar');
+  const panelProgressLeft = document.getElementById('panel-progress-left');
+  const panelScorecard = document.getElementById('panel-scorecard');
+  
+  // Sandbox-specific sections to show/hide in right panel
+  const sandboxSection = document.getElementById('sandbox-panel-section');
+  const trainingSections = document.getElementById('training-sections');
   
   if (sim.sandboxMode) {
     if (training) training.classList.add('hidden');
     if (sandbox) sandbox.classList.remove('hidden');
-    // Ensure panel is visible if not hidden by user preference? 
-    // Let's assume user wants to see it, but we won't force-remove 'module-hidden' 
-    // unless explicitly requested. For now, just swap contents.
+    // Hide top bar, left panel, and bottom panel in sandbox mode
+    if (panelTopBar) panelTopBar.style.display = 'none';
+    if (panelProgressLeft) panelProgressLeft.style.display = 'none';
+    if (panelScorecard) panelScorecard.style.display = 'none';
+    // Show sandbox section in right panel, hide training sections
+    if (sandboxSection) sandboxSection.style.display = 'block';
+    if (trainingSections) trainingSections.style.display = 'none';
+    // Don't show floating controls - use right panel instead
+    hideSandboxControls();
   } else {
     if (training) training.classList.remove('hidden');
     if (sandbox) sandbox.classList.add('hidden');
+    // Restore panels
+    if (panelTopBar) panelTopBar.style.display = 'flex';
+    if (panelProgressLeft) panelProgressLeft.style.display = 'block';
+    if (panelScorecard) panelScorecard.style.display = 'block';
+    // Show training sections, hide sandbox section
+    if (sandboxSection) sandboxSection.style.display = 'none';
+    if (trainingSections) trainingSections.style.display = 'block';
+    hideSandboxControls();
+    // Clear sandbox graphs
+    const graphIds = ['sandbox-graph-distance', 'sandbox-graph-speed', 'sandbox-graph-stability', 'sandbox-graph-actuation'];
+    graphIds.forEach(id => {
+      const canvas = document.getElementById(id);
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    });
   }
+}
+
+function ensureSandboxControls() {
+  let container = document.getElementById('sandbox-controls');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'sandbox-controls';
+    
+    container.innerHTML = `
+      <div class="sandbox-header">
+        <span class="sandbox-badge">SANDBOX</span>
+        <span class="sandbox-run" id="sandbox-run-num">RUN 1</span>
+      </div>
+      <div class="sandbox-stats">
+        <div class="sandbox-stat">
+          <div class="sandbox-stat-label">Distance</div>
+          <div class="sandbox-stat-value" id="sandbox-stat-dist">0.0m</div>
+        </div>
+        <div class="sandbox-stat">
+          <div class="sandbox-stat-label">Speed</div>
+          <div class="sandbox-stat-value" id="sandbox-stat-speed">0.0 m/s</div>
+        </div>
+        <div class="sandbox-stat">
+          <div class="sandbox-stat-label">Stability</div>
+          <div class="sandbox-stat-value" id="sandbox-stat-stability">0%</div>
+        </div>
+        <div class="sandbox-stat">
+          <div class="sandbox-stat-label">Falls</div>
+          <div class="sandbox-stat-value" id="sandbox-stat-falls">0</div>
+        </div>
+      </div>
+      <div class="sandbox-buttons">
+        <button class="sandbox-btn sandbox-btn-pause" id="btn-sandbox-pause">
+          <i class="fas fa-pause"></i> Pause
+        </button>
+        <button class="sandbox-btn sandbox-btn-exit" id="btn-sandbox-exit-new">
+          <i class="fas fa-sign-out-alt"></i> Exit
+        </button>
+      </div>
+    `;
+    
+    document.body.appendChild(container);
+    
+    // Bind events
+    document.getElementById('btn-sandbox-pause').onclick = () => {
+      sim.sandboxPaused = !sim.sandboxPaused;
+      const btn = document.getElementById('btn-sandbox-pause');
+      if (sim.sandboxPaused) {
+        btn.innerHTML = '<i class="fas fa-play"></i> Resume';
+        btn.classList.remove('sandbox-btn-pause');
+        btn.classList.add('sandbox-btn-resume');
+      } else {
+        btn.innerHTML = '<i class="fas fa-pause"></i> Pause';
+        btn.classList.remove('sandbox-btn-resume');
+        btn.classList.add('sandbox-btn-pause');
+      }
+    };
+    
+    document.getElementById('btn-sandbox-exit-new').onclick = () => {
+      sim.exitSandboxMode();
+      hideSandboxControls();
+      updateSandboxUI();
+    };
+  }
+}
+
+function hideSandboxControls() {
+  const el = document.getElementById('sandbox-controls');
+  if (el) el.remove();
+}
+
+// Initialize sandbox panel controls (called after DOM is ready)
+function initSandboxPanelControls() {
+  // Sandbox speed slider
+  const speedSlider = document.getElementById('inp-sandbox-speed');
+  const speedVal = document.getElementById('val-sandbox-speed');
+  if (speedSlider) {
+    speedSlider.oninput = () => {
+      const val = parseInt(speedSlider.value);
+      sim.simSpeed = val;
+      if (speedVal) speedVal.textContent = val + 'x';
+    };
+  }
+  
+  // Sandbox pause button in right panel
+  const pauseBtn = document.getElementById('btn-sandbox-pause-panel');
+  if (pauseBtn) {
+    pauseBtn.onclick = () => {
+      sim.sandboxPaused = !sim.sandboxPaused;
+      if (sim.sandboxPaused) {
+        pauseBtn.innerHTML = '<i class="fas fa-play mr-1"></i> Resume';
+        pauseBtn.classList.remove('bg-amber-500/20', 'text-amber-300', 'border-amber-400/40');
+        pauseBtn.classList.add('bg-emerald-500/20', 'text-emerald-300', 'border-emerald-400/40');
+      } else {
+        pauseBtn.innerHTML = '<i class="fas fa-pause mr-1"></i> Pause';
+        pauseBtn.classList.remove('bg-emerald-500/20', 'text-emerald-300', 'border-emerald-400/40');
+        pauseBtn.classList.add('bg-amber-500/20', 'text-amber-300', 'border-amber-400/40');
+      }
+    };
+  }
+  
+  // Sandbox exit button in right panel
+  const exitBtn = document.getElementById('btn-sandbox-exit-panel');
+  if (exitBtn) {
+    exitBtn.onclick = () => {
+      sim.exitSandboxMode();
+      updateSandboxUI();
+    };
+  }
+}
+
+function updateSandboxStats(leader) {
+  // Update both floating panel and right panel stats
+  const f = leader ? leader.getFitnessSnapshot() : null;
+  if (!f) return;
+  
+  const dist = sim.distMetersContinuousFromX(leader.getX());
+  
+  // Update floating panel stats (if exists)
+  const floatDistEl = document.getElementById('sandbox-stat-dist');
+  const floatSpeedEl = document.getElementById('sandbox-stat-speed');
+  const floatStabEl = document.getElementById('sandbox-stat-stability');
+  const floatFallsEl = document.getElementById('sandbox-stat-falls');
+  const runEl = document.getElementById('sandbox-run-num');
+  
+  if (floatDistEl) floatDistEl.textContent = dist.toFixed(1) + 'm';
+  if (floatSpeedEl) floatSpeedEl.textContent = (f.speed / 100).toFixed(1) + ' m/s';
+  if (floatStabEl) floatStabEl.textContent = f.stability.toFixed(0) + '%';
+  if (floatFallsEl) floatFallsEl.textContent = String(f.stumbles);
+  if (runEl) runEl.textContent = 'RUN ' + sim.sandboxRuns;
+  
+  // Update right panel stats
+  const panelDistEl = document.getElementById('sandbox-stat-dist');
+  const panelSpeedEl = document.getElementById('sandbox-stat-speed');
+  const panelStabEl = document.getElementById('sandbox-stat-stability');
+  const panelFallsEl = document.getElementById('sandbox-stat-falls');
+  const panelRunEl = document.getElementById('sandbox-mode-badge');
+  
+  if (panelDistEl) panelDistEl.textContent = dist.toFixed(1) + 'm';
+  if (panelSpeedEl) panelSpeedEl.textContent = (f.speed / 100).toFixed(1) + ' m/s';
+  if (panelStabEl) panelStabEl.textContent = f.stability.toFixed(0) + '%';
+  if (panelFallsEl) panelFallsEl.textContent = String(f.stumbles);
+  if (panelRunEl) panelRunEl.textContent = 'RUN ' + sim.sandboxRuns;
+  
+  // Track history for graphs (sample every 6 frames = ~10 samples/sec for 60 seconds)
+  if (!sim._sandboxGraphData) {
+    sim._sandboxGraphData = {
+      distance: [],
+      speed: [],
+      stability: [],
+      actuation: [],
+      maxPoints: 600, // 60 seconds at 10 samples/sec
+      frameCount: 0
+    };
+  }
+  
+  const gd = sim._sandboxGraphData;
+  gd.frameCount = (gd.frameCount || 0) + 1;
+  
+  // Sample every 6 frames (~10 times per second)
+  if (gd.frameCount % 6 !== 0) return;
+  
+  gd.distance.push(dist);
+  gd.speed.push(f.speed / 100);
+  gd.stability.push(f.stability);
+  gd.actuation.push(f.actuationLevel || 0);
+  
+  // Trim to max points
+  if (gd.distance.length > gd.maxPoints) {
+    gd.distance.shift();
+    gd.speed.shift();
+    gd.stability.shift();
+    gd.actuation.shift();
+  }
+  
+  // Draw graphs
+  drawSandboxGraphs();
+}
+
+function drawSandboxGraphs() {
+  const gd = sim._sandboxGraphData;
+  if (!gd || gd.distance.length < 2) return;
+  
+  const configs = [
+    { id: 'sandbox-graph-distance', data: gd.distance, color: '#22d3ee', maxVal: 50, suffix: 'm' },
+    { id: 'sandbox-graph-speed', data: gd.speed, color: '#a78bfa', maxVal: 5, suffix: ' m/s' },
+    { id: 'sandbox-graph-stability', data: gd.stability, color: '#34d399', maxVal: 100, suffix: '%' },
+    { id: 'sandbox-graph-actuation', data: gd.actuation, color: '#fbbf24', maxVal: 1, suffix: '' }
+  ];
+  
+  configs.forEach(cfg => {
+    const canvas = document.getElementById(cfg.id);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    
+    // Clear with gradient background
+    const gradient = ctx.createLinearGradient(0, 0, 0, h);
+    gradient.addColorStop(0, 'rgba(15, 23, 42, 0.9)');
+    gradient.addColorStop(1, 'rgba(8, 15, 28, 0.95)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, w, h);
+    
+    const data = cfg.data;
+    if (data.length < 2) return;
+    
+    // Smooth the data
+    const smoothed = smoothData(data, 8);
+    
+    // Draw glow layer (wider line, more transparent)
+    ctx.beginPath();
+    ctx.strokeStyle = cfg.color + '30';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
+    const step = w / (gd.maxPoints - 1);
+    const xOffset = w - (smoothed.length * step);
+    
+    for (let i = 0; i < smoothed.length; i++) {
+      const x = xOffset + i * step;
+      const y = h - (smoothed[i] / cfg.maxVal) * (h - 16) - 8;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    
+    // Draw main line
+    ctx.beginPath();
+    ctx.strokeStyle = cfg.color;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
+    // Add glow effect
+    ctx.shadowColor = cfg.color;
+    ctx.shadowBlur = 8;
+    
+    for (let i = 0; i < smoothed.length; i++) {
+      const x = xOffset + i * step;
+      const y = h - (smoothed[i] / cfg.maxVal) * (h - 16) - 8;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    
+    // Draw current value
+    const currentVal = data[data.length - 1];
+    ctx.font = 'bold 16px "JetBrains Mono", monospace';
+    ctx.fillStyle = cfg.color;
+    ctx.textAlign = 'right';
+    ctx.fillText(currentVal.toFixed(1) + cfg.suffix, w - 8, 20);
+    
+    // Draw grid lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      const y = (h / 4) * i;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+  });
+}
+
+// Smooth data using moving average
+function smoothData(data, windowSize) {
+  if (data.length < windowSize) return data;
+  const result = [];
+  for (let i = 0; i < data.length; i++) {
+    let sum = 0;
+    let count = 0;
+    for (let j = Math.max(0, i - windowSize + 1); j <= i; j++) {
+      sum += data[j];
+      count++;
+    }
+    result.push(sum / count);
+  }
+  return result;
 }
 
 function updateSandboxScorecard(leader) {
@@ -246,6 +559,7 @@ document.getElementById('tool-node').onclick = e => setTool('node', e.currentTar
 document.getElementById('tool-joint').onclick = e => setTool('joint', e.currentTarget);
 document.getElementById('tool-bone').onclick = e => setTool('bone', e.currentTarget);
 document.getElementById('tool-muscle').onclick = e => setTool('muscle', e.currentTarget);
+document.getElementById('tool-polygon').onclick = e => setTool('polygon', e.currentTarget);
 document.getElementById('tool-move').onclick = e => setTool('move', e.currentTarget);
 document.getElementById('tool-erase').onclick = e => setTool('erase', e.currentTarget);
 document.getElementById('tool-undo').onclick = () => designer.undo();
@@ -274,15 +588,23 @@ fileInput.onchange = async e => {
 document.getElementById('tool-clear').onclick = () => designer.clear();
 
 // Ctrl+Z for undo in draw mode
+// Space to pause in sandbox mode
 window.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && currentScreen === 'draw') {
     designer.undo();
+    e.preventDefault();
+  }
+  // Space to pause/resume in sandbox mode
+  if (e.code === 'Space' && sim.sandboxMode) {
+    const pauseBtn = document.getElementById('btn-sandbox-pause');
+    if (pauseBtn) pauseBtn.click();
     e.preventDefault();
   }
 });
 
 // --- Controls binding ---
 const startTrainingNow = () => {
+  progressChart.clear();
   if (!sim.startSimulation()) {
     alert('Design needs at least 2 nodes, 1 bone, and 1 muscle.');
     return false;
@@ -304,6 +626,7 @@ controls.bind({
     const design = designer.getDesign();
     sim.nodes = design.nodes;
     sim.constraints = design.constraints;
+    sim.polygons = design.polygons || [];
     sim.exitSandboxMode();
     startTrainingNow();
   },
@@ -317,6 +640,7 @@ controls.bind({
     const design = designer.getDesign();
     sim.nodes = design.nodes;
     sim.constraints = design.constraints;
+    sim.polygons = design.polygons || [];
     startTrainingNow();
   },
   onResetSettings: () => {
@@ -415,8 +739,10 @@ if (sandboxRunBtn) {
       const design = designer.getDesign();
       sim.nodes = design.nodes;
       sim.constraints = design.constraints;
+      sim.polygons = design.polygons || [];
       startTrainingNow();
       renderBrainLibrary();
+      updateSandboxUI();
     } catch (err) {
       alert(`Sandbox start failed: ${err.message}`);
     }
@@ -472,16 +798,10 @@ sim.onGenerationEnd = info => {
 
   // Record generation data for evolution monitoring
   if (!sim.sandboxMode && sim.progressHistory.length > 0) {
-    const latest = sim.progressHistory[sim.progressHistory.length - 1];
-    evolutionMonitor.recordGeneration(latest);
+  const latest = sim.progressHistory[sim.progressHistory.length - 1];
+  evolutionMonitor.recordGeneration(latest);
 
-    // Try auto-adaptation if enabled
-    const adaptation = evolutionMonitor.autoAdapt(sim);
-    if (adaptation) {
-      evolutionFeedback.showAdaptation(adaptation);
-      // Update UI to reflect new settings
-      controls.updateLabels();
-    }
+  // Auto-adaptation feature removed - user controls settings manually
   }
 };
 
@@ -509,38 +829,6 @@ function drawGhosts(ctx) {
     ctx.strokeStyle = 'rgba(255,255,255,0.20)';
     ctx.lineWidth = 1.4;
     ctx.stroke();
-  }
-}
-
-function drawReplayOverlay(ctx) {
-  const fitnessTag = document.getElementById('fitness-tag');
-  if (sim.replayIndex < 0 || sim.replayIndex >= sim.replayHistory.length) {
-    if (fitnessTag) fitnessTag.textContent = `LIVE · A${sim.championAwards}`;
-    return;
-  }
-  const replay = sim.replayHistory[sim.replayIndex];
-  if (!replay.path.length) return;
-  if (fitnessTag) fitnessTag.textContent = sim.replayPlaying ? 'REPLAY ▶' : 'REPLAY ⏸';
-
-  ctx.beginPath();
-  ctx.moveTo(replay.path[0].x, replay.path[0].y);
-  for (let i = 1; i < replay.path.length; i++) {
-    ctx.lineTo(replay.path[i].x, replay.path[i].y);
-  }
-  ctx.strokeStyle = 'rgba(255,180,50,0.65)';
-  ctx.lineWidth = 2.5;
-  ctx.stroke();
-
-  const idx = Math.max(0, Math.min(replay.path.length - 1, Math.floor(sim.replayCursor)));
-  const p = replay.path[idx];
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255,210,90,0.95)';
-  ctx.fill();
-
-  if (sim.replayPlaying) {
-    sim.replayCursor += Math.max(0.5, sim.simSpeed * 0.25);
-    if (sim.replayCursor >= replay.path.length) sim.replayCursor = 0;
   }
 }
 
@@ -638,10 +926,13 @@ function renderWorld(leader) {
   }
 
   drawGhosts(ctx);
-  drawReplayOverlay(ctx);
 
   // Draw creatures
-  sim.creatures.forEach(c => c.draw(ctx, c === leader));
+  if (sim.showGhosts) {
+    sim.creatures.forEach(c => c.draw(ctx, c === leader));
+  } else if (leader) {
+    leader.draw(ctx, true);
+  }
 
   if (challengeTool !== 'none') {
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
@@ -679,6 +970,7 @@ sim.onFrame = (leader, simulatedSec) => {
   hud.update(sim);
   controls.updateFitnessPanel(leader ? leader.getFitnessSnapshot() : null, leader);
   updateSandboxScorecard(leader);
+  updateSandboxStats(leader);
   renderWorld(leader);
   visualizer.render(leader);
   progressChart.renderRight(sim);
@@ -745,3 +1037,4 @@ window.addEventListener('resize', () => {
 setTool('node', document.getElementById('tool-node'));
 resizeCanvases();
 designer.render();
+initSandboxPanelControls();

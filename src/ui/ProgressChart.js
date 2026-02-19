@@ -49,6 +49,25 @@ export class ProgressChart {
     this.createGraphElements();
   }
 
+  clear() {
+    this.graphElements.forEach(graphEl => {
+      const { ctx, canvas, valueEl } = graphEl;
+      const w = canvas.width;
+      const h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(0,0,0,0.12)';
+      ctx.fillRect(0, 0, w, h);
+      valueEl.textContent = '--';
+    });
+    if (this.rightCtx && this.rightCanvas) {
+      const w = this.rightCanvas.width;
+      const h = this.rightCanvas.height;
+      this.rightCtx.clearRect(0, 0, w, h);
+      this.rightCtx.fillStyle = 'rgba(0,0,0,0.12)';
+      this.rightCtx.fillRect(0, 0, w, h);
+    }
+  }
+
   createGraphElements() {
     // Create left panel graphs (all metrics, vertical layout)
     if (this.leftContainer) {

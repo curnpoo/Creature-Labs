@@ -21,7 +21,6 @@ export class Controls {
       'val-mutsize', 'val-zoom', 'val-cam',
       'val-hidden', 'val-neurons', 'val-elites', 'val-tournament',
       'cam-lock', 'cam-free', 'icon-pause',
-      'replay-label', 'replay-play-icon',
       'fitness-tag', 'fitness-speed', 'fitness-stability',
       'fitness-energy', 'fitness-energy-bar', 'fitness-stumbles', 'fitness-spin',
       'val-spinpen', 'val-maxenergy', 'val-regen', 'val-energycost'
@@ -59,14 +58,47 @@ export class Controls {
       };
     }
 
-    const checkSelfCollision = document.getElementById('check-self-collision');
-    if (checkSelfCollision) {
-      checkSelfCollision.checked = this.sim.selfCollision;
-      checkSelfCollision.onchange = (e) => {
-        this.sim.selfCollision = e.target.checked;
+    const selfcolOn = document.getElementById('selfcol-on');
+    const selfcolOff = document.getElementById('selfcol-off');
+    const updateSelfCollisionUI = () => {
+      if (selfcolOn) selfcolOn.classList.toggle('active', this.sim.selfCollision);
+      if (selfcolOff) selfcolOff.classList.toggle('active', !this.sim.selfCollision);
+    };
+    if (selfcolOn) {
+      selfcolOn.onclick = () => {
+        this.sim.selfCollision = true;
         this.sim.syncCreatureRuntimeSettings();
+        updateSelfCollisionUI();
       };
     }
+    if (selfcolOff) {
+      selfcolOff.onclick = () => {
+        this.sim.selfCollision = false;
+        this.sim.syncCreatureRuntimeSettings();
+        updateSelfCollisionUI();
+      };
+    }
+    updateSelfCollisionUI();
+
+    const ghostsOn = document.getElementById('ghosts-on');
+    const ghostsOff = document.getElementById('ghosts-off');
+    const updateGhostsUI = () => {
+      if (ghostsOn) ghostsOn.classList.toggle('active', this.sim.showGhosts);
+      if (ghostsOff) ghostsOff.classList.toggle('active', !this.sim.showGhosts);
+    };
+    if (ghostsOn) {
+      ghostsOn.onclick = () => {
+        this.sim.showGhosts = true;
+        updateGhostsUI();
+      };
+    }
+    if (ghostsOff) {
+      ghostsOff.onclick = () => {
+        this.sim.showGhosts = false;
+        updateGhostsUI();
+      };
+    }
+    updateGhostsUI();
 
     // Sliders
     this._bindSlider('inp-speed', v => { this.sim.simSpeed = v; });
@@ -80,38 +112,12 @@ export class Controls {
       this.sim.muscleStrength = v / 100;
       this.sim.creatures.forEach(c => { c.simConfig.muscleStrength = this.sim.muscleStrength; });
     });
-    this._bindSlider('inp-jointspeed', v => {
-      this.sim.jointMoveSpeed = v / 100;
-      this.sim.creatures.forEach(c => { c.simConfig.jointMoveSpeed = this.sim.jointMoveSpeed; });
-    });
-    this._bindSlider('inp-joint', v => {
-      this.sim.jointFreedom = v / 100;
-      this.sim.creatures.forEach(c => { c.simConfig.jointFreedom = this.sim.jointFreedom; });
-    });
     this._bindSlider('inp-gravity', v => {
       this.sim.gravity = v;
       if (this.sim.world) this.sim.world.setGravity(planck.Vec2(0, v));
     }, true);
     this._bindSlider('inp-groundfric', v => {
       this.sim.groundFriction = v / 100;
-      if (this.sim.ground) this.sim.ground.friction = this.sim.groundFriction;
-    });
-    this._bindSlider('inp-groundstatic', v => {
-      this.sim.groundStaticFriction = v / 100;
-      if (this.sim.ground) this.sim.ground.frictionStatic = this.sim.groundStaticFriction;
-    });
-    this._bindSlider('inp-traction', v => { this.sim.tractionDamping = v / 100; });
-    this._bindSlider('inp-bodyfric', v => {
-      this.sim.bodyFriction = v / 100;
-      this.sim.creatures.forEach(c => c.bodies.forEach(b => { b.friction = this.sim.bodyFriction; }));
-    });
-    this._bindSlider('inp-bodystatic', v => {
-      this.sim.bodyStaticFriction = v / 100;
-      this.sim.creatures.forEach(c => c.bodies.forEach(b => { b.frictionStatic = this.sim.bodyStaticFriction; }));
-    });
-    this._bindSlider('inp-bodyair', v => {
-      this.sim.bodyAirFriction = v / 1000;
-      this.sim.creatures.forEach(c => c.bodies.forEach(b => { b.frictionAir = this.sim.bodyAirFriction; }));
     });
     this._bindSlider('inp-musrange', v => {
       this.sim.muscleRange = v / 100;
@@ -120,6 +126,10 @@ export class Controls {
     this._bindSlider('inp-musmooth', v => {
       this.sim.muscleSmoothing = v / 100;
       this.sim.creatures.forEach(c => { c.simConfig.muscleSmoothing = this.sim.muscleSmoothing; });
+    });
+    this._bindSlider('inp-musbudget', v => {
+      this.sim.muscleActionBudget = Math.max(1, Math.floor(v));
+      this.sim.creatures.forEach(c => { c.simConfig.muscleActionBudget = this.sim.muscleActionBudget; });
     });
 
     // Energy system sliders
@@ -382,26 +392,14 @@ export class Controls {
     set('val-duration', `${s.simDuration}s`);
     set('val-pop', `${s.popSize}`);
     set('val-strength', `${Math.round(s.muscleStrength * 100)}%`);
-    set('val-jointspeed', `${s.jointMoveSpeed.toFixed(2)}x`);
-    set('val-joint', `${Math.round(s.jointFreedom * 100)}%`);
     set('val-gravity', s.gravity.toFixed(1));
     set('val-groundfric', `${s.groundFriction.toFixed(2)}`);
-    set('val-groundstatic', `${s.groundStaticFriction.toFixed(2)}`);
-    set('val-traction', `${Math.round(s.tractionDamping * 100)}%`);
-    set('val-bodyfric', `${s.bodyFriction.toFixed(2)}`);
-    set('val-bodystatic', `${s.bodyStaticFriction.toFixed(2)}`);
-    set('val-bodyair', `${s.bodyAirFriction.toFixed(3)}`);
     set('val-musrange', `${Math.round(s.muscleRange * 100)}%`);
     set('val-musmooth', `${Math.round(s.muscleSmoothing * 100)}%`);
+    set('val-musbudget', `${s.muscleActionBudget}`);
     set('val-maxenergy', `${Math.round(s.maxEnergy)}`);
     set('val-regen', `${Math.round(s.energyRegenRate)}/s`);
     set('val-energycost', `${(s.energyUsagePerActuation || 0.8).toFixed(2)}`);
-    set('val-distreward', `${Math.round(s.distanceRewardWeight)}`);
-    set('val-speedreward', `${s.speedRewardWeight.toFixed(2)}`);
-    set('val-jitterpen', `${Math.round(s.jitterPenaltyWeight)}`);
-    set('val-slippen', `${Math.round(s.groundSlipPenaltyWeight)}`);
-    set('val-spinpen', `${Math.round(s.spinPenaltyWeight)}`);
-    set('val-stabmode', s.rewardStability ? 'ON' : 'OFF');
     set('val-mut', `${Math.round(s.mutationRate * 100)}%`);
     set('val-mutsize', `${s.mutationSize.toFixed(2)}x`);
     set('val-zoom', `${s.zoom.toFixed(2)}x`);
@@ -443,23 +441,10 @@ export class Controls {
     s.popSize = CONFIG.defaultPopSize;
     s.gravity = CONFIG.defaultGravity;
     s.muscleStrength = CONFIG.defaultMuscleStrength;
-    s.jointMoveSpeed = CONFIG.defaultJointMoveSpeed;
-    s.jointFreedom = CONFIG.defaultJointFreedom;
     s.groundFriction = CONFIG.defaultGroundFriction;
-    s.groundStaticFriction = CONFIG.defaultGroundStaticFriction;
-    s.tractionDamping = CONFIG.defaultTractionDamping;
-    s.bodyFriction = CONFIG.defaultBodyFriction;
-    s.bodyStaticFriction = CONFIG.defaultBodyStaticFriction;
-    s.bodyAirFriction = CONFIG.defaultBodyAirFriction;
     s.muscleRange = CONFIG.defaultMuscleRange;
     s.muscleSmoothing = CONFIG.defaultMuscleSmoothing;
-    s.distanceRewardWeight = CONFIG.defaultDistanceRewardWeight;
-    s.speedRewardWeight = CONFIG.defaultSpeedRewardWeight;
-    s.stabilityRewardWeight = CONFIG.defaultStabilityRewardWeight;
-    s.rewardStability = true;
-    s.jitterPenaltyWeight = CONFIG.defaultJitterPenaltyWeight;
-    s.groundSlipPenaltyWeight = CONFIG.defaultGroundSlipPenaltyWeight;
-    s.spinPenaltyWeight = CONFIG.defaultSpinPenaltyWeight;
+    s.muscleActionBudget = CONFIG.defaultMuscleActionBudget;
     s.mutationRate = CONFIG.defaultMutationRate;
     s.mutationSize = CONFIG.defaultMutationSize;
     // NN architecture is auto-evolving - no reset needed
@@ -475,22 +460,10 @@ export class Controls {
       'inp-duration': String(Math.round(s.simDuration)),
       'inp-pop': String(Math.round(s.popSize)),
       'inp-strength': String(Math.round(s.muscleStrength * 100)),
-      'inp-jointspeed': String(Math.round(s.jointMoveSpeed * 100)),
-      'inp-joint': String(Math.round(s.jointFreedom * 100)),
       'inp-gravity': s.gravity.toFixed(1),
       'inp-groundfric': String(Math.round(s.groundFriction * 100)),
-      'inp-groundstatic': String(Math.round(s.groundStaticFriction * 100)),
-      'inp-traction': String(Math.round(s.tractionDamping * 100)),
-      'inp-bodyfric': String(Math.round(s.bodyFriction * 100)),
-      'inp-bodystatic': String(Math.round(s.bodyStaticFriction * 100)),
-      'inp-bodyair': String(Math.round(s.bodyAirFriction * 1000)),
       'inp-musrange': String(Math.round(s.muscleRange * 100)),
       'inp-musmooth': String(Math.round(s.muscleSmoothing * 100)),
-      'inp-distreward': String(Math.round(s.distanceRewardWeight)),
-      'inp-speedreward': String(Math.round(s.speedRewardWeight * 100)),
-      'inp-jitterpen': String(Math.round(s.jitterPenaltyWeight)),
-      'inp-slippen': String(Math.round(s.groundSlipPenaltyWeight)),
-      'inp-spinpen': String(Math.round(s.spinPenaltyWeight)),
       'inp-mut': String(Math.round(s.mutationRate * 100)),
       'inp-mutsize': String(Math.round(s.mutationSize * 100)),
       // NN architecture auto-evolves - no sliders
@@ -506,7 +479,6 @@ export class Controls {
       const el = document.getElementById(id);
       if (el) el.value = value;
     });
-    this._updateStabilityMode();
     this.updateLabels();
   }
 }

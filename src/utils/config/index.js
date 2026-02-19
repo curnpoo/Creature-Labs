@@ -45,6 +45,7 @@ export const CONFIG = {
   defaultJointFreedom: MUSCLE_CONFIG.jointFreedom,
   defaultMuscleRange: MUSCLE_CONFIG.range,
   defaultMuscleSmoothing: MUSCLE_CONFIG.smoothing,
+  defaultMuscleActionBudget: MUSCLE_CONFIG.actionBudget,
 
   // Fitness Weights
   defaultDistanceRewardWeight: FITNESS_CONFIG.distanceWeight,

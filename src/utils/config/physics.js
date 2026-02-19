@@ -5,8 +5,8 @@
 export const PHYSICS_CONFIG = {
   // Core Physics Engine
   fixedStepHz: 60,              // Physics update rate (Hz) - don't change unless needed
-  maxPhysicsStepsPerFrame: 240, // Maximum physics steps per render frame
-  gravity: 1.0,                 // Gravity strength (1.0 = normal)
+  maxPhysicsStepsPerFrame: 120, // Balance between stability and performance
+  gravity: 9.8,                // Earth gravity in m/s² (Planck.js uses meters)
 
   // Ground/Surface Properties (Matter.js range: 0-1)
   groundFriction: 0.95,         // Ground kinetic friction (0.95 = high grip, prevents sliding exploits)
@@ -28,10 +28,10 @@ export const PHYSICS_CONFIG = {
   muscleDamping: 0.30,          // Muscle constraint damping (mimics muscle-tendon)
 
   // Solver Iterations (higher = more stable but slower)
-  positionIterations: 20,       // Position constraint resolution iterations
-  velocityIterations: 16,       // Velocity constraint resolution iterations
-  constraintIterations: 24,     // Constraint resolution iterations
-  enableSleeping: false,        // Disable sleeping to prevent energy accumulation
+  positionIterations: 60, // Increased for stability with rigid bones
+  velocityIterations: 40, // Increased for stability
+  constraintIterations: 60, // Increased for rigid constraint stability
+  enableSleeping: false, // Disable sleeping to prevent energy accumulation
 
   // Anti-Exploit Stabilization
   angularDamping: 0.96,         // Angular velocity damping per step

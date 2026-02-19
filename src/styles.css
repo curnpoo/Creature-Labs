@@ -440,16 +440,37 @@ canvas {
 
 .cam-btn {
     flex: 1;
-    padding: 6px 8px;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.04);
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
     color: var(--text-secondary);
     font-family: "Inter", sans-serif;
     font-size: 11px;
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.cam-btn:hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
+    color: var(--text-primary);
+    border-color: rgba(0, 242, 255, 0.3);
+    box-shadow: 0 0 15px rgba(0, 242, 255, 0.1);
+}
+
+.cam-btn:active {
+    transform: scale(0.97);
+}
+
+/* Larger version of cam-btn, used for sandbox controls */
+.cam-btn-big {
+    padding: 14px 28px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 10px;
 }
 
 .cam-btn:hover {
@@ -463,6 +484,36 @@ canvas {
     border-color: rgba(0, 242, 255, 0.45);
     color: var(--primary);
     box-shadow: 0 0 10px rgba(0, 242, 255, 0.15);
+}
+
+.toggle-btn {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+    color: var(--text-secondary);
+    font-family: "Inter", sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.toggle-btn:hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
+    color: var(--text-primary);
+    border-color: rgba(0, 242, 255, 0.3);
+    box-shadow: 0 0 15px rgba(0, 242, 255, 0.1);
+}
+
+.toggle-btn.active {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.45);
+    color: #22c55e;
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.15);
 }
 
 /* ─── Section Dividers ─── */
@@ -965,3 +1016,247 @@ input:checked + .toggle-slider:before {
     border-color: rgba(239, 68, 68, 0.5);
     color: #fca5a5;
 }
+
+/* ─── Sleek Sandbox Controls ─── */
+#sandbox-controls {
+    position: fixed;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1000;
+    background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(8, 15, 28, 0.98));
+    border: 1px solid rgba(0, 242, 255, 0.2);
+    border-radius: 16px;
+    padding: 20px;
+    min-width: 220px;
+    box-shadow: 
+        0 0 40px rgba(0, 242, 255, 0.1),
+        0 20px 60px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+}
+
+.sandbox-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(0, 242, 255, 0.15);
+}
+
+.sandbox-badge {
+    background: linear-gradient(135deg, #00f2ff, #00d4aa);
+    color: #000;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    box-shadow: 0 0 15px rgba(0, 242, 255, 0.4);
+}
+
+.sandbox-run {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+
+.sandbox-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.sandbox-stat {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all 0.2s ease;
+}
+
+.sandbox-stat:hover {
+    border-color: rgba(0, 242, 255, 0.2);
+    background: rgba(0, 242, 255, 0.05);
+}
+
+.sandbox-stat-label {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+}
+
+.sandbox-stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    font-family: "JetBrains Mono", monospace;
+}
+
+.sandbox-stat:nth-child(1) .sandbox-stat-value { color: #22d3ee; }
+.sandbox-stat:nth-child(2) .sandbox-stat-value { color: #a78bfa; }
+.sandbox-stat:nth-child(3) .sandbox-stat-value { color: #34d399; }
+.sandbox-stat:nth-child(4) .sandbox-stat-value { color: #f87171; }
+
+.sandbox-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.sandbox-btn {
+    flex: 1;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: "Inter", sans-serif;
+}
+
+.sandbox-btn-pause {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(245, 158, 11, 0.15));
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.sandbox-btn-pause:hover {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.3), rgba(245, 158, 11, 0.25));
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.2);
+}
+
+.sandbox-btn-resume {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.15));
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.sandbox-btn-resume:hover {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.3), rgba(16, 185, 129, 0.25));
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
+}
+
+.sandbox-btn-exit {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.15));
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.sandbox-btn-exit:hover {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(220, 38, 38, 0.25));
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+}
+
+/* Special sandbox button styles for right panel */
+.sandbox-run-btn {
+    background: linear-gradient(135deg, rgba(0, 242, 255, 0.2), rgba(0, 200, 200, 0.15));
+    color: #00f2ff;
+    border: 1px solid rgba(0, 242, 255, 0.4);
+    text-shadow: 0 0 10px rgba(0, 242, 255, 0.3);
+}
+
+.sandbox-run-btn:hover {
+    background: linear-gradient(135deg, rgba(0, 242, 255, 0.3), rgba(0, 200, 200, 0.25));
+    box-shadow: 0 0 25px rgba(0, 242, 255, 0.3);
+    color: #fff;
+}
+
+.sandbox-exit-btn {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.15));
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.sandbox-exit-btn:hover {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(220, 38, 38, 0.25));
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+    color: #fff;
+}
+
+/* Inline sandbox stats for right panel */
+.sandbox-stats-inline {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sandbox-stat-inline {
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+    padding: 6px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+}
+
+.sandbox-stat-label-inline {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 2px;
+}
+
+.sandbox-stat-value-inline {
+    font-size: 14px;
+    font-weight: 700;
+    font-family: "JetBrains Mono", monospace;
+}
+
+/* Sandbox live graphs - 4 separate pretty graphs */
+.sandbox-graphs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.sandbox-graph-container {
+    position: relative;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.8) 0%, rgba(8, 15, 28, 0.9) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 8px;
+    box-shadow: 
+        0 4px 20px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.sandbox-graph-container canvas {
+    width: 100%;
+    height: 70px;
+    border-radius: 6px;
+    display: block;
+}
+
+.sandbox-graph-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 6px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.sandbox-graph-container:nth-child(1) .sandbox-graph-label { color: #22d3ee; }
+.sandbox-graph-container:nth-child(2) .sandbox-graph-label { color: #a78bfa; }
+.sandbox-graph-container:nth-child(3) .sandbox-graph-label { color: #34d399; }
+.sandbox-graph-container:nth-child(4) .sandbox-graph-label { color: #fbbf24; }

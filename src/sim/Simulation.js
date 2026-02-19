@@ -9,6 +9,7 @@ import { Evolution } from '../nn/Evolution.js';
  */
 export class Simulation {
   constructor() {
+    this.sandboxPaused = false; // pause flag for sandbox mode
     this.world = null;
     this.ground = null;
     this.creatures = [];
@@ -19,7 +20,7 @@ export class Simulation {
     this.lastFrame = 0;
     this.fpsSmoothed = 60;
     this.simTimeElapsed = 0;
-    this.selfCollision = false;
+    this.selfCollision = true; // Enabled by default to prevent folding
 
     // Evolution state
     this.genBestDist = 0;
@@ -47,6 +48,7 @@ export class Simulation {
     this.sandboxMode = false;
     this.sandboxBrainDNA = null;
     this.sandboxRuns = 0;
+    this.showGhosts = true;
 
     // Callbacks
     this.onGenerationEnd = null;
@@ -68,6 +70,7 @@ export class Simulation {
     this.bodyAirFriction = CONFIG.defaultBodyAirFriction;
     this.muscleRange = CONFIG.defaultMuscleRange;
     this.muscleSmoothing = CONFIG.defaultMuscleSmoothing;
+    this.muscleActionBudget = CONFIG.defaultMuscleActionBudget;
     this.distanceRewardWeight = CONFIG.defaultDistanceRewardWeight;
     this.speedRewardWeight = CONFIG.defaultSpeedRewardWeight;
     this.stabilityRewardWeight = CONFIG.defaultStabilityRewardWeight;
@@ -103,6 +106,7 @@ export class Simulation {
     // Design data
     this.nodes = [];
     this.constraints = [];
+    this.polygons = [];
   }
 
   getGroundY() {
@@ -126,6 +130,7 @@ export class Simulation {
       jointMoveSpeed: this.jointMoveSpeed,
       muscleRange: this.muscleRange,
       muscleSmoothing: this.muscleSmoothing,
+      muscleActionBudget: this.muscleActionBudget,
       bodyFriction: this.bodyFriction,
       bodyStaticFriction: this.bodyStaticFriction,
       bodyAirFriction: this.bodyAirFriction,
@@ -143,7 +148,7 @@ export class Simulation {
     };
   }
 
-  spawnGeneration(dnaArray = null) {
+  spawnGeneration(dnaArray = null, winnerArchitecture = null) {
     // console.log('Spawning generation');
     this.creatures.forEach(c => c.destroy());
     this.creatures = [];
@@ -156,17 +161,53 @@ export class Simulation {
     // console.log(`Spawn position: (${startX}, ${startY})`);
 
     const creatureCount = this.sandboxMode ? 1 : this.popSize;
+    
     // console.log(`Spawning ${creatureCount} creatures`);
+    
+    // Create config that includes parent architecture for inheritance
+    const spawnConfig = this.getSimConfig();
+    
     for (let i = 0; i < creatureCount; i++) {
-      const dna = dnaArray ? dnaArray[i] : null;
+      const creatureConfig = { ...spawnConfig };
+      
+      // Pass architecture info to creature
+      if (dnaArray && dnaArray[i] && dnaArray[i].architecture) {
+        // Offspring inherits architecture from parent
+        creatureConfig.parentHiddenLayers = dnaArray[i].architecture.hiddenLayers;
+        creatureConfig.parentNeuronsPerLayer = dnaArray[i].architecture.neuronsPerLayer;
+      } else if (winnerArchitecture) {
+        // Generation 2+: inherit from winner with some mutation
+        let mutatedLayers = winnerArchitecture.hiddenLayers;
+        let mutatedNeurons = winnerArchitecture.neuronsPerLayer;
+        
+        // Architecture mutation: 10% chance to add/remove layer, 15% chance to change neuron count
+        if (Math.random() < 0.10) {
+          // Mutate layer count
+          const delta = Math.random() < 0.5 ? -1 : 1;
+          mutatedLayers = Math.max(0, Math.min(6, mutatedLayers + delta));
+        }
+        if (Math.random() < 0.15) {
+          // Mutate neuron count
+          const delta = (Math.floor(Math.random() * 4) - 2) * 2; // -4, -2, 0, 2, 4
+          mutatedNeurons = Math.max(4, Math.min(32, mutatedNeurons + delta));
+        }
+        
+        creatureConfig.parentHiddenLayers = mutatedLayers;
+        creatureConfig.parentNeuronsPerLayer = mutatedNeurons;
+      }
+      
+      const dna = dnaArray && dnaArray[i] ? dnaArray[i].dna : null;
       // console.log(`Creating creature ${i}`);
       const creature = new Creature(
         this.world, startX, startY,
-        this.nodes, this.constraints,
+        this.nodes, this.constraints, this.polygons,
         dna, bounds.minX, bounds.minY,
-        this.getSimConfig(),
+        creatureConfig,
         i
       );
+      
+      // Store creature's architecture for next generation
+      creature.storedArchitecture = creature.architecture;
       // console.log(`Created creature ${i} with ${creature.bodies.length} bodies and ${creature.muscles.length} muscles`);
       this.creatures.push(creature);
     }
@@ -174,47 +215,51 @@ export class Simulation {
   }
 
   startSimulation() {
-    // console.log(`Starting simulation: nodes=${this.nodes.length}, constraints=${this.constraints.length}`);
     if (this.nodes.length < 2 || this.constraints.length < 1) {
-      // console.log('Not enough nodes or constraints');
       return false;
     }
 
+    // Guard: don't start if already running
+    if (this.frameId) {
+      return true;
+    }
+    
     this.stopLoop();
     this.clearSimulation();
 
-    // console.log('Creating physics world');
-    this.world = createEngine(this.gravity * 10); // Scale gravity for Planck.js (10 m/s² base)
-    // console.log('Physics world created');
+    this.world = createEngine(this.gravity); // Earth gravity ~9.8 m/s²
 
     // Set up collision filtering
-    this.world.on('begin-contact', (contact) => {
-      const fixtureA = contact.getFixtureA();
-      const fixtureB = contact.getFixtureB();
-      const bodyA = fixtureA.getBody();
-      const bodyB = fixtureB.getBody();
+this.world.on('begin-contact', (contact) => {
+  const fixtureA = contact.getFixtureA();
+  const fixtureB = contact.getFixtureB();
+  const bodyA = fixtureA.getBody();
+  const bodyB = fixtureB.getBody();
 
-      // Skip collision between connected bodies from the same creature
-      if (bodyA.creatureId === bodyB.creatureId) {
-        if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB)) {
-          contact.setEnabled(false);
-        }
-      }
-    });
+  // Skip collision ONLY between DIRECTLY connected bodies (jointed together)
+  // Non-connected bodies from same creature should collide (self-collision)
+  if (bodyA.creatureId === bodyB.creatureId) {
+    if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB)) {
+      contact.setEnabled(false); // Connected bodies don't collide
+    }
+  }
+});
 
-    this.world.on('pre-solve', (contact) => {
-      const fixtureA = contact.getFixtureA();
-      const fixtureB = contact.getFixtureB();
-      const bodyA = fixtureA.getBody();
-      const bodyB = fixtureB.getBody();
+this.world.on('pre-solve', (contact) => {
+  const fixtureA = contact.getFixtureA();
+  const fixtureB = contact.getFixtureB();
+  const bodyA = fixtureA.getBody();
+  const bodyB = fixtureB.getBody();
 
-      // Skip collision between connected bodies from the same creature
-      if (bodyA.creatureId === bodyB.creatureId) {
-        if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB)) {
-          contact.setEnabled(false);
-        }
-      }
-    });
+  // Skip collision ONLY between DIRECTLY connected bodies (jointed together)
+  // Non-connected bodies from same creature should collide (self-collision)
+  if (bodyA.creatureId === bodyB.creatureId) {
+    if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB)) {
+      contact.setEnabled(false); // Connected bodies don't collide
+    }
+    // else: non-connected bodies DO collide (prevents folding)
+  }
+});
 
     this.ground = createGround(this.world, this.getGroundY(), {
       friction: this.groundFriction
@@ -250,11 +295,10 @@ export class Simulation {
     const seedDNA = sourceBrain
       ? Array.from({ length: count }, () => new Float32Array(sourceBrain))
       : null;
+    
     this.spawnGeneration(seedDNA);
     this.rebuildChallengeBodies();
-    // console.log('Setting up game loop');
     this.frameId = requestAnimationFrame(timestamp => this.gameLoop(timestamp));
-    // console.log('Game loop started');
     return true;
   }
 
@@ -431,19 +475,40 @@ export class Simulation {
       ? fitness.energyEfficiency * this.energyEfficiencyBonus
       : 0;
 
-    return (
-      distance * this.distanceRewardWeight +
-      fitness.speed * this.speedRewardWeight * (0.2 + (fitness.actuationLevel || 0) * 0.8) +
-      (this.rewardStability ? fitness.stability * this.stabilityRewardWeight : 0) +
-      energyBonus -
-      fitness.airtimePct * 0.3 * gaitPenaltyScale * distanceScale -
-      fitness.stumbles * 15 * gaitPenaltyScale -
-      Math.pow(fitness.spin, 2) * this.spinPenaltyWeight * gaitPenaltyScale -
-      (fitness.spinAccumulated || 0) * 150 -
-      (fitness.energyViolations || 0) * 500 -
-      Math.pow(fitness.actuationJerk || 0, 1.5) * this.jitterPenaltyWeight * gaitPenaltyScale -
-      (fitness.groundSlip || 0) * this.groundSlipPenaltyWeight * gaitPenaltyScale
-    );
+    // SIMPLIFIED FITNESS: Distance-first approach
+    // Let creatures discover walking naturally, only penalize extremes
+    
+    // Base score: primarily distance traveled
+    let score = distance * 10; // Strong distance reward
+    
+    // Small bonus for speed (encourages forward movement)
+    score += fitness.speed * 0.5;
+    
+    // Energy efficiency bonus (if enabled)
+    score += energyBonus;
+    
+    // ONLY EXTREME PENALTIES:
+    // 1. Falling over (stumbles) - moderate penalty
+    score -= fitness.stumbles * 2;
+    
+    // 2. Excessive spinning (> 1 rad/s sustained) - creatures shouldn't just spin
+    if (fitness.spin > 1.0) {
+      score -= (fitness.spin - 1.0) * 5;
+    }
+    
+    // 3. Going backwards (negative distance)
+    if (distance < 0) {
+      score -= Math.abs(distance) * 5;
+    }
+    
+    // That's it! No penalties for:
+    // - Being unstable while learning
+    // - Air time while jumping
+    // - Ground slip while finding grip
+    // - Movement jerkiness while experimenting
+    // - Minor spinning while balancing
+    
+    return score;
   }
 
   effectiveMutationRate() {
@@ -481,7 +546,23 @@ export class Simulation {
     const avgSpin = popFitness.reduce((a, f) => a + (f.spin || 0), 0) / Math.max(1, popFitness.length);
     const avgSlip = popFitness.reduce((a, f) => a + (f.groundSlip || 0), 0) / Math.max(1, popFitness.length);
     const avgActuation = popFitness.reduce((a, f) => a + (f.actuationLevel || 0), 0) / Math.max(1, popFitness.length);
-    const evoScore = genBest * 2 + avgDist + avgSpeed * 0.03 + avgStability * 0.15 - avgStumbles * 1.2;
+    
+    // SIMPLIFIED EVO SCORE: Distance-first, minimal penalties
+    // Focus on actual progress, not punishing experimental behaviors
+    
+    let evoScore = genBest * 10; // Strong reward for distance
+    evoScore += avgDist * 5; // Reward population average too
+    
+    // Small bonuses for good behaviors (not required, just nice)
+    evoScore += avgSpeed * 0.1; // Forward movement is good
+    
+    // Only penalize clear failures
+    evoScore -= avgStumbles * 0.5; // Falling is actually bad
+    if (avgSpin > 2.0) {
+      evoScore -= (avgSpin - 2.0) * 2; // Only penalize excessive spinning
+    }
+    
+    // No stagnation penalty - let creatures take time to discover walking
 
     this.prevAllTimeBest = this.allTimeBest;
     if (genBest > this.allTimeBest) {
@@ -530,13 +611,15 @@ export class Simulation {
     if (winnerFitness > this.championFitness) {
       this.championFitness = winnerFitness;
       this.championDNA = new Float32Array(winner.dna);
+      this.championArchitecture = winner.architecture; // Store winning architecture
       this.championAwards++;
     }
 
     // Use Evolution engine for next generation
     const evalCreatures = this.creatures.map(c => ({
       dna: c.dna,
-      fitness: this.creatureScore(c)
+      fitness: this.creatureScore(c),
+      architecture: c.architecture // Include architecture
     }));
 
     const nextGenDNA = Evolution.evolve(evalCreatures, this.popSize, {
@@ -551,7 +634,8 @@ export class Simulation {
     this.timer = this.simDuration;
     this.visualLeader = null;
 
-    this.spawnGeneration(nextGenDNA);
+    // Pass winner's architecture for inheritance
+    this.spawnGeneration(nextGenDNA, this.championArchitecture || winner.architecture);
 
     if (this.onGenerationEnd) {
       this.onGenerationEnd({
@@ -575,7 +659,7 @@ export class Simulation {
     const groundY = this.getGroundY();
 
     let simulatedSec = 0;
-    if (!this.paused && this.world) {
+    if (!this.paused && (!this.sandboxMode || !this.sandboxPaused) && this.world) {
       const stepsToRun = Math.min(CONFIG.maxPhysicsStepsPerFrame, Math.max(1, this.simSpeed));
 
       for (let i = 0; i < stepsToRun; i++) {
@@ -584,10 +668,9 @@ export class Simulation {
         this.creatures.forEach(c => c.update(time, groundY));
         
         // Step physics
-        // console.log(`Stepping physics: dt=${fixedDtSec}`);
         this.world.step(fixedDtSec);
-
-        // Anti-spin stabilization
+        
+        // Anti-spin stabilization - apply AFTER each physics step
         this.creatures.forEach(c => {
           c.bodies.forEach(b => {
             const pos = b.getPosition();
@@ -596,8 +679,9 @@ export class Simulation {
               const vel = b.getLinearVelocity();
               b.setLinearVelocity(Vec2(vel.x * this.tractionDamping, vel.y));
             }
-            const damped = b.getAngularVelocity() * 0.96;
-            b.setAngularVelocity(Math.max(-3, Math.min(3, damped)));
+            // Moderate angular damping to prevent spinning
+            const damped = b.getAngularVelocity() * 0.90;
+            b.setAngularVelocity(Math.max(-5, Math.min(5, damped)));
           });
         });
       }
@@ -670,6 +754,7 @@ export class Simulation {
       c.simConfig.jointMoveSpeed = this.jointMoveSpeed;
       c.simConfig.muscleRange = this.muscleRange;
       c.simConfig.muscleSmoothing = this.muscleSmoothing;
+      c.simConfig.muscleActionBudget = this.muscleActionBudget;
       c.simConfig.selfCollision = this.selfCollision;
       c.simConfig.bodyFriction = this.bodyFriction;
       c.simConfig.bodyStaticFriction = this.bodyStaticFriction;
@@ -728,6 +813,7 @@ export class Simulation {
     }
     this.sandboxBrainDNA = new Float32Array(dna);
     this.sandboxMode = true;
+    this.sandboxPaused = false; // Reset pause state when entering sandbox
     if (Number.isFinite(payload.hiddenLayers)) {
       this.hiddenLayers = Math.max(1, Math.min(3, Math.round(payload.hiddenLayers)));
     }
@@ -739,14 +825,18 @@ export class Simulation {
   exitSandboxMode() {
     this.sandboxMode = false;
     this.sandboxBrainDNA = null;
+    this._sandboxGraphData = null; // Reset graph data
+    this.sandboxRuns = 0;
   }
 
   restartSandboxRun() {
     if (!this.sandboxBrainDNA) return;
     this.sandboxRuns += 1;
-    this.timer = this.simDuration;
+    this.timer = Infinity; // Unlimited time in sandbox mode
+    this.sandboxPaused = false; // Reset pause state
     this.visualLeader = null;
     this.currentGhostPath = [];
+    this._sandboxGraphData = null; // Reset graph data
     this.spawnGeneration([new Float32Array(this.sandboxBrainDNA)]);
   }
 }

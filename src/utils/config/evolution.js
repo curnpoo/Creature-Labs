@@ -7,14 +7,14 @@ export const EVOLUTION_CONFIG = {
   populationSize: 24,           // Number of creatures per generation
 
   // Selection
-  eliteCount: 2,                // Number of best creatures kept unchanged
+  eliteCount: 1,                // Number of best creatures kept unchanged
   tournamentSize: 3,            // Tournament selection size
 
-  // Mutation
-  mutationRate: 0.08,           // Base probability of gene mutation (0-1)
-  mutationSize: 1.0,            // Magnitude of mutations
-  maxMutationRate: 0.95,        // Maximum mutation rate during stagnation
-  stagnantMutBonus: 0.015,      // Mutation rate increase per stagnant generation
+  // Mutation - CONSERVATIVE (less chaotic)
+  mutationRate: 0.03,           // Base probability of gene mutation (3% - more conservative)
+  mutationSize: 0.3,            // Magnitude of mutations (0.3 = smaller changes)
+  maxMutationRate: 0.50,        // Maximum mutation rate during stagnation (capped lower)
+  stagnantMutBonus: 0.005,      // Mutation rate increase per stagnant generation (slower increase)
 
   // Simulation Duration
   generationDuration: 8,        // Seconds per generation
@@ -26,5 +26,5 @@ export const EVOLUTION_CONFIG = {
   activation: 'tanh',           // Activation function
 
   // Creature Behavior
-  selfCollision: false,         // Enable collision between creature's own bodies
+selfCollision: true, // Enable collision between creature's own bodies (prevents folding)
 };

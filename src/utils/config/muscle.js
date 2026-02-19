@@ -4,10 +4,10 @@
  */
 export const MUSCLE_CONFIG = {
   // Base Muscle Properties
-  strength: 1.5, // Base muscle strength (1.5 = strong actuation)
-  moveSpeed: 1.2, // Joint movement speed (1.2 = responsive)
-  range: 1.2, // Muscle contraction range (1.2 = ±120% from base length for full range)
-  smoothing: 0.15, // Muscle signal smoothing (0.15 = responsive but not jerky)
+  strength: 2.0,                // Base muscle strength (2.0 = very strong for force-based muscles)
+  moveSpeed: 2.0,               // Muscle response speed (2.0 = quick)
+  range: 1.0,                   // Muscle range multiplier (1.0 = 80% max change with 0.8 amplitude)
+  smoothing: 0.10,              // Muscle signal smoothing (0.10 = responsive)
 
   // Ground-Dependent Strength (prevents air-pushing exploits)
   groundedBothBodies: 1.0,      // Strength when both bodies grounded (100%)
@@ -18,5 +18,8 @@ export const MUSCLE_CONFIG = {
   maxForcePerStep: 0.4,         // Max force per step (as fraction of base length)
 
   // Joint Freedom/Stiffness
-  jointFreedom: 1.0,            // Joint freedom (1.0 = free, 0.0 = rigid)
+  jointFreedom: 1.0, // Joint freedom (1.0 = free, 0.0 = rigid)
+
+  // Action Budget (frames between muscle state changes)
+  actionBudget: 3, // Minimum frames between muscle actions (1 = every frame, 10 = every 10 frames)
 };
