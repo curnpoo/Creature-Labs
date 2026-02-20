@@ -15,7 +15,7 @@ export class Creature {
    * @param {object[]} schemaNodes
    * @param {object[]} schemaConstraints
    * @param {object[]} schemaPolygons - Array of { id, vertices: [{x,y}], internalNodes: [nodeIds] }
-   * @param {Float32Array|null} dna - NN weights, null for random init
+   * @param {{dna: Float32Array, architecture?: {hiddenLayers: number, neuronsPerLayer: number}}|null} dna - NN weights + optional architecture, null for random init
    * @param {number} minX
    * @param {number} minY
    * @param {object} simConfig - { jointFreedom, muscleStrength, jointMoveSpeed, muscleRange, muscleSmoothing }
@@ -23,8 +23,6 @@ export class Creature {
   constructor(world, originX, originY, schemaNodes, schemaConstraints, schemaPolygons, dna, minX, minY, simConfig = {}, creatureId = 0) {
     this.world = world;
     this.id = creatureId;
-    this.bodies = []; // Array of planck.Body (nodes)
-    this.polygonBodies = []; // Array of planck.Body (solid polygon bodies)
     this.bodies = []; // Array of planck.Body (nodes)
     this.polygonBodies = []; // Array of planck.Body (solid polygon bodies)
     this.muscles = []; // Array of { joint: PrismaticJoint, bodyA: Body, bodyB: Body, baseLength: number, currentLength: number, index: number }
@@ -212,18 +210,32 @@ export class Creature {
     // Each creature has its own architecture that evolves
     const generation = simConfig.currentGeneration || 1;
     
-    // If simConfig provides parent architecture (from winner), use it
-    // Otherwise, start simple and let evolution discover what works
+    // Extract DNA weights and architecture from the passed dna object
+    let dnaWeights = null;
+    let dnaArchitecture = null;
+    
+    if (dna) {
+      if (dna.dna) {
+        // DNA is an object with { dna, architecture }
+        dnaWeights = dna.dna;
+        dnaArchitecture = dna.architecture;
+      } else {
+        // DNA is just the Float32Array (legacy format)
+        dnaWeights = dna;
+      }
+    }
+    
+    // Determine architecture: prioritize DNA's architecture, then simConfig, then random
     let hiddenLayers, neuronsPerLayer;
     
-    if (simConfig.parentHiddenLayers !== undefined && simConfig.parentNeuronsPerLayer !== undefined) {
-      // Inherit from parent (the winner)
+    if (dnaArchitecture) {
+      // Use architecture from DNA (passed through from Evolution)
+      hiddenLayers = dnaArchitecture.hiddenLayers;
+      neuronsPerLayer = dnaArchitecture.neuronsPerLayer;
+    } else if (simConfig.parentHiddenLayers !== undefined && simConfig.parentNeuronsPerLayer !== undefined) {
+      // Fall back to simConfig parent architecture
       hiddenLayers = simConfig.parentHiddenLayers;
       neuronsPerLayer = simConfig.parentNeuronsPerLayer;
-    } else if (dna && dna.architecture) {
-      // DNA contains architecture info
-      hiddenLayers = dna.architecture.hiddenLayers;
-      neuronsPerLayer = dna.architecture.neuronsPerLayer;
     } else {
       // Generation 1: Start very simple
       // Random initialization with bias toward simple networks
@@ -250,12 +262,6 @@ export class Creature {
     // Clamp to reasonable bounds
     hiddenLayers = Math.max(0, Math.min(6, hiddenLayers));
     neuronsPerLayer = Math.max(4, Math.min(32, neuronsPerLayer));
-    
-    // Store architecture for evolution
-    this.architecture = {
-      hiddenLayers: hiddenLayers,
-      neuronsPerLayer: neuronsPerLayer
-    };
 
     const layers = [numInputs];
     for (let i = 0; i < hiddenLayers; i++) {
@@ -266,11 +272,20 @@ export class Creature {
     // Create the neural network brain
     this.brain = new NeuralNetwork(layers);
 
-    // Apply DNA if provided
-    if (dna && dna.length === this.brain.getWeightCount()) {
-      this.brain.fromArray(dna);
+    // Apply DNA weights if provided and architecture matches
+    if (dnaWeights && dnaWeights.length === this.brain.getWeightCount()) {
+      this.brain.fromArray(dnaWeights);
+      this.dna = dnaWeights; // Use the passed DNA weights
+    } else {
+      // DNA length mismatch - architecture changed, use fresh random weights
+      this.dna = this.brain.toArray();
     }
-    this.dna = this.brain.toArray();
+    
+    // Store architecture for evolution
+    this.architecture = {
+      hiddenLayers: hiddenLayers,
+      neuronsPerLayer: neuronsPerLayer
+    };
 
     // Create joints
     let m = 0;
@@ -286,16 +301,23 @@ export class Creature {
       const lengthPx = Math.sqrt(dx * dx + dy * dy) * SCALE;
 
       if (schema.type === 'muscle') {
+        // Create prismatic joint with hard limits to prevent over-extension
+        const muscleJoint = createMuscle(this.world, bodyA, null, bodyB, null, null, {
+          restLength: lengthPx,
+          minLength: schema.minLength ?? lengthPx * 0.5,  // Default 50% min
+          maxLength: schema.maxLength ?? lengthPx * 1.5,  // Default 150% max
+          maxForce: 100 // Strong enough to move but limits won't break
+        });
+        
         // Store muscle info for force-based actuation
-        // NO JOINT created - we apply forces directly in update()
         this.muscles.push({
           bodyA,
           bodyB,
+          joint: muscleJoint, // Prismatic joint with limits
           baseLength: lengthPx,
           currentLength: lengthPx,
           index: m,
           smoothSignal: 0,
-          // Store initial positions to calculate rest length
           restLength: lengthPx
         });
         m++;
@@ -473,13 +495,20 @@ export class Creature {
       // Previous muscle activation (what we did last frame) - for coordination
       inputs[muscleOffset + 2] = m.prevActivation || 0;
 
-      // Muscle length trend (moving average direction) - for predicting future
-      if (!m.lengthHistory) m.lengthHistory = [];
-      m.lengthHistory.push(lengthRatio);
-      if (m.lengthHistory.length > 20) m.lengthHistory.shift(); // Keep last 20 frames (smoother)
-      const trend = m.lengthHistory.length > 1 ?
-        (m.lengthHistory[m.lengthHistory.length - 1] - m.lengthHistory[0]) / m.lengthHistory.length : 0;
-      inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced multiplier
+// Muscle length trend (moving average direction) - for predicting future
+// Use circular buffer for better performance
+if (!m.lengthHistory) {
+m.lengthHistory = new Float32Array(20);
+m.historyIndex = 0;
+m.historyCount = 0;
+}
+m.lengthHistory[m.historyIndex] = lengthRatio;
+m.historyIndex = (m.historyIndex + 1) % 20;
+m.historyCount = Math.min(m.historyCount + 1, 20);
+
+const trend = m.historyCount > 1 ?
+(m.lengthHistory[(m.historyIndex - 1 + 20) % 20] - m.lengthHistory[(m.historyIndex - m.historyCount + 20) % 20]) / m.historyCount : 0;
+inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced multiplier
 
       // Store previous values for next frame
       m.prevLength = m.currentLength;
@@ -623,7 +652,8 @@ export class Creature {
       const targetLength = m.baseLength + (smoothSignal * (smoothSignal > 0 ? extensionRange : contractionRange));
 
       // Calculate force direction (from A to B)
-      if (currentDist > 0.1 && Math.abs(smoothSignal) > 0.02) {
+      // Always apply spring force - at signal=0, targetLength=baseLength, so muscle holds its drawn length
+      if (currentDist > 0.1) {
         const dirX = dx / currentDist;
         const dirY = dy / currentDist;
 

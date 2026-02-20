@@ -170,33 +170,10 @@ export class Simulation {
     for (let i = 0; i < creatureCount; i++) {
       const creatureConfig = { ...spawnConfig };
       
-      // Pass architecture info to creature
-      if (dnaArray && dnaArray[i] && dnaArray[i].architecture) {
-        // Offspring inherits architecture from parent
-        creatureConfig.parentHiddenLayers = dnaArray[i].architecture.hiddenLayers;
-        creatureConfig.parentNeuronsPerLayer = dnaArray[i].architecture.neuronsPerLayer;
-      } else if (winnerArchitecture) {
-        // Generation 2+: inherit from winner with some mutation
-        let mutatedLayers = winnerArchitecture.hiddenLayers;
-        let mutatedNeurons = winnerArchitecture.neuronsPerLayer;
-        
-        // Architecture mutation: 10% chance to add/remove layer, 15% chance to change neuron count
-        if (Math.random() < 0.10) {
-          // Mutate layer count
-          const delta = Math.random() < 0.5 ? -1 : 1;
-          mutatedLayers = Math.max(0, Math.min(6, mutatedLayers + delta));
-        }
-        if (Math.random() < 0.15) {
-          // Mutate neuron count
-          const delta = (Math.floor(Math.random() * 4) - 2) * 2; // -4, -2, 0, 2, 4
-          mutatedNeurons = Math.max(4, Math.min(32, mutatedNeurons + delta));
-        }
-        
-        creatureConfig.parentHiddenLayers = mutatedLayers;
-        creatureConfig.parentNeuronsPerLayer = mutatedNeurons;
-      }
+      // Architecture is now handled entirely by Evolution.js
+      // Pass full DNA object (with architecture) to creature for proper inheritance
+      const dna = dnaArray && dnaArray[i] ? dnaArray[i] : null;
       
-      const dna = dnaArray && dnaArray[i] ? dnaArray[i].dna : null;
       // console.log(`Creating creature ${i}`);
       const creature = new Creature(
         this.world, startX, startY,
@@ -219,11 +196,6 @@ export class Simulation {
       return false;
     }
 
-    // Guard: don't start if already running
-    if (this.frameId) {
-      return true;
-    }
-    
     this.stopLoop();
     this.clearSimulation();
 
@@ -293,7 +265,10 @@ this.world.on('pre-solve', (contact) => {
     const sourceBrain = this.sandboxMode ? this.sandboxBrainDNA : this.importedBrainDNA;
     const count = this.sandboxMode ? 1 : this.popSize;
     const seedDNA = sourceBrain
-      ? Array.from({ length: count }, () => new Float32Array(sourceBrain))
+      ? Array.from({ length: count }, () => ({
+          dna: new Float32Array(sourceBrain),
+          architecture: { hiddenLayers: this.hiddenLayers, neuronsPerLayer: this.neuronsPerLayer }
+        }))
       : null;
     
     this.spawnGeneration(seedDNA);
@@ -309,15 +284,23 @@ this.world.on('pre-solve', (contact) => {
     }
   }
 
-  clearSimulation() {
-    this.creatures.forEach(c => c.destroy());
-    this.creatures = [];
-    this.challengeBodies = [];
-    if (this.world) {
-      cleanup(this.world);
-      this.world = null;
-    }
-  }
+clearSimulation() {
+this.creatures.forEach(c => c.destroy());
+this.creatures = [];
+this.challengeBodies = [];
+
+// Clear memory leak sources
+this.progressHistory = [];
+this.ghosts = [];
+this.currentGhostPath = [];
+this.brainHistory = [];
+this.replayHistory = [];
+
+if (this.world) {
+cleanup(this.world);
+this.world = null;
+}
+}
 
   setGroundProfile(points) {
     this.groundProfile = Array.isArray(points)
@@ -341,10 +324,24 @@ this.world.on('pre-solve', (contact) => {
 
   addObstacle(obstacle) {
     const o = {
+      type: 'box',
       x: Number(obstacle.x),
       y: Number(obstacle.y),
       w: Math.max(10, Number(obstacle.w) || 60),
       h: Math.max(10, Number(obstacle.h) || 40)
+    };
+    if (!Number.isFinite(o.x) || !Number.isFinite(o.y)) return;
+    this.obstacles.push(o);
+    this.rebuildChallengeBodies();
+  }
+
+  addTriangleObstacle(obstacle) {
+    const o = {
+      type: 'triangle',
+      x: Number(obstacle.x),
+      y: Number(obstacle.y),
+      w: Math.max(10, Number(obstacle.w) || 50),
+      h: Math.max(10, Number(obstacle.h) || 50)
     };
     if (!Number.isFinite(o.x) || !Number.isFinite(o.y)) return;
     this.obstacles.push(o);
@@ -404,11 +401,25 @@ this.world.on('pre-solve', (contact) => {
         position: Vec2(o.x / SCALE, o.y / SCALE)
       });
       
-      body.createFixture({
-        shape: Box(o.w / 2 / SCALE, o.h / 2 / SCALE),
-        friction: this.groundFriction,
-        restitution: 0
-      });
+      if (o.type === 'triangle') {
+        const hw = o.w / 2 / SCALE;
+        const hh = o.h / 2 / SCALE;
+        body.createFixture({
+          shape: planck.Polygon([
+            Vec2(0, -hh),
+            Vec2(-hw, hh),
+            Vec2(hw, hh)
+          ]),
+          friction: this.groundFriction,
+          restitution: 0
+        });
+      } else {
+        body.createFixture({
+          shape: Box(o.w / 2 / SCALE, o.h / 2 / SCALE),
+          friction: this.groundFriction,
+          restitution: 0
+        });
+      }
       
       bodies.push(body);
     });
@@ -625,9 +636,7 @@ this.world.on('pre-solve', (contact) => {
     const nextGenDNA = Evolution.evolve(evalCreatures, this.popSize, {
       mutationRate: this.mutationRate,
       mutationSize: this.mutationSize,
-      eliteCount: this.eliteCount,
-      tournamentSize: this.tournamentSize,
-      stagnantGens: this.stagnantGens
+      eliteCount: this.eliteCount
     });
 
     this.generation++;
@@ -660,7 +669,8 @@ this.world.on('pre-solve', (contact) => {
 
     let simulatedSec = 0;
     if (!this.paused && (!this.sandboxMode || !this.sandboxPaused) && this.world) {
-      const stepsToRun = Math.min(CONFIG.maxPhysicsStepsPerFrame, Math.max(1, this.simSpeed));
+      // Clamp physics steps to prevent lag spikes while maintaining accuracy
+const stepsToRun = Math.min(5, Math.max(1, this.simSpeed));
 
       for (let i = 0; i < stepsToRun; i++) {
         this.syncCreatureRuntimeSettings();
@@ -727,8 +737,11 @@ this.world.on('pre-solve', (contact) => {
       const center = leader.getCenter();
       if (!this.currentGhostPath.length ||
         Math.abs(center.x - this.currentGhostPath[this.currentGhostPath.length - 1].x) > 5) {
-        this.currentGhostPath.push({ x: center.x, y: center.y });
-        if (this.currentGhostPath.length > 1500) this.currentGhostPath.shift();
+// Limit ghost path length to prevent memory bloat
+if (this.currentGhostPath.length > 200) {
+this.currentGhostPath.shift();
+}
+this.currentGhostPath.push({ x: center.x, y: center.y });
       }
     }
 
@@ -837,6 +850,9 @@ this.world.on('pre-solve', (contact) => {
     this.visualLeader = null;
     this.currentGhostPath = [];
     this._sandboxGraphData = null; // Reset graph data
-    this.spawnGeneration([new Float32Array(this.sandboxBrainDNA)]);
+    this.spawnGeneration([{
+      dna: new Float32Array(this.sandboxBrainDNA),
+      architecture: { hiddenLayers: this.hiddenLayers, neuronsPerLayer: this.neuronsPerLayer }
+    }]);
   }
 }

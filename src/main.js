@@ -26,6 +26,11 @@ let simSessionStarted = false;
 const BRAIN_LIBRARY_KEY = 'polyevolve.brainLibrary.v1';
 let brainLibrary = [];
 
+// Performance: Cache panel dimensions (updated once per frame)
+let cachedPanelDims = null;
+let lastPanelUpdateFrame = 0;
+let frameCount = 0;
+
 // --- Modules ---
 const sim = new Simulation();
 
@@ -151,28 +156,39 @@ function updateSandboxUI() {
   const sandboxSection = document.getElementById('sandbox-panel-section');
   const trainingSections = document.getElementById('training-sections');
   
+  // Sandbox toggle buttons
+  const sandboxRunBtn = document.getElementById('btn-sandbox-run');
+  const sandboxExitBtn = document.getElementById('btn-sandbox-exit');
+  const brainLibrarySection = document.getElementById('brain-library-section');
+  
   if (sim.sandboxMode) {
     if (training) training.classList.add('hidden');
     if (sandbox) sandbox.classList.remove('hidden');
-    // Hide top bar, left panel, and bottom panel in sandbox mode
-    if (panelTopBar) panelTopBar.style.display = 'none';
+    // Hide left panel and bottom panel in sandbox mode, but keep top bar for camera controls
     if (panelProgressLeft) panelProgressLeft.style.display = 'none';
     if (panelScorecard) panelScorecard.style.display = 'none';
     // Show sandbox section in right panel, hide training sections
     if (sandboxSection) sandboxSection.style.display = 'block';
     if (trainingSections) trainingSections.style.display = 'none';
+    // Toggle sandbox/train buttons
+    if (sandboxRunBtn) sandboxRunBtn.style.display = 'none';
+    if (sandboxExitBtn) sandboxExitBtn.style.display = 'none';
+    if (brainLibrarySection) brainLibrarySection.style.display = 'none';
     // Don't show floating controls - use right panel instead
     hideSandboxControls();
   } else {
     if (training) training.classList.remove('hidden');
     if (sandbox) sandbox.classList.add('hidden');
     // Restore panels
-    if (panelTopBar) panelTopBar.style.display = 'flex';
     if (panelProgressLeft) panelProgressLeft.style.display = 'block';
     if (panelScorecard) panelScorecard.style.display = 'block';
     // Show training sections, hide sandbox section
     if (sandboxSection) sandboxSection.style.display = 'none';
     if (trainingSections) trainingSections.style.display = 'block';
+    // Toggle sandbox/train buttons - show Run Sandbox, hide Exit Sandbox
+    if (sandboxRunBtn) sandboxRunBtn.style.display = 'block';
+    if (sandboxExitBtn) sandboxExitBtn.style.display = 'none';
+    if (brainLibrarySection) brainLibrarySection.style.display = 'block';
     hideSandboxControls();
     // Clear sandbox graphs
     const graphIds = ['sandbox-graph-distance', 'sandbox-graph-speed', 'sandbox-graph-stability', 'sandbox-graph-actuation'];
@@ -289,9 +305,84 @@ function initSandboxPanelControls() {
   const exitBtn = document.getElementById('btn-sandbox-exit-panel');
   if (exitBtn) {
     exitBtn.onclick = () => {
+      // Stop current simulation first
+      sim.stopLoop();
+      sim.clearSimulation();
+      // Exit sandbox mode
       sim.exitSandboxMode();
+      // Restart with new training population
+      startTrainingNow();
+      updateSandboxUI();
+      renderBrainLibrary();
+    };
+  }
+  
+  // Sandbox reset button in right panel
+  const resetBtn = document.getElementById('btn-sandbox-reset-panel');
+  if (resetBtn) {
+    resetBtn.onclick = () => {
+      // Reset the creature position by restarting the sandbox run
+      sim.restartSandboxRun();
       updateSandboxUI();
     };
+  }
+  
+  // Sandbox environment tools
+  const sandboxGroundBtn = document.getElementById('btn-sandbox-ground');
+  const sandboxBoxBtn = document.getElementById('btn-sandbox-box');
+  const sandboxTriangleBtn = document.getElementById('btn-sandbox-triangle');
+  const sandboxClearBtn = document.getElementById('btn-sandbox-clear');
+  const sandboxToolStatus = document.getElementById('sandbox-tool-status');
+  
+  if (sandboxGroundBtn) {
+    sandboxGroundBtn.onclick = () => {
+      challengeTool = challengeTool === 'ground' ? 'none' : 'ground';
+      sandboxGroundBtn.classList.toggle('active', challengeTool === 'ground');
+      if (sandboxBoxBtn) sandboxBoxBtn.classList.remove('active');
+      if (sandboxTriangleBtn) sandboxTriangleBtn.classList.remove('active');
+      updateToolStatus();
+    };
+  }
+  if (sandboxBoxBtn) {
+    sandboxBoxBtn.onclick = () => {
+      challengeTool = challengeTool === 'obstacle' ? 'none' : 'obstacle';
+      sandboxBoxBtn.classList.toggle('active', challengeTool === 'obstacle');
+      if (sandboxGroundBtn) sandboxGroundBtn.classList.remove('active');
+      if (sandboxTriangleBtn) sandboxTriangleBtn.classList.remove('active');
+      updateToolStatus();
+    };
+  }
+  if (sandboxTriangleBtn) {
+    sandboxTriangleBtn.onclick = () => {
+      challengeTool = challengeTool === 'triangle' ? 'none' : 'triangle';
+      sandboxTriangleBtn.classList.toggle('active', challengeTool === 'triangle');
+      if (sandboxGroundBtn) sandboxGroundBtn.classList.remove('active');
+      if (sandboxBoxBtn) sandboxBoxBtn.classList.remove('active');
+      updateToolStatus();
+    };
+  }
+  if (sandboxClearBtn) {
+    sandboxClearBtn.onclick = () => {
+      sim.clearChallenge();
+      challengeTool = 'none';
+      if (sandboxGroundBtn) sandboxGroundBtn.classList.remove('active');
+      if (sandboxBoxBtn) sandboxBoxBtn.classList.remove('active');
+      if (sandboxTriangleBtn) sandboxTriangleBtn.classList.remove('active');
+      updateToolStatus();
+    };
+  }
+  
+  function updateToolStatus() {
+    if (!sandboxToolStatus) return;
+    if (challengeTool === 'ground') {
+      sandboxToolStatus.textContent = 'Ground draw: ON - click to add points';
+    } else if (challengeTool === 'obstacle') {
+      sandboxToolStatus.textContent = 'Box mode: ON - click to place';
+    } else if (challengeTool === 'triangle') {
+      sandboxToolStatus.textContent = 'Triangle mode: ON - click to place';
+    } else {
+      sandboxToolStatus.textContent = 'Click world to place';
+    }
   }
 }
 
@@ -726,6 +817,10 @@ if (sandboxRunBtn) {
     const picked = brainLibrary.find(b => b.id === selectedId) || brainLibrary[0];
     if (!picked) return;
     try {
+      // Stop current simulation first if running
+      sim.stopLoop();
+      sim.clearSimulation();
+      
       if (picked.design && Array.isArray(picked.design.nodes) && Array.isArray(picked.design.constraints)) {
         designer.loadDesign({
           nodes: picked.design.nodes,
@@ -752,7 +847,12 @@ if (sandboxRunBtn) {
 const sandboxExitBtn = document.getElementById('btn-sandbox-exit');
 if (sandboxExitBtn) {
   sandboxExitBtn.onclick = () => {
+    // Stop current simulation first
+    sim.stopLoop();
+    sim.clearSimulation();
+    // Exit sandbox mode
     sim.exitSandboxMode();
+    // Restart with new training population
     startTrainingNow();
     updateSandboxUI();
     renderBrainLibrary();
@@ -779,6 +879,8 @@ worldCanvas.addEventListener('click', e => {
     sim.addGroundPoint({ x: p.x, y: p.y });
   } else if (challengeTool === 'obstacle') {
     sim.addObstacle({ x: p.x, y: p.y - 20, w: 60, h: 40 });
+  } else if (challengeTool === 'triangle') {
+    sim.addTriangleObstacle({ x: p.x, y: p.y - 25, w: 50, h: 50 });
   }
 });
 
@@ -833,25 +935,37 @@ function drawGhosts(ctx) {
 }
 
 function renderWorld(leader) {
-  if (!worldCtx) return;
-  const ctx = worldCtx;
-  const gY = sim.getGroundY();
+if (!worldCtx) return;
+const ctx = worldCtx;
+const gY = sim.getGroundY();
 
-  const zoom = sim.zoom;
-  const viewW = worldCanvas.width / zoom;
-  const viewH = worldCanvas.height / zoom;
+const zoom = sim.zoom;
+const viewW = worldCanvas.width / zoom;
+const viewH = worldCanvas.height / zoom;
 
-  // Camera follow — center creature in visible canvas area (between panels)
-  if (leader && sim.cameraMode === 'lock') {
-    // Approximate panel sizes that eat into canvas area
-    const leftPanel = document.getElementById('panel-progress-left');
-    const rightPanel = document.getElementById('panel-controls');
-    const topPanel = document.getElementById('panel-top-bar');
-    const bottomPanel = document.getElementById('panel-scorecard');
-    const leftW = (leftPanel && !leftPanel.classList.contains('module-hidden')) ? leftPanel.offsetWidth : 0;
-    const rightW = (rightPanel && !rightPanel.classList.contains('module-hidden')) ? rightPanel.offsetWidth : 0;
-    const topH = (topPanel && !topPanel.classList.contains('module-hidden')) ? topPanel.offsetHeight : 0;
-    const bottomH = (bottomPanel && !bottomPanel.classList.contains('module-hidden')) ? bottomPanel.offsetHeight : 0;
+frameCount++;
+
+// Camera follow — center creature in visible canvas area (between panels)
+// Cache panel dimensions and update only every 5 frames for performance
+if (leader && sim.cameraMode === 'lock') {
+let leftW, rightW, topH, bottomH;
+
+if (!cachedPanelDims || frameCount - lastPanelUpdateFrame >= 5) {
+// Update cache every 5 frames
+const leftPanel = document.getElementById('panel-progress-left');
+const rightPanel = document.getElementById('panel-controls');
+const topPanel = document.getElementById('panel-top-bar');
+const bottomPanel = document.getElementById('panel-scorecard');
+leftW = (leftPanel && !leftPanel.classList.contains('module-hidden')) ? leftPanel.offsetWidth : 0;
+rightW = (rightPanel && !rightPanel.classList.contains('module-hidden')) ? rightPanel.offsetWidth : 0;
+topH = (topPanel && !topPanel.classList.contains('module-hidden')) ? topPanel.offsetHeight : 0;
+bottomH = (bottomPanel && !bottomPanel.classList.contains('module-hidden')) ? bottomPanel.offsetHeight : 0;
+cachedPanelDims = { leftW, rightW, topH, bottomH };
+lastPanelUpdateFrame = frameCount;
+} else {
+// Use cached values
+({ leftW, rightW, topH, bottomH } = cachedPanelDims);
+}
 
     // Visible center in world coordinates
     const visibleCenterX = (leftW + (worldCanvas.width - leftW - rightW) / 2) / zoom;
@@ -1027,10 +1141,14 @@ window.addEventListener('applySuggestion', (e) => {
     }
 });
 
-// --- Resize ---
+// --- Resize with throttling ---
+let resizeTimeout;
 window.addEventListener('resize', () => {
-  resizeCanvases();
-  designer.render();
+clearTimeout(resizeTimeout);
+resizeTimeout = setTimeout(() => {
+resizeCanvases();
+designer.render();
+}, 100); // Debounce 100ms
 });
 
 // --- Init ---
