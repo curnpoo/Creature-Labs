@@ -69,16 +69,20 @@ export class ProgressChart {
   }
 
   createGraphElements() {
-    // Create left panel graphs (all metrics, vertical layout)
+    // Left panel: evolution health/progress metrics
     if (this.leftContainer) {
-      this.metrics.forEach(metric => {
-        const graphEl = this.createMetricGraph(metric, 'left');
-        this.leftContainer.appendChild(graphEl.container);
-        this.graphElements.set(`left-${metric.id}`, graphEl);
+      const leftMetrics = ['allbest', 'evoscore', 'mutrate', 'stagnant', 'awards', 'popsize'];
+      leftMetrics.forEach(metricId => {
+        const metric = this.metrics.find(m => m.id === metricId);
+        if (metric) {
+          const graphEl = this.createMetricGraph(metric, 'left');
+          this.leftContainer.appendChild(graphEl.container);
+          this.graphElements.set(`left-${metric.id}`, graphEl);
+        }
       });
     }
 
-    // Create top bar graphs (key performance metrics)
+    // Top bar graphs (key live performance metrics)
     if (this.topContainer) {
       const topMetrics = ['fitness', 'allbest', 'avgspeed', 'avgstab', 'mutrate', 'awards'];
       topMetrics.forEach(metricId => {
@@ -91,10 +95,9 @@ export class ProgressChart {
       });
     }
 
-    // Create bottom panel graphs (comprehensive evolution view)
+    // Bottom panel: current run performance metrics
     if (this.bottomContainer) {
-      const bottomMetrics = ['fitness', 'allbest', 'genbest', 'avgdist', 'avgspeed', 'avgstab',
-                             'avgspin', 'avgstumbles', 'avgslip', 'evoscore', 'stagnant', 'popsize'];
+      const bottomMetrics = ['fitness', 'genbest', 'avgspeed', 'avgstab', 'avgspin', 'avgstumbles'];
       bottomMetrics.forEach(metricId => {
         const metric = this.metrics.find(m => m.id === metricId);
         if (metric) {

@@ -22,4 +22,8 @@ export const MUSCLE_CONFIG = {
 
   // Action Budget (frames between muscle state changes)
   actionBudget: 3, // Minimum frames between muscle actions (1 = every frame, 10 = every 10 frames)
+
+  // Muscle Length Limits (as ratio of base length)
+  minLength: 0.8,   // 80% - can shrink to 80% of base length
+  maxLength: 1.1,   // 110% - can extend to 110% of base length
 };

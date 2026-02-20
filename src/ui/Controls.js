@@ -16,14 +16,15 @@ export class Controls {
       'val-speed', 'val-duration', 'val-pop', 'val-strength',
       'val-jointspeed', 'val-joint', 'val-gravity', 'val-groundfric',
       'val-groundstatic', 'val-traction', 'val-bodyfric', 'val-bodystatic',
-      'val-bodyair', 'val-musrange', 'val-musmooth', 'val-distreward',
+      'val-bodyair', 'val-musrange', 'val-musmooth', 'val-musminlen', 'val-musmaxlen',
+      'val-distreward',
       'val-speedreward', 'val-jitterpen', 'val-slippen', 'val-stabmode', 'val-mut',
       'val-mutsize', 'val-zoom', 'val-cam',
       'val-hidden', 'val-neurons', 'val-elites', 'val-tournament',
       'cam-lock', 'cam-free', 'icon-pause',
       'fitness-tag', 'fitness-speed', 'fitness-stability',
       'fitness-energy', 'fitness-energy-bar', 'fitness-stumbles', 'fitness-spin',
-      'val-spinpen', 'val-maxenergy', 'val-regen', 'val-energycost'
+      'val-spinpen', 'val-maxenergy', 'val-regen', 'val-energycost', 'val-basedrain'
     ];
     ids.forEach(id => {
       this.els[id] = document.getElementById(id);
@@ -123,13 +124,23 @@ export class Controls {
       this.sim.muscleRange = v / 100;
       this.sim.creatures.forEach(c => { c.simConfig.muscleRange = this.sim.muscleRange; });
     });
-    this._bindSlider('inp-musmooth', v => {
-      this.sim.muscleSmoothing = v / 100;
-      this.sim.creatures.forEach(c => { c.simConfig.muscleSmoothing = this.sim.muscleSmoothing; });
+    this._bindSlider('inp-musminlen', v => {
+      this.sim.muscleMinLength = v / 100;
+      this.sim.syncCreatureRuntimeSettings();
     });
-    this._bindSlider('inp-musbudget', v => {
-      this.sim.muscleActionBudget = Math.max(1, Math.floor(v));
-      this.sim.creatures.forEach(c => { c.simConfig.muscleActionBudget = this.sim.muscleActionBudget; });
+    this._bindSlider('inp-musmaxlen', v => {
+      this.sim.muscleMaxLength = v / 100;
+      this.sim.syncCreatureRuntimeSettings();
+    });
+    this._bindSlider('inp-musmooth', v => {
+      // Slider 10-100 maps to smoothing 0.010-0.100 (1.0%-10.0% display)
+      const val = v / 1000;
+      this.sim.muscleSmoothing = val;
+      if (this.sim.creatures) {
+        this.sim.creatures.forEach(c => {
+          c.simConfig.muscleSmoothing = val;
+        });
+      }
     });
 
     // Energy system sliders
@@ -154,6 +165,12 @@ export class Controls {
         if (c.energy) c.energy.usagePerActuation = v / 100;
       });
     });
+    this._bindSlider('inp-basedrain', v => {
+      this.sim.baseDrain = v / 100;
+      this.sim.creatures.forEach(c => {
+        if (c.energy) c.energy.baseDrain = v / 100;
+      });
+    });
 
     this._bindSlider('inp-distreward', v => { this.sim.distanceRewardWeight = v; });
     this._bindSlider('inp-speedreward', v => { this.sim.speedRewardWeight = v / 100; });
@@ -162,11 +179,6 @@ export class Controls {
     this._bindSlider('inp-spinpen', v => { this.sim.spinPenaltyWeight = v; });
     this._bindSlider('inp-mut', v => { this.sim.mutationRate = v / 100; });
     this._bindSlider('inp-mutsize', v => { this.sim.mutationSize = v / 100; });
-
-    // NN architecture is auto-evolving - no manual controls
-    // Evolution controls only
-    this._bindSlider('inp-elites', v => { this.sim.eliteCount = v; });
-    this._bindSlider('inp-tournament', v => { this.sim.tournamentSize = v; });
 
     // Stability reward toggle
     const stabOn = document.getElementById('stab-on');
@@ -181,6 +193,33 @@ export class Controls {
       this._updateStabilityMode();
       this.updateLabels();
     };
+
+    // Energy system toggle
+    const energyOn = document.getElementById('energy-on');
+    const energyOff = document.getElementById('energy-off');
+    const updateEnergyUI = () => {
+      if (energyOn) energyOn.classList.toggle('active', this.sim.energyEnabled);
+      if (energyOff) energyOff.classList.toggle('active', !this.sim.energyEnabled);
+      // Sync to all creatures
+      this.sim.creatures.forEach(c => {
+        if (c.energy) c.energy.enabled = this.sim.energyEnabled;
+      });
+    };
+    if (energyOn) {
+      energyOn.onclick = () => {
+        this.sim.energyEnabled = true;
+        this.sim.syncCreatureRuntimeSettings();
+        updateEnergyUI();
+      };
+    }
+    if (energyOff) {
+      energyOff.onclick = () => {
+        this.sim.energyEnabled = false;
+        this.sim.syncCreatureRuntimeSettings();
+        updateEnergyUI();
+      };
+    }
+    updateEnergyUI();
 
     // Camera buttons
     const camLock = document.getElementById('cam-lock');
@@ -372,6 +411,13 @@ export class Controls {
     if (this.els['val-stabmode']) this.els['val-stabmode'].textContent = this.sim.rewardStability ? 'ON' : 'OFF';
   }
 
+  _updateEnergyMode() {
+    const energyOn = document.getElementById('energy-on');
+    const energyOff = document.getElementById('energy-off');
+    if (energyOn) energyOn.classList.toggle('active', this.sim.energyEnabled);
+    if (energyOff) energyOff.classList.toggle('active', !this.sim.energyEnabled);
+  }
+
   toggleReplayPlay(forceValue = null) {
     if (!this.sim.replayHistory.length) {
       this.sim.replayPlaying = false;
@@ -395,16 +441,17 @@ export class Controls {
     set('val-gravity', s.gravity.toFixed(1));
     set('val-groundfric', `${s.groundFriction.toFixed(2)}`);
     set('val-musrange', `${Math.round(s.muscleRange * 100)}%`);
-    set('val-musmooth', `${Math.round(s.muscleSmoothing * 100)}%`);
-    set('val-musbudget', `${s.muscleActionBudget}`);
+    set('val-musminlen', `${Math.round((s.muscleMinLength ?? 0.8) * 100)}%`);
+    set('val-musmaxlen', `${Math.round((s.muscleMaxLength ?? 1.1) * 100)}%`);
+    set('val-musmooth', `${(s.muscleSmoothing * 100).toFixed(1)}%`);
     set('val-maxenergy', `${Math.round(s.maxEnergy)}`);
     set('val-regen', `${Math.round(s.energyRegenRate)}/s`);
     set('val-energycost', `${(s.energyUsagePerActuation || 0.8).toFixed(2)}`);
+    set('val-basedrain', `${(s.baseDrain || CONFIG.ENERGY_CONFIG.baseDrain).toFixed(2)}`);
+    set('val-slippen', `${s.groundSlipPenaltyWeight}`);
     set('val-mut', `${Math.round(s.mutationRate * 100)}%`);
     set('val-mutsize', `${s.mutationSize.toFixed(2)}x`);
     set('val-zoom', `${s.zoom.toFixed(2)}x`);
-    set('val-elites', `${s.eliteCount}`);
-    set('val-tournament', `${s.tournamentSize}`);
     
     // Update NN architecture display
     const leader = s.getLeader ? s.getLeader() : null;
@@ -443,17 +490,16 @@ export class Controls {
     s.muscleStrength = CONFIG.defaultMuscleStrength;
     s.groundFriction = CONFIG.defaultGroundFriction;
     s.muscleRange = CONFIG.defaultMuscleRange;
+    s.muscleMinLength = CONFIG.defaultMuscleMinLength;
+    s.muscleMaxLength = CONFIG.defaultMuscleMaxLength;
     s.muscleSmoothing = CONFIG.defaultMuscleSmoothing;
-    s.muscleActionBudget = CONFIG.defaultMuscleActionBudget;
     s.mutationRate = CONFIG.defaultMutationRate;
     s.mutationSize = CONFIG.defaultMutationSize;
-    // NN architecture is auto-evolving - no reset needed
-    s.eliteCount = CONFIG.defaultEliteCount;
-    s.tournamentSize = CONFIG.defaultTournamentSize;
     s.zoom = CONFIG.defaultZoom;
     s.maxEnergy = CONFIG.defaultMaxEnergy;
     s.energyRegenRate = CONFIG.defaultEnergyRegenRate;
     s.energyUsagePerActuation = CONFIG.defaultEnergyUsagePerActuation;
+    s.baseDrain = CONFIG.ENERGY_CONFIG.baseDrain;
 
     const sliderValues = {
       'inp-speed': String(Math.round(s.simSpeed)),
@@ -463,16 +509,17 @@ export class Controls {
       'inp-gravity': s.gravity.toFixed(1),
       'inp-groundfric': String(Math.round(s.groundFriction * 100)),
       'inp-musrange': String(Math.round(s.muscleRange * 100)),
-      'inp-musmooth': String(Math.round(s.muscleSmoothing * 100)),
+      'inp-musminlen': String(Math.round(s.muscleMinLength * 100)),
+      'inp-musmaxlen': String(Math.round(s.muscleMaxLength * 100)),
+      'inp-musmooth': String(Math.round(s.muscleSmoothing * 1000)),
       'inp-mut': String(Math.round(s.mutationRate * 100)),
       'inp-mutsize': String(Math.round(s.mutationSize * 100)),
-      // NN architecture auto-evolves - no sliders
-      'inp-elites': String(Math.round(s.eliteCount)),
-      'inp-tournament': String(Math.round(s.tournamentSize)),
       'inp-zoom': String(Math.round(s.zoom * 100)),
       'inp-maxenergy': String(Math.round(s.maxEnergy)),
       'inp-regen': String(Math.round(s.energyRegenRate)),
-      'inp-energycost': String(Math.round(s.energyUsagePerActuation * 100))
+      'inp-energycost': String(Math.round(s.energyUsagePerActuation * 100)),
+      'inp-basedrain': String(Math.round(s.baseDrain * 100)),
+      'inp-slippen': String(s.groundSlipPenaltyWeight)
     };
 
     Object.entries(sliderValues).forEach(([id, value]) => {

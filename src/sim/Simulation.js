@@ -69,6 +69,8 @@ export class Simulation {
     this.bodyStaticFriction = CONFIG.defaultBodyStaticFriction;
     this.bodyAirFriction = CONFIG.defaultBodyAirFriction;
     this.muscleRange = CONFIG.defaultMuscleRange;
+    this.muscleMinLength = CONFIG.defaultMuscleMinLength;
+    this.muscleMaxLength = CONFIG.defaultMuscleMaxLength;
     this.muscleSmoothing = CONFIG.defaultMuscleSmoothing;
     this.muscleActionBudget = CONFIG.defaultMuscleActionBudget;
     this.distanceRewardWeight = CONFIG.defaultDistanceRewardWeight;
@@ -86,6 +88,7 @@ export class Simulation {
     this.energyRegenRate = CONFIG.defaultEnergyRegenRate;
     this.energyUsagePerActuation = CONFIG.defaultEnergyUsagePerActuation;
     this.minEnergyForActuation = CONFIG.defaultMinEnergyForActuation;
+    this.baseDrain = CONFIG.ENERGY_CONFIG.baseDrain;
     this.energyEfficiencyBonus = CONFIG.defaultEnergyEfficiencyBonus;
     this.mutationRate = CONFIG.defaultMutationRate;
     this.mutationSize = CONFIG.defaultMutationSize;
@@ -129,6 +132,8 @@ export class Simulation {
       muscleStrength: this.muscleStrength,
       jointMoveSpeed: this.jointMoveSpeed,
       muscleRange: this.muscleRange,
+      muscleMinLength: this.muscleMinLength,
+      muscleMaxLength: this.muscleMaxLength,
       muscleSmoothing: this.muscleSmoothing,
       muscleActionBudget: this.muscleActionBudget,
       bodyFriction: this.bodyFriction,
@@ -142,6 +147,7 @@ export class Simulation {
       energyRegenRate: this.energyRegenRate,
       energyUsagePerActuation: this.energyUsagePerActuation,
       minEnergyForActuation: this.minEnergyForActuation,
+      baseDrain: this.baseDrain ?? CONFIG.ENERGY_CONFIG.baseDrain,
       // Auto-evolving NN architecture
       currentGeneration: this.generation,
       baseFitness: this.championFitness > 0 ? this.championFitness : 0
@@ -189,6 +195,16 @@ export class Simulation {
       this.creatures.push(creature);
     }
     // console.log(`Spawned ${this.creatures.length} creatures`);
+    // DEBUG: Check creatures spawned correctly
+    const validCreatures = this.creatures.filter(c => c.bodies.length > 0).length;
+    const creaturesWithMuscles = this.creatures.filter(c => c.muscles.length > 0).length;
+    if (validCreatures !== this.creatures.length) {
+      console.error(`Gen ${this.generation}: Only ${validCreatures}/${this.creatures.length} creatures have bodies!`);
+    }
+    if (creaturesWithMuscles === 0) {
+      console.error(`Gen ${this.generation}: No creatures have muscles!`);
+    }
+    console.log(`Gen ${this.generation}: Spawned ${this.creatures.length} creatures, ${validCreatures} with bodies, ${creaturesWithMuscles} with muscles`);
   }
 
   startSimulation() {
@@ -512,13 +528,18 @@ this.world = null;
       score -= Math.abs(distance) * 5;
     }
     
-    // That's it! No penalties for:
-    // - Being unstable while learning
-    // - Air time while jumping
-    // - Ground slip while finding grip
-    // - Movement jerkiness while experimenting
-    // - Minor spinning while balancing
-    
+    // 4. Energy depletion penalty - penalize running out of energy
+    if (this.energyEnabled && fitness.energyViolations > 0) {
+      score -= fitness.energyViolations * 3;
+    }
+
+    // 5. Ground slip penalty - penalize sliding/jitter locomotion
+    // groundSlip = smoothed avg |vx| of grounded nodes (px/s). Jitter keeps ALL nodes sliding
+    // at high speed; real walking has planted feet (near-zero slip).
+    if (this.groundSlipPenaltyWeight > 0 && fitness.groundSlip > 0) {
+      score -= fitness.groundSlip * this.groundSlipPenaltyWeight;
+    }
+
     return score;
   }
 
@@ -670,27 +691,32 @@ this.world = null;
     let simulatedSec = 0;
     if (!this.paused && (!this.sandboxMode || !this.sandboxPaused) && this.world) {
       // Clamp physics steps to prevent lag spikes while maintaining accuracy
-const stepsToRun = Math.min(5, Math.max(1, this.simSpeed));
+      const stepsToRun = Math.min(25, Math.max(1, this.simSpeed));
 
       for (let i = 0; i < stepsToRun; i++) {
         this.syncCreatureRuntimeSettings();
         const time = (this.simTimeElapsed + i * fixedDtSec) * 10;
-        this.creatures.forEach(c => c.update(time, groundY));
+        this.creatures.forEach(c => c.update(time, groundY, fixedDtSec));
         
         // Step physics
         this.world.step(fixedDtSec);
         
         // Anti-spin stabilization - apply AFTER each physics step
+        // Constant per-step factor (speed-independent): ~1.5% loss per step = ~60% per second
+        const angularDampingPerStep = 0.985;
         this.creatures.forEach(c => {
           c.bodies.forEach(b => {
             const pos = b.getPosition();
+            const vel = b.getLinearVelocity();
             const grounded = (pos.y * SCALE + CONFIG.nodeRadius) >= (groundY - 1.5);
             if (grounded) {
-              const vel = b.getLinearVelocity();
               b.setLinearVelocity(Vec2(vel.x * this.tractionDamping, vel.y));
+            } else {
+              // Airborne: light linear damping to kill passive oscillations between ground contacts
+              b.setLinearVelocity(Vec2(vel.x * 0.992, vel.y * 0.992));
             }
-            // Moderate angular damping to prevent spinning
-            const damped = b.getAngularVelocity() * 0.90;
+            // Constant per-step angular damping — speed-independent
+            const damped = b.getAngularVelocity() * angularDampingPerStep;
             b.setAngularVelocity(Math.max(-5, Math.min(5, damped)));
           });
         });
@@ -766,14 +792,17 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
       c.simConfig.muscleStrength = this.muscleStrength;
       c.simConfig.jointMoveSpeed = this.jointMoveSpeed;
       c.simConfig.muscleRange = this.muscleRange;
+      c.simConfig.muscleMinLength = this.muscleMinLength;
+      c.simConfig.muscleMaxLength = this.muscleMaxLength;
       c.simConfig.muscleSmoothing = this.muscleSmoothing;
-      c.simConfig.muscleActionBudget = this.muscleActionBudget;
-      c.simConfig.selfCollision = this.selfCollision;
-      c.simConfig.bodyFriction = this.bodyFriction;
-      c.simConfig.bodyStaticFriction = this.bodyStaticFriction;
-      c.simConfig.bodyAirFriction = this.bodyAirFriction;
+    c.simConfig.muscleActionBudget = this.muscleActionBudget;
+    c.simConfig.selfCollision = this.selfCollision;
+    c.simConfig.bodyFriction = this.bodyFriction;
+    c.simConfig.bodyStaticFriction = this.bodyStaticFriction;
+    c.simConfig.bodyAirFriction = this.bodyAirFriction;
+    c.simConfig.energyEnabled = this.energyEnabled;
 
-      c.updateRuntimeSettings();
+    c.updateRuntimeSettings();
 
       // Update body friction
       c.bodies.forEach(b => {

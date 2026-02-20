@@ -179,7 +179,7 @@ canvas {
     z-index: 10;
     display: grid;
     grid-template-columns: min-content 1fr min-content;
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
         "top-bar    top-bar   top-bar"
         "left       canvas    right"
@@ -246,8 +246,15 @@ canvas {
     min-width: 200px;
     border-right: 1px solid var(--border-color);
     border-radius: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+#left-metrics-container {
+    flex: 1;
     overflow-y: auto;
-    max-height: 100%;
+    min-height: 0;
 }
 
 /* ─── Right Panel ─── */
@@ -258,7 +265,7 @@ canvas {
     border-left: 1px solid var(--border-color);
     border-radius: 0;
     overflow-y: auto;
-    max-height: 100%;
+    min-height: 0;
     padding: 6px 8px;
 }
 

@@ -1041,12 +1041,26 @@ lastPanelUpdateFrame = frameCount;
 
   drawGhosts(ctx);
 
-  // Draw creatures
+  // Draw creatures - DEBUG: log if creatures should be visible
   if (sim.showGhosts) {
-    sim.creatures.forEach(c => c.draw(ctx, c === leader));
+    if (sim.creatures.length === 0) {
+      console.warn(`Gen ${sim.generation}: No creatures to render!`);
+    } else {
+      // DEBUG: Check first creature
+      const firstC = sim.creatures[0];
+      if (!firstC.bodies || firstC.bodies.length === 0) {
+        console.warn(`Gen ${sim.generation}: Creatures have no bodies!`);
+      }
+      sim.creatures.forEach(c => c.draw(ctx, c === leader));
+    }
   } else if (leader) {
     leader.draw(ctx, true);
   }
+  
+  // DEBUG: Visual indicator of camera bounds
+  ctx.strokeStyle = 'rgba(255,0,0,0.3)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(sim.cameraX, sim.cameraY, viewW, viewH);
 
   if (challengeTool !== 'none') {
     ctx.fillStyle = 'rgba(255,255,255,0.7)';

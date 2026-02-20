@@ -53,7 +53,7 @@ export function createNode(world, x, y, radius, options = {}) {
     type: 'dynamic',
     position: Vec2(x / SCALE, y / SCALE),
     angularDamping: options.angularDamping ?? 0.5, // Moderate damping
-    linearDamping: options.linearDamping ?? 0.1
+    linearDamping: options.linearDamping ?? 0.2
   });
   
   body.createFixture({
@@ -130,8 +130,8 @@ export function createBone(world, bodyA, bodyAOffset, bodyB, bodyBOffset, length
   const joint = world.createJoint(DistanceJoint({
     bodyA: bodyA,
     bodyB: bodyB,
-    frequencyHz: options.frequencyHz ?? 60, // Stiff but stable (60Hz)
-    dampingRatio: options.dampingRatio ?? 0.7, // Good damping to prevent oscillation
+    frequencyHz: options.frequencyHz ?? 15, // Soft enough to avoid ground chattering
+    dampingRatio: options.dampingRatio ?? 1.0, // Critically damped by default — no oscillation
     length: length / SCALE,
     localAnchorA: bodyAOffset ? Vec2(bodyAOffset.x / SCALE, bodyAOffset.y / SCALE) : Vec2(0, 0),
     localAnchorB: bodyBOffset ? Vec2(bodyBOffset.x / SCALE, bodyBOffset.y / SCALE) : Vec2(0, 0)
@@ -174,9 +174,7 @@ export function createMuscle(world, bodyA, bodyAOffset, bodyB, bodyBOffset, axis
     enableLimit: true,
     lowerTranslation: minLen - restLengthMeters, // Relative to rest position
     upperTranslation: maxLen - restLengthMeters, // Relative to rest position
-    enableMotor: true,
-    maxMotorForce: options.maxForce ?? 50, // Reduced from 100
-    motorSpeed: 0
+    enableMotor: false // Motor disabled - we use force-based actuation
   }));
   
   return joint;

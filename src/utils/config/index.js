@@ -44,6 +44,8 @@ export const CONFIG = {
   defaultJointMoveSpeed: MUSCLE_CONFIG.moveSpeed,
   defaultJointFreedom: MUSCLE_CONFIG.jointFreedom,
   defaultMuscleRange: MUSCLE_CONFIG.range,
+  defaultMuscleMinLength: MUSCLE_CONFIG.minLength,
+  defaultMuscleMaxLength: MUSCLE_CONFIG.maxLength,
   defaultMuscleSmoothing: MUSCLE_CONFIG.smoothing,
   defaultMuscleActionBudget: MUSCLE_CONFIG.actionBudget,
 
@@ -51,6 +53,7 @@ export const CONFIG = {
   defaultDistanceRewardWeight: FITNESS_CONFIG.distanceWeight,
   defaultSpeedRewardWeight: FITNESS_CONFIG.speedWeight,
   defaultStabilityRewardWeight: FITNESS_CONFIG.stabilityWeight,
+  defaultStumblePenaltyWeight: FITNESS_CONFIG.stumblePenaltyWeight,
   defaultJitterPenaltyWeight: FITNESS_CONFIG.jitterPenalty,
   defaultGroundSlipPenaltyWeight: FITNESS_CONFIG.groundSlipPenalty,
   defaultSpinPenaltyWeight: FITNESS_CONFIG.spinPenalty,
@@ -67,6 +70,9 @@ export const CONFIG = {
   defaultHiddenLayers: EVOLUTION_CONFIG.hiddenLayers,
   defaultNeuronsPerLayer: EVOLUTION_CONFIG.neuronsPerLayer,
   defaultActivation: EVOLUTION_CONFIG.activation,
+
+  // Full config modules (for direct access)
+  ENERGY_CONFIG,
 
   // Visual
   nodeRadius: PHYSICS_CONFIG.nodeRadius,

@@ -9,23 +9,24 @@ export const ENERGY_CONFIG = {
   startingEnergy: 100,          // Starting energy (% of max, or absolute value)
 
   // Energy Costs
-  usagePerActuation: 0.05,      // Energy cost per unit of muscle actuation (0-1 range) - reduced from 0.8
-  minEnergyForActuation: 0,     // Minimum energy required to actuate muscles (0 = always allow)
+  usagePerActuation: 1.0, // Energy cost per unit of muscle actuation (0-1 range)
+  baseDrain: 0.01, // Low base drain - ~2.4/sec with 4 muscles, sustainable with rest
+  minEnergyForActuation: 0, // Minimum energy required to actuate muscles (0 = always allow)
 
   // Energy Regeneration
-  regenRate: 60,                // Base energy regeneration per second - increased from 35
+  regenRate: 8, // Lower base regen - must rest to recover
   regenInactivityBonus: true,   // Bonus regen when muscles are inactive
   regenMinMultiplier: 0.5,      // Minimum regen even when fully active (50% of regenRate) - up from 20%
   regenWhileGrounded: 1.0,      // Regen multiplier when grounded (1.0 = normal)
   regenWhileAirborne: 0.8,      // Regen multiplier when airborne - up from 0.5
 
-  // Energy-Based Strength Modifiers - DRAMATIC falloff (energy is critical!)
-  strengthAtFullEnergy: 1.0, // Strength multiplier at 100% energy
-  strengthAt75Energy: 0.85, // Strength at 75% energy
-  strengthAt50Energy: 0.6, // Strength at 50% energy - significantly weaker
-  strengthAt25Energy: 0.3, // Strength at 25% energy - barely functional
-  strengthAt20Energy: 0.15, // Strength at 20% energy - nearly depleted
-  strengthAtZeroEnergy: 0.05, // Strength at 0% energy - almost no movement
+  // Energy-Based Strength Modifiers - Less punishing curve
+  strengthAtFullEnergy: 1.0,  // Strength multiplier at 100% energy
+  strengthAt75Energy: 0.9,    // Strength at 75% energy
+  strengthAt50Energy: 0.75,   // Strength at 50% energy - still decent
+  strengthAt25Energy: 0.55,   // Strength at 25% energy - weakened but not crippled
+  strengthAt20Energy: 0.45,   // Strength at 20% energy
+  strengthAtZeroEnergy: 0.35, // Strength at 0% energy - 35% is minimum
 
   // Fitness Rewards
   efficiencyBonus: 0.5,         // Fitness bonus for energy efficiency (distance/energy)

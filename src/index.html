@@ -728,40 +728,6 @@
   </div>
 </div>
 
-<div class="control-group">
-                        <div class="control-label">
-                            Elite Count <span
-                                class="control-val"
-                                id="val-elites"
-                            >2</span>
-                        </div>
-                        <input
-                            type="range"
-                            id="inp-elites"
-                            min="1"
-                            max="10"
-                            value="2"
-                            step="1"
-                        >
-                    </div>
-
-                    <div class="control-group">
-                        <div class="control-label">
-                            Tournament Size <span
-                                class="control-val"
-                                id="val-tournament"
-                            >3</span>
-                        </div>
-                        <input
-                            type="range"
-                            id="inp-tournament"
-                            min="2"
-                            max="8"
-                            value="3"
-                            step="1"
-                        >
-                    </div>
-
                     <div class="section-divider"></div>
                     <div class="section-title text-amber-400">Physics</div>
 
@@ -817,52 +783,54 @@
 
                     <div class="control-group">
                         <div class="control-label">
-                            Muscle Range <span
+                            Muscle Min Length <span
                                 class="control-val"
-                                id="val-musrange"
-                            >50%</span>
-                            <span class="text-xs text-gray-500">(50% = can shrink to half size)</span>
+                                id="val-musminlen"
+                            >80%</span>
+                            <span class="text-xs text-gray-500">(50-100%)</span>
                         </div>
                         <input
                             type="range"
-                            id="inp-musrange"
-                            min="20"
-                            max="80"
-                            value="50"
+                            id="inp-musminlen"
+                            min="50"
+                            max="100"
+                            value="80"
                             step="5"
                         >
                     </div>
 
                     <div class="control-group">
                         <div class="control-label">
-                            Muscle Smoothing <span
+                            Muscle Max Length <span
+                                class="control-val"
+                                id="val-musmaxlen"
+                            >110%</span>
+                            <span class="text-xs text-gray-500">(100-150%)</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-musmaxlen"
+                            min="100"
+                            max="150"
+                            value="110"
+                            step="5"
+                        >
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Muscle Speed <span
                                 class="control-val"
                                 id="val-musmooth"
-                            >22%</span>
+                            >10.0%</span>
+                            <span class="text-xs text-gray-500">(1.0%=slow/no jitter · 10.0%=fast/may jitter)</span>
                         </div>
 <input
                 type="range"
                 id="inp-musmooth"
-                min="2"
-                max="50"
-                value="22"
-                step="1"
-              >
-            </div>
-
-            <div class="control-group">
-              <div class="control-label">
-                Action Budget <span
-                  class="control-val"
-                  id="val-musbudget"
-                >3</span>
-              </div>
-              <input
-                type="range"
-                id="inp-musbudget"
-                min="1"
-                max="20"
-                value="3"
+                min="10"
+                max="100"
+                value="100"
                 step="1"
               >
             </div>
@@ -906,24 +874,65 @@
                         >
                     </div>
 
+<div class="control-group">
+<div class="control-label">
+Energy Cost <span
+class="control-val"
+id="val-energycost"
+>0.80</span>
+</div>
+<input
+type="range"
+id="inp-energycost"
+min="20"
+max="200"
+value="80"
+step="10"
+>
+</div>
+
+<div class="control-group">
+<div class="control-label">
+Base Drain <span
+class="control-val"
+id="val-basedrain"
+>0.02</span>
+</div>
+<input
+type="range"
+id="inp-basedrain"
+min="0"
+max="10"
+value="2"
+step="1"
+>
+</div>
+
+<div class="control-group">
+<div class="control-label">Energy System</div>
+<div class="flex gap-2 mt-1">
+<button id="energy-on" class="toggle-btn flex-1"><i class="fas fa-check mr-1"></i>On</button>
+<button id="energy-off" class="toggle-btn flex-1"><i class="fas fa-xmark mr-1"></i>Off</button>
+</div>
+</div>
+
+                    <div class="section-divider"></div>
+                    <div class="section-title text-pink-400">Fitness Penalties</div>
+
                     <div class="control-group">
                         <div class="control-label">
-                            Energy Cost <span
-                                class="control-val"
-                                id="val-energycost"
-                            >0.80</span>
+                            Ground Slip Penalty <span class="control-val" id="val-slippen">5</span>
                         </div>
                         <input
                             type="range"
-                            id="inp-energycost"
-                            min="20"
-                            max="200"
-                            value="80"
-                            step="10"
+                            id="inp-slippen"
+                            min="0"
+                            max="20"
+                            value="5"
+                            step="1"
                         >
+                        <span class="text-xs text-gray-500">(0=off · higher=penalize jitter sliding more)</span>
                     </div>
-
-                    <!-- Fitness weights removed - now uses simplified distance-first system -->
 
                     <div class="section-divider"></div>
                     <div class="section-title text-pink-400">Mutation</div>
@@ -970,7 +979,7 @@
                         gaussian mutation.
                     </div>
                 </div>
-
+                </div>
 
 <!-- ═══ BOTTOM PANEL: Training Details ═══ -->
 <div
@@ -981,7 +990,7 @@ style="grid-area: bottom; border-top: 1px solid var(--border-color); border-radi
                     <!-- TRAINING MODE DETAILS -->
                     <div id="training-details" class="h-full flex flex-col">
                         <div class="sim-panel-title" style="border: none; padding: 4px 0 2px">
-                            <span><i class="fas fa-table-list mr-1"></i> Evolution Metrics</span>
+                            <span><i class="fas fa-chart-bar mr-1"></i> Current Run</span>
                             <span id="score-mode" class="text-cyan-300 text-[9px]">TRAINING</span>
                         </div>
                         <!-- Individual metric graphs in horizontal layout -->
@@ -1028,24 +1037,19 @@ style="grid-area: bottom; border-top: 1px solid var(--border-color); border-radi
                 <div
                     id="panel-progress-left"
                     class="sim-panel"
-                    style="grid-area: left; width: 320px; border-right: 1px solid var(--border-color); border-radius: 0; overflow-y: auto; max-height: 100%"
+                    style="grid-area: left; width: 320px; border-right: 1px solid var(--border-color); border-radius: 0;"
                 >
                     <div
                         class="sim-panel-title"
                         style="border-color: rgba(0, 242, 255, 0.3)"
                     >
-                        <span><i class="fas fa-chart-area mr-1"></i> Metrics
-                            History</span>
+                        <span><i class="fas fa-dna mr-1"></i> Evolution</span>
                         <span id="left-graph-meta" class="text-cyan-300"
                         >G1</span>
                     </div>
 
-                    <!-- Individual metric graphs container -->
-                    <div id="left-metrics-container" style="padding: 4px 8px 8px; display: flex; flex-direction: column; gap: 2px;"></div>
-
                     <!-- ═══ EVOLUTION FEEDBACK ═══ -->
-                    <div id="evolution-feedback" style="padding: 0 10px">
-                        <div class="section-divider"></div>
+                    <div id="evolution-feedback" style="padding: 0 10px 6px; flex-shrink: 0;">
                         <div class="sim-panel-title" style="padding: 6px 0; border: none">
                             <span><i class="fas fa-heartbeat mr-1"></i> Evolution Health</span>
                             <span id="evo-status-badge" class="evo-status-badge severity-info">○ Starting</span>
@@ -1143,7 +1147,10 @@ id="sandbox-slip-left"
 </div>
 </div>
 </div>
-                    </div> <!-- End training-sections -->
+                    </div>
+
+                    <!-- Individual metric graphs container -->
+                    <div id="left-metrics-container" style="padding: 4px 8px 8px; display: flex; flex-direction: column; gap: 4px;"></div>
                 </div>
 
             <div class="edge-tab-rail edge-top-rail pointer-events-auto">
@@ -1159,9 +1166,9 @@ id="sandbox-slip-left"
                 <button
                     class="edge-tab active"
                     data-target="panel-progress-left"
-                    title="Toggle Metrics Panel"
+                    title="Toggle Evolution Panel"
                 >
-                    <i class="fas fa-chart-area"></i> Metrics
+                    <i class="fas fa-dna"></i> Evolution
                 </button>
             </div>
             <div class="edge-tab-rail edge-right-rail pointer-events-auto">
@@ -1177,9 +1184,9 @@ id="sandbox-slip-left"
                 <button
                     class="edge-tab active"
                     data-target="panel-scorecard"
-                    title="Toggle History Panel"
+                    title="Toggle Current Run Panel"
                 >
-                    <i class="fas fa-history"></i> History
+                    <i class="fas fa-chart-bar"></i> Current Run
                 </button>
             </div>
         </div>

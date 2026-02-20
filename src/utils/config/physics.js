@@ -11,7 +11,7 @@ export const PHYSICS_CONFIG = {
   // Ground/Surface Properties (Matter.js range: 0-1)
   groundFriction: 0.95,         // Ground kinetic friction (0.95 = high grip, prevents sliding exploits)
   groundStaticFriction: 1.0,    // Ground static friction (maximum resistance to start sliding)
-  tractionDamping: 0.75,        // Velocity damping on ground contact (0.75 = keep 25%, more aggressive)
+  tractionDamping: 0.97,        // Velocity damping on ground contact per step (0.97 = 3% loss/step ≈ 84% loss/sec)
 
   // Body/Node Properties (Matter.js range: 0-1)
   bodyFriction: 0.85,           // Body-to-body kinetic friction (increased to prevent slipping)

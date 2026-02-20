@@ -49,18 +49,19 @@ export class Creature {
       stumbleLatched: false
     };
 
-    // Energy system
-    const maxEnergy = simConfig.maxEnergy ?? CONFIG.defaultMaxEnergy;
-    this.energy = {
-      current: maxEnergy,
-      max: maxEnergy,
-      regenRate: simConfig.energyRegenRate ?? CONFIG.defaultEnergyRegenRate,
-      usagePerActuation: simConfig.energyUsagePerActuation ?? CONFIG.defaultEnergyUsagePerActuation,
-      minForActuation: simConfig.minEnergyForActuation ?? CONFIG.defaultMinEnergyForActuation,
-      enabled: simConfig.energyEnabled ?? CONFIG.defaultEnergyEnabled,
-      totalUsed: 0,
-      efficiency: 1.0
-    };
+  // Energy system
+  const maxEnergy = simConfig.maxEnergy ?? CONFIG.defaultMaxEnergy;
+  this.energy = {
+    current: maxEnergy,
+    max: maxEnergy,
+    regenRate: simConfig.energyRegenRate ?? CONFIG.defaultEnergyRegenRate,
+    usagePerActuation: simConfig.energyUsagePerActuation ?? CONFIG.defaultEnergyUsagePerActuation,
+    minForActuation: simConfig.minEnergyForActuation ?? CONFIG.defaultMinEnergyForActuation,
+    enabled: simConfig.energyEnabled ?? CONFIG.defaultEnergyEnabled,
+    baseDrain: simConfig.baseDrain ?? CONFIG.ENERGY_CONFIG?.baseDrain ?? 0.15,
+    totalUsed: 0,
+    efficiency: 1.0
+  };
 
     // Create physics bodies (nodes)
     const bodyMap = {};
@@ -302,11 +303,13 @@ export class Creature {
 
       if (schema.type === 'muscle') {
         // Create prismatic joint with hard limits to prevent over-extension
+        const minLen = schema.minLength ?? (this.simConfig.muscleMinLength ?? 0.8);
+        const maxLen = schema.maxLength ?? (this.simConfig.muscleMaxLength ?? 1.1);
         const muscleJoint = createMuscle(this.world, bodyA, null, bodyB, null, null, {
           restLength: lengthPx,
-          minLength: schema.minLength ?? lengthPx * 0.5,  // Default 50% min
-          maxLength: schema.maxLength ?? lengthPx * 1.5,  // Default 150% max
-          maxForce: 100 // Strong enough to move but limits won't break
+          minLength: lengthPx * minLen,
+          maxLength: lengthPx * maxLen,
+          maxForce: 100
         });
         
         // Store muscle info for force-based actuation
@@ -318,15 +321,17 @@ export class Creature {
           currentLength: lengthPx,
           index: m,
           smoothSignal: 0,
-          restLength: lengthPx
+          restLength: lengthPx,
+          minLength: minLen, // store limits so spring target matches joint hard stops
+          maxLength: maxLen
         });
         m++;
       } else {
     // Create distance joint for bone - RIGID but allows rotation at nodes
       // High frequency = rigid bone that maintains length
       const joint = createBone(this.world, bodyA, null, bodyB, null, lengthPx, {
-        frequencyHz: 30, // Rigid bone structure
-        dampingRatio: 0.5 // Moderate damping for stability
+        frequencyHz: 15, // Lower stiffness (spring ∝ freq²) reduces ground-chattering impulses
+        dampingRatio: 1.0 // Critically damped — no overshoot, no resonance
       });
         this.bones.push(joint);
       }
@@ -391,7 +396,7 @@ export class Creature {
 
           const limiter = createBone(this.world, bodyA, null, bodyB, null, lengthPx, {
             frequencyHz: 60, // Rigid for fixed joints
-            dampingRatio: 0.7
+            dampingRatio: 1.0 // Critically damped — no oscillation in fixed joints
           });
           limiter.isAngleLimiter = true;
           limiter.isFixedJoint = true;
@@ -429,9 +434,10 @@ export class Creature {
    * @param {number} time - simulation time
    * @returns {Float32Array}
    */
-  buildInputs(groundY, time) {
+  buildInputs(groundY, time, dt = 1/60) {
     const numBodies = this.bodies.length;
     const numMuscles = this.muscles.length;
+    const normFactor = dt * 60;
     // Inputs: per body (5) + gait phase (3) + per muscle (4)
     const inputs = new Float32Array(numBodies * 5 + 3 + numMuscles * 4);
     const center = this.getCenter();
@@ -452,10 +458,10 @@ export class Creature {
       inputs[offset] = ((pos.x * SCALE) - center.x) / this.span;
       inputs[offset + 1] = ((pos.y * SCALE) - center.y) / this.span;
 
-      // Smooth velocity inputs to prevent NN spam
+      // Smooth velocity inputs to prevent NN spam - normalized by dt
       const rawVelX = Math.max(-1, Math.min(1, vel.x * SCALE * 0.05)); // Reduced sensitivity
       const rawVelY = Math.max(-1, Math.min(1, vel.y * SCALE * 0.05));
-      const velAlpha = 0.1; // Smooth velocity changes
+      const velAlpha = 0.1 * normFactor; // Smooth velocity changes - normalized
       this.smoothedVelocities[velOffset] = this.smoothedVelocities[velOffset] * (1 - velAlpha) + rawVelX * velAlpha;
       this.smoothedVelocities[velOffset + 1] = this.smoothedVelocities[velOffset + 1] * (1 - velAlpha) + rawVelY * velAlpha;
       
@@ -487,9 +493,10 @@ export class Creature {
       // Muscle length change velocity - SMOOTHED to prevent noise
       const prevLength = m.prevLength || m.baseLength;
       const rawLengthVelocity = (m.currentLength - prevLength) / Math.max(0.001, m.baseLength);
-      // Smooth the velocity input
+      // Smooth the velocity input - normalized by dt
       if (!m.smoothedLengthVelocity) m.smoothedLengthVelocity = 0;
-      m.smoothedLengthVelocity = m.smoothedLengthVelocity * 0.8 + rawLengthVelocity * 0.2;
+      const muscleVelAlpha = Math.min(0.4, Math.max(0.02, 0.2 * normFactor));
+      m.smoothedLengthVelocity = m.smoothedLengthVelocity * (1 - muscleVelAlpha) + rawLengthVelocity * muscleVelAlpha;
       inputs[muscleOffset + 1] = Math.max(-1, Math.min(1, m.smoothedLengthVelocity * 5)); // Reduced multiplier
 
       // Previous muscle activation (what we did last frame) - for coordination
@@ -521,8 +528,10 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
    * Neural network forward pass → apply outputs to muscles.
    * @param {number} time
    * @param {number} groundY
+   * @param {number} dt - delta time in seconds for frame-rate normalization
    */
-  update(time, groundY) {
+  update(time, groundY, dt = 1/60) {
+    const normFactor = dt * 60;
     // Update angle limiter stiffness
     const freedom = this.simConfig.jointFreedom !== undefined ? this.simConfig.jointFreedom : 1.0;
     const rigid = 1 - freedom;
@@ -535,15 +544,15 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
     if (this.muscles.length === 0) return;
 
     // Build inputs and run NN
-    const inputs = this.buildInputs(groundY, time);
+    const inputs = this.buildInputs(groundY, time, dt);
     const outputs = this.brain.forward(inputs);
 
     // Apply NN outputs to muscles (tanh output in [-1, 1])
     const strength = this.simConfig.muscleStrength || 1.2;
     const moveSpeed = Math.max(0.2, Math.min(2.2, this.simConfig.jointMoveSpeed || 1.0));
     const rangeScale = this.simConfig.muscleRange ?? 0.8; // Default 80% range
-    const smoothingBase = this.simConfig.muscleSmoothing ?? 0.22;
-    const smoothing = Math.min(0.5, Math.max(0.02, smoothingBase));
+    const smoothingBase = this.simConfig.muscleSmoothing ?? 0.10;
+    const smoothing = Math.min(0.5, Math.max(0.01, smoothingBase));
 
     // Pre-calculate which bodies are grounded
     const isGrounded = new Map();
@@ -552,54 +561,43 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
       isGrounded.set(b, (pos.y * SCALE + CONFIG.nodeRadius) >= (groundY - 2));
     });
 
-    let totalJerk = 0;
-    let totalActuation = 0;
-    let energyUsedThisFrame = 0;
+  let totalJerk = 0;
+  let totalActuation = 0;
+  let energyUsedThisFrame = 0;
+  let groundedMuscles = 0; // Count muscles touching ground for regen bonus
 
-    // Calculate average activation for coordination incentives
-    const avgActivation = outputs.reduce((sum, out) => sum + Math.abs(out || 0), 0) / Math.max(1, outputs.length);
-    
-// SMOOTH MUSCLE CONTROL with inertia
-    // NN outputs desired target, muscle moves with realistic physics
-    this.muscles.forEach((m, i) => {
+  // Calculate average activation for coordination incentives
+  const avgActivation = outputs.reduce((sum, out) => sum + Math.abs(out || 0), 0) / Math.max(1, outputs.length);
+
+  // SMOOTH MUSCLE CONTROL with speed limit
+  // NN outputs desired target, muscle moves with realistic physics
+  this.muscles.forEach((m, i) => {
       // NN output is the desired target (-1 = contract, 0 = base, +1 = extend)
       const desiredTarget = outputs[i] || 0;
       
       // Initialize muscle state
       if (m.currentTarget === undefined) m.currentTarget = 0;
-      if (m.targetVelocity === undefined) m.targetVelocity = 0;
-      if (m.smoothedDesired === undefined) m.smoothedDesired = 0;
-      
-      // VERY slow smoothing on desired target (prevents wild NN outputs)
-      // 0.1 = 10% toward new target per frame (very heavy smoothing)
-      m.smoothedDesired += (desiredTarget - m.smoothedDesired) * 0.1;
-      
-      // Calculate acceleration toward desired target
-      // Spring force pulls muscle toward target
-      const displacement = m.smoothedDesired - m.currentTarget;
-      const springForce = displacement * 0.05; // Weak spring
-      
-      // Apply acceleration to velocity (with damping/friction)
-      m.targetVelocity += springForce;
-      m.targetVelocity *= 0.85; // Heavy damping (friction)
-      
-      // Apply velocity to position
-      m.currentTarget += m.targetVelocity;
-      
-      // Clamp to valid range
+
+      // Rate-limit how fast the signal can change per physics step.
+      // This is the real jitter fix: muscles can't reverse direction faster than
+      // this rate allows, so high-frequency vibration exploitation is physically impossible.
+      // smoothing=0.10 → 0.30/step max → ~4Hz max oscillation (fast walking)
+      // smoothing=0.03 → 0.09/step max → ~1.3Hz max (slow, deliberate)
+      // smoothing=0.01 → 0.03/step max → ~0.4Hz max (very slow)
+      const maxDeltaPerStep = Math.max(0.005, smoothing * 3.0);
+      const rawDelta = desiredTarget - m.currentTarget;
+      m.currentTarget += Math.sign(rawDelta) * Math.min(Math.abs(rawDelta), maxDeltaPerStep);
       m.currentTarget = Math.max(-1, Math.min(1, m.currentTarget));
-      
+
       // Store for visualization and NN feedback
       m.smoothSignal = m.currentTarget;
-      
-      // DEBUG: Log muscle state (only log first muscle to avoid spam)
-      totalJerk += Math.abs(m.targetVelocity);
 
-      // Per-muscle ground contact
-      const bodyAGrounded = isGrounded.get(m.bodyA) || false;
-      const bodyBGrounded = isGrounded.get(m.bodyB) || false;
+    // Per-muscle ground contact
+    const bodyAGrounded = isGrounded.get(m.bodyA) || false;
+    const bodyBGrounded = isGrounded.get(m.bodyB) || false;
+    if (bodyAGrounded || bodyBGrounded) groundedMuscles++;
 
-      let muscleStrengthMultiplier;
+    let muscleStrengthMultiplier;
       if (bodyAGrounded && bodyBGrounded) {
         muscleStrengthMultiplier = 1.0;
       } else if (bodyAGrounded || bodyBGrounded) {
@@ -608,25 +606,29 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
         muscleStrengthMultiplier = 0.15;
       }
 
-      // Energy system
-      let energyMultiplier = 1.0;
-      if (this.energy.enabled) {
-        const actuationMagnitude = Math.abs(m.currentTarget);
-        const energyCost = actuationMagnitude * this.energy.usagePerActuation;
-        energyUsedThisFrame += energyCost;
+    // Energy system - use currentTarget (what's actually applied) for accurate cost
+    let energyMultiplier = 1.0;
+    if (this.energy.enabled) {
+      const actuationMagnitude = Math.abs(m.currentTarget || 0);
+      const baseDrain = this.energy.baseDrain || 0;
+      const energyCost = (actuationMagnitude * this.energy.usagePerActuation) + baseDrain;
+      energyUsedThisFrame += energyCost;
 
-        const energyRatio = Math.max(0, Math.min(1, this.energy.current / this.energy.max));
+      const energyRatio = Math.max(0, Math.min(1, this.energy.current / this.energy.max));
 
-        if (energyRatio <= 0) {
-          energyMultiplier = 0.0;
-        } else if (energyRatio < 0.2) {
-          energyMultiplier = energyRatio * 2.0;
-        } else if (energyRatio < 0.5) {
-          energyMultiplier = 0.4 + (energyRatio - 0.2) * 1.5;
-        } else {
-          energyMultiplier = 0.85 + (energyRatio - 0.5) * 0.3;
-        }
+      // Less punishing energy multiplier curve
+      if (energyRatio <= 0) {
+        energyMultiplier = 0.35; // Minimum 35% strength at zero energy
+      } else if (energyRatio < 0.25) {
+        energyMultiplier = 0.35 + (energyRatio / 0.25) * 0.2; // 35% to 55%
+      } else if (energyRatio < 0.5) {
+        energyMultiplier = 0.55 + ((energyRatio - 0.25) / 0.25) * 0.2; // 55% to 75%
+      } else if (energyRatio < 0.75) {
+        energyMultiplier = 0.75 + ((energyRatio - 0.5) / 0.25) * 0.15; // 75% to 90%
+      } else {
+        energyMultiplier = 0.9 + ((energyRatio - 0.75) / 0.25) * 0.1; // 90% to 100%
       }
+    }
 
       // MUSCLES CAN PUSH AND PULL (like artificial actuators)
       // Signal > 0 = PUSH (extend, increase distance)
@@ -641,13 +643,13 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
       const currentDist = Math.sqrt(dx * dx + dy * dy);
       m.currentLength = currentDist;
 
-      // Signal directly maps to target length adjustment
-      // -1 = contract to 50% of base length
-      // 0 = maintain current length
-      // +1 = extend to 125% of base length (tighter clamp)
-      const extensionRange = m.baseLength * 0.25; // Can extend 25% longer (125% max) - tighter clamp
-      const contractionRange = m.baseLength * 0.50; // Can contract 50% shorter (50% min)
-      
+      // Signal maps to target length — use stored joint limits so spring never fights the hard stop
+      // This eliminates jitter caused by spring pulling beyond the prismatic joint's physical limits
+      const maxLen = m.maxLength ?? 1.1;
+      const minLen = m.minLength ?? 0.8;
+      const extensionRange = m.baseLength * (maxLen - 1.0);   // e.g. 0.1 for 110% max
+      const contractionRange = m.baseLength * (1.0 - minLen); // e.g. 0.2 for 80% min
+
       const smoothSignal = m.currentTarget;
       const targetLength = m.baseLength + (smoothSignal * (smoothSignal > 0 ? extensionRange : contractionRange));
 
@@ -657,25 +659,27 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
         const dirX = dx / currentDist;
         const dirY = dy / currentDist;
 
-// Apply force to reach target length with optimized damping
+// Spring drives muscle to rate-limited target. Fixed constants — strength slider controls cap.
       const error = currentDist - targetLength;
-      const springConstant = 7.0; // Slightly stiffer (was 5.0)
+      const springConstant = 7.0;
       let forceMagnitude = -springConstant * error;
 
-      // Heavy damping to kill oscillations
+      // Velocity damping along muscle axis kills spring oscillation
       const velA = m.bodyA.getLinearVelocity();
       const velB = m.bodyB.getLinearVelocity();
       const relVelX = (velB.x - velA.x) * SCALE;
       const relVelY = (velB.y - velA.y) * SCALE;
       const relVelAlong = relVelX * dirX + relVelY * dirY;
 
-      // Slightly increased damping for tighter control
-      const damping = 7.5; // Was 6.0, increased a hair
+      const damping = 7.5;
       forceMagnitude -= damping * relVelAlong;
 
       // Apply force if significant
       if (Math.abs(forceMagnitude) > 1.5) {
         forceMagnitude = Math.max(-90, Math.min(90, forceMagnitude)); // Slightly higher force cap (was 80)
+        
+        // Apply all multipliers: slider strength, energy level, ground contact
+        forceMagnitude *= (strength * energyMultiplier * muscleStrengthMultiplier);
 
           // Apply force
           const forceX = (forceMagnitude * dirX) / SCALE;
@@ -685,8 +689,9 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
         }
       }
       
-      // Store for visualization
-      m.currentExtension = m.currentTarget;
+      // Store actual physical extension for visualization (not the target)
+      // Positive = stretched (extended), Negative = compressed (contracted)
+      m.currentExtension = (m.currentLength - m.baseLength) / m.baseLength;
 
       m.currentSignal = m.currentTarget;
       m.prevActivation = m.currentTarget; // Store for next frame's NN input
@@ -714,20 +719,23 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
     const avgAct = totalActuation / Math.max(1, this.muscles.length);
     this.stats.actuationLevel = this.stats.actuationLevel * 0.9 + avgAct * 0.1;
 
-    // Update energy system
-    if (this.energy.enabled) {
-      this.energy.current = Math.max(0, this.energy.current - energyUsedThisFrame);
-      this.energy.totalUsed += energyUsedThisFrame;
+  // Update energy system
+  if (this.energy.enabled) {
+    this.energy.current = Math.max(0, this.energy.current - energyUsedThisFrame);
+    this.energy.totalUsed += energyUsedThisFrame;
 
-      const regenMultiplier = 0.2 + (1.0 - avgAct) * 0.8;
-      const dtSec = 1 / CONFIG.fixedStepHz;
-      const regenAmount = this.energy.regenRate * regenMultiplier * dtSec;
-      this.energy.current = Math.min(this.energy.max, this.energy.current + regenAmount);
+    // Energy regen: lower base, scales with inactivity, bonus when grounded
+    const regenMultiplier = 0.2 + (1.0 - avgAct) * 0.3; // 0.2 to 0.5 range
+    const groundedRatio = this.muscles.length > 0 ? groundedMuscles / this.muscles.length : 0;
+    const groundedBonus = groundedRatio > 0.5 ? 1.25 : 1.0; // 25% bonus when 50%+ muscles grounded
+    const dtSec = 1 / CONFIG.fixedStepHz;
+    const regenAmount = this.energy.regenRate * regenMultiplier * groundedBonus * dtSec;
+    this.energy.current = Math.min(this.energy.max, this.energy.current + regenAmount);
 
-      if (this.energy.totalUsed > 0) {
-        this.energy.efficiency = this.stats.maxX / Math.max(1, this.energy.totalUsed);
-      }
+    if (this.energy.totalUsed > 0) {
+      this.energy.efficiency = this.stats.maxX / Math.max(1, this.energy.totalUsed);
     }
+  }
   }
 
   sampleFitness(dtSec, groundY) {
@@ -975,33 +983,37 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
       ctx.moveTo(p1.x, p1.y);
       ctx.lineTo(p2.x, p2.y);
 
-      // Activation level: uses smoothSignal from muscle
-      // Positive = PUSH (extend), Negative = PULL (contract)
+      // Actual physical extension: positive = stretched, negative = contracted
       const extension = m.currentExtension || 0;
       const activation = Math.abs(extension);
 
-      // Visual thickness: thicker when activated
+      // Visual thickness: THICKER when contracted, THINNER when extended
+      // Negative extension = contracted = very thick
+      // Positive extension = stretched = thin
       const baseWidth = isLeader ? 6 : 3;
-      const thickness = baseWidth * (1 + activation * 0.5); // 1x to 1.5x thickness
-      ctx.lineWidth = Math.max(2, Math.min(12, thickness));
+      const normalizedExt = Math.max(-1, Math.min(1, extension * 3)); // Scale for visual effect
+      const thickness = baseWidth * (1.8 - normalizedExt * 0.8); // 2.6x when contracted, 1x when extended
+      ctx.lineWidth = Math.max(2, Math.min(14, thickness));
 
-      // Color: BLUE for push (positive), RED for pull (negative), gray when relaxed
+      // Color: BLUE for extended (stretched), RED for contracted, gray when relaxed
+      // Colors get MORE vibrant with activation
+      const satBoost = 0.4 + activation * 0.6; // More saturated when working
       let r, g, b_color;
-      if (extension > 0.05) {
-        // PUSHING - Blue
-        r = Math.floor(100 * (1 - activation));
-        g = Math.floor(150 * (1 - activation));
+      if (extension > 0.03) {
+        // EXTENDED - Blue (stretched)
+        r = Math.floor(40 + 20 * (1 - satBoost));
+        g = Math.floor(80 + 70 * satBoost);
         b_color = 255;
-      } else if (extension < -0.05) {
-        // PULLING - Red
+      } else if (extension < -0.03) {
+        // CONTRACTED - Red
         r = 255;
-        g = Math.floor(100 * (1 - activation));
-        b_color = Math.floor(100 * (1 - activation));
+        g = Math.floor(30 + 50 * (1 - satBoost));
+        b_color = Math.floor(30 + 30 * (1 - satBoost));
       } else {
         // Relaxed - Gray
-        r = 180;
-        g = 180;
-        b_color = 180;
+        r = 150;
+        g = 150;
+        b_color = 150;
       }
       ctx.strokeStyle = `rgb(${r},${g},${b_color})`;
 
