@@ -27,7 +27,7 @@ export function createGround(world, groundY, options = {}) {
   
   // Create a long ground plane
   ground.createFixture({
-    shape: Edge(Vec2(-10000, 0), Vec2(10000, 0)),
+    shape: Edge(Vec2(-100000, 0), Vec2(100000, 0)),
     friction: options.friction ?? 0.8,
     restitution: 0.0
   });

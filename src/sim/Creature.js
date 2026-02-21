@@ -1,6 +1,111 @@
 import { createNode, createBone, createMuscle, createPolygonBody, cleanup, SCALE, planck, World, Vec2, Body, Circle, Edge, PrismaticJoint, DistanceJoint, RevoluteJoint } from '../sim/Physics.js';
-import { NeuralNetwork } from '../nn/NeuralNetwork.js';
+import { NeuralNetwork, gaussianRandom } from '../nn/NeuralNetwork.js';
 import { CONFIG } from '../utils/config.js';
+
+/**
+ * Transfer weights from a parent network to a new network with a different architecture.
+ *
+ * When architecture evolves (layers/neurons added or removed), we preserve as much
+ * learned knowledge as possible rather than starting from scratch:
+ *   - First hidden layer always maps to first hidden layer (input→H1)
+ *   - Last hidden layer always maps to last hidden layer (HN→output)
+ *   - Middle layers map by position index; new middle layers Xavier-init fresh
+ *   - Within a layer: copy the min(old, new) neuron overlap; Xavier-init extras
+ *
+ * This lets a creature that learned to walk retain that behavior even after its
+ * network grows a new layer — the new layer initializes near-identity and learns
+ * refinements without disrupting the base gait.
+ *
+ * @param {Float32Array} oldDNA  - Weights from the parent's architecture
+ * @param {{ hiddenLayers, neuronsPerLayer }} prevArch - Parent's architecture
+ * @param {{ hiddenLayers, neuronsPerLayer }} newArch  - Child's architecture
+ * @param {number} numInputs  - NN input size (determined by creature morphology)
+ * @param {number} numOutputs - NN output size (= muscle count)
+ * @returns {Float32Array} New weight array sized for newArch
+ */
+function transferWeights(oldDNA, prevArch, newArch, numInputs, numOutputs) {
+  // Build the full layer-size array for an architecture
+  function buildLayers(arch) {
+    const l = [numInputs];
+    for (let i = 0; i < arch.hiddenLayers; i++) l.push(arch.neuronsPerLayer);
+    l.push(numOutputs);
+    return l;
+  }
+
+  // Total weight count for a layer-size array
+  function calcSize(l) {
+    let n = 0;
+    for (let i = 1; i < l.length; i++) n += l[i - 1] * l[i] + l[i];
+    return n;
+  }
+
+  function xavierStd(fanIn, fanOut) {
+    return Math.sqrt(2 / (fanIn + fanOut));
+  }
+
+  // Byte-offset of layer l's weight block (1-based: l=1 = first connection)
+  function oldOffset(l) {
+    let off = 0;
+    for (let i = 1; i < l; i++) off += oldL[i - 1] * oldL[i] + oldL[i];
+    return off;
+  }
+  function newOffset(l) {
+    let off = 0;
+    for (let i = 1; i < l; i++) off += newL[i - 1] * newL[i] + newL[i];
+    return off;
+  }
+
+  const oldL = buildLayers(prevArch);
+  const newL = buildLayers(newArch);
+  const result = new Float32Array(calcSize(newL));
+
+  for (let l = 1; l < newL.length; l++) {
+    const nIn = newL[l - 1];
+    const nOut = newL[l];
+    const std = xavierStd(nIn, nOut);
+    const no = newOffset(l);
+
+    // Xavier-init all weights in this layer first (safe default for new connections)
+    for (let j = 0; j < nOut; j++) {
+      for (let k = 0; k < nIn; k++) result[no + j * nIn + k] = gaussianRandom() * std;
+      result[no + nOut * nIn + j] = 0; // zero biases
+    }
+
+    // Find the corresponding old layer:
+    //   l=1             → always maps to old layer 1  (first connection preserved)
+    //   l=newL.length-1 → always maps to old last layer (output weights preserved)
+    //   middle          → same index if it exists in old, else stays Xavier-init
+    let ol;
+    if (l === 1) {
+      ol = 1;
+    } else if (l === newL.length - 1) {
+      ol = oldL.length - 1;
+    } else if (l < oldL.length - 1) {
+      ol = l; // same position in both architectures
+    } else {
+      ol = -1; // no matching old layer — keep Xavier init
+    }
+
+    if (ol >= 1 && ol < oldL.length) {
+      const oIn = oldL[ol - 1];
+      const oOut = oldL[ol];
+      const oo = oldOffset(ol);
+
+      // Copy the overlapping block (min neurons on each axis)
+      const copyOut = Math.min(oOut, nOut);
+      const copyIn  = Math.min(oIn, nIn);
+      for (let j = 0; j < copyOut; j++) {
+        for (let k = 0; k < copyIn; k++) {
+          result[no + j * nIn + k] = oldDNA[oo + j * oIn + k];
+        }
+        // Copy bias for this output neuron
+        result[no + nOut * nIn + j] = oldDNA[oo + oOut * oIn + j];
+      }
+    }
+  }
+
+  return result;
+}
 
 /**
  * Creature with a real neural network brain.
@@ -241,27 +346,24 @@ export class Creature {
       // Generation 1: Start very simple
       // Random initialization with bias toward simple networks
       if (generation === 1) {
-        // Gen 1: mostly simple networks
+        // Gen 1: always ≥1 hidden layer — linear networks cannot learn locomotion
         const rand = Math.random();
-        if (rand < 0.5) {
-          hiddenLayers = 0; // 50% chance: no hidden layers (direct)
-          neuronsPerLayer = 4;
-        } else if (rand < 0.8) {
-          hiddenLayers = 1; // 30% chance: 1 layer
-          neuronsPerLayer = 4 + Math.floor(Math.random() * 4); // 4-8 neurons
-        } else {
-          hiddenLayers = 1; // 20% chance: slightly bigger
-          neuronsPerLayer = 8 + Math.floor(Math.random() * 8); // 8-16 neurons
+        if (rand < 0.50) {  // 50%: simple 1-layer network
+          hiddenLayers = 1;
+          neuronsPerLayer = 4 + Math.floor(Math.random() * 8); // 4–12 neurons
+        } else {            // 50%: moderate 2-layer network
+          hiddenLayers = 2;
+          neuronsPerLayer = 8 + Math.floor(Math.random() * 8); // 8–16 neurons
         }
       } else {
-        // Random initialization with more diversity
-        hiddenLayers = Math.floor(Math.random() * 4); // 0-3 layers
-        neuronsPerLayer = 4 + Math.floor(Math.random() * 16); // 4-20 neurons
+        // Random initialization — never allow 0 hidden layers
+        hiddenLayers = 1 + Math.floor(Math.random() * 3); // 1–3 layers
+        neuronsPerLayer = 4 + Math.floor(Math.random() * 12); // 4–16 neurons
       }
     }
     
-    // Clamp to reasonable bounds
-    hiddenLayers = Math.max(0, Math.min(6, hiddenLayers));
+    // Clamp to reasonable bounds — never allow 0 hidden layers
+    hiddenLayers = Math.max(1, Math.min(6, hiddenLayers));
     neuronsPerLayer = Math.max(4, Math.min(32, neuronsPerLayer));
 
     const layers = [numInputs];
@@ -273,12 +375,28 @@ export class Creature {
     // Create the neural network brain
     this.brain = new NeuralNetwork(layers);
 
-    // Apply DNA weights if provided and architecture matches
+    // Apply DNA weights to the brain:
+    //   1. Exact match  → load directly (normal inheritance)
+    //   2. Architecture mutated (prevArchitecture present) → smart transfer:
+    //        copy compatible weights, Xavier-init new connections.
+    //        Preserves learned behaviors across architectural changes.
+    //   3. No match / no prev arch → fresh Xavier init
     if (dnaWeights && dnaWeights.length === this.brain.getWeightCount()) {
       this.brain.fromArray(dnaWeights);
-      this.dna = dnaWeights; // Use the passed DNA weights
+      this.dna = dnaWeights;
+    } else if (dnaWeights && dna && dna.prevArchitecture) {
+      // Architecture was mutated — transfer compatible weights from parent
+      const transferred = transferWeights(
+        dnaWeights,
+        dna.prevArchitecture,
+        { hiddenLayers, neuronsPerLayer },
+        numInputs,
+        numOutputs
+      );
+      this.brain.fromArray(transferred);
+      this.dna = transferred;
     } else {
-      // DNA length mismatch - architecture changed, use fresh random weights
+      // DNA length mismatch with no prev arch — fresh Xavier init (correct architecture kept)
       this.dna = this.brain.toArray();
     }
     
@@ -589,6 +707,10 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
       m.currentTarget += Math.sign(rawDelta) * Math.min(Math.abs(rawDelta), maxDeltaPerStep);
       m.currentTarget = Math.max(-1, Math.min(1, m.currentTarget));
 
+      // Track actuation jerk: magnitude of change in activation per step
+      const prevAct = m.prevActivation || 0;
+      totalJerk += Math.abs(m.currentTarget - prevAct);
+
       // Store for visualization and NN feedback
       m.smoothSignal = m.currentTarget;
 
@@ -830,6 +952,7 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
       spinAccumulated: this.stats.spinAccumulated,
       actuationJerk: this.stats.actuationJerk,
       actuationLevel: this.stats.actuationLevel,
+      coordinationBonus: Math.max(0, this.stats.coordinationBonus),
       groundSlip: this.stats.groundSlip,
       energyViolations: this.stats.energyViolations,
       energyEfficiency: this.energy.efficiency,

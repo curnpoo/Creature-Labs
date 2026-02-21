@@ -5,6 +5,7 @@
  *   • Color fill = activation level (blue ↔ neutral ↔ orange)
  *   • Connection lines colored + sized by weight magnitude
  *   • Subtle glow on active neurons
+ *   • Architecture info overlay (layers, neurons, params)
  *   • Clean layer labels
  */
 export class Visualizer {
@@ -13,6 +14,9 @@ export class Visualizer {
     this.ctx = canvasEl ? canvasEl.getContext('2d') : null;
     this._dpr = window.devicePixelRatio || 1;
     this._resized = false;
+    // Track prev architecture for change animation
+    this._prevArchKey = null;
+    this._archChangedAt = 0;
   }
 
   _ensureHiDPI() {
@@ -65,11 +69,72 @@ export class Visualizer {
     const layers = nn.layerSizes;
     const activations = nn.activations;
     const numLayers = layers.length;
+    const arch = leader.architecture || {};
+    const hiddenLayers = arch.hiddenLayers ?? (numLayers - 2);
+    const neuronsPerLayer = arch.neuronsPerLayer ?? layers[1];
+    const totalParams = nn.weightCount || nn.getWeightCount?.() || 0;
+
+    // Detect architecture change → flash indicator
+    const archKey = `${hiddenLayers}:${neuronsPerLayer}`;
+    if (archKey !== this._prevArchKey) {
+      if (this._prevArchKey !== null) {
+        this._archChangedAt = performance.now();
+      }
+      this._prevArchKey = archKey;
+    }
+    const msSinceChange = performance.now() - this._archChangedAt;
+    const showChangePulse = msSinceChange < 2000; // 2s flash
+
+    // --- Architecture info bar (top of canvas) ---
+    const INFO_H = 20; // pixels reserved at top for info bar
+    const padX = 40;
+    const padY = INFO_H + 8;
+    const padBottom = 18;
+
+    // Info bar background
+    if (showChangePulse) {
+      const pulse = Math.max(0, 1 - msSinceChange / 2000);
+      ctx.fillStyle = `rgba(0, 242, 255, ${pulse * 0.12})`;
+      ctx.fillRect(0, 0, w, INFO_H);
+    }
+
+    // Architecture text
+    ctx.font = 'bold 10px "Inter", monospace';
+    ctx.textBaseline = 'middle';
+
+    const paramStr = totalParams >= 1000
+      ? `${(totalParams / 1000).toFixed(1)}k params`
+      : `${totalParams} params`;
+
+    let archLabel, archColor;
+    if (hiddenLayers === 0) {
+      // Linear network — should never happen after our fixes, but label it clearly
+      archLabel = `LINEAR — no hidden layers | ${paramStr}`;
+      archColor = 'rgba(255, 80, 80, 0.9)';
+    } else {
+      const layerStr = hiddenLayers === 1 ? '1 hidden layer' : `${hiddenLayers} hidden layers`;
+      archLabel = `${layerStr} × ${neuronsPerLayer} neurons | ${paramStr}`;
+      archColor = showChangePulse ? 'rgba(0,242,255,1)' : 'rgba(0,242,255,0.65)';
+    }
+
+    // Left-aligned arch info
+    ctx.textAlign = 'left';
+    ctx.fillStyle = archColor;
+    ctx.fillText(archLabel, padX, INFO_H / 2);
+
+    // Right-aligned: "EVOLVED" flash when arch just changed
+    if (showChangePulse) {
+      const pulse = Math.max(0, 1 - msSinceChange / 2000);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = `rgba(0, 255, 160, ${pulse})`;
+      ctx.font = 'bold 10px "Inter", monospace';
+      ctx.fillText('⟳ ARCHITECTURE EVOLVED', w - padX, INFO_H / 2);
+    }
+
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
 
     // --- Layout ---
-    const padX = 40;
-    const padY = 22;
-    const padBottom = 18;
     const usableW = w - padX * 2;
     const usableH = h - padY - padBottom;
     const layerSpacing = usableW / Math.max(1, numLayers - 1);
@@ -123,10 +188,8 @@ export class Visualizer {
           const lw = Math.min(2.5, 0.3 + absW * 0.7);
 
           if (weight > 0) {
-            // Positive weights: blue-cyan
             ctx.strokeStyle = `rgba(80, 180, 255, ${alpha})`;
           } else {
-            // Negative weights: warm red-orange
             ctx.strokeStyle = `rgba(255, 100, 80, ${alpha})`;
           }
           ctx.lineWidth = lw;
@@ -151,12 +214,10 @@ export class Visualizer {
         // Activation color: smooth blue → dark gray → orange
         let fillR, fillG, fillB;
         if (val > 0) {
-          // Positive: toward warm orange
           fillR = Math.round(40 + 215 * val);
           fillG = Math.round(40 + 130 * val);
           fillB = Math.round(60 - 30 * val);
         } else {
-          // Negative: toward cool blue
           const a = -val;
           fillR = Math.round(40 - 10 * a);
           fillG = Math.round(40 + 80 * a);
@@ -210,9 +271,13 @@ export class Visualizer {
     ctx.textAlign = 'center';
     for (let l = 0; l < numLayers; l++) {
       let label;
-      if (l === 0) label = `IN(${layers[l]})`;
-      else if (l === numLayers - 1) label = `OUT(${layers[l]})`;
-      else label = `H${l}(${layers[l]})`;
+      if (l === 0) {
+        label = `IN(${layers[l]})`;
+      } else if (l === numLayers - 1) {
+        label = `OUT(${layers[l]})`;
+      } else {
+        label = `H${l}(${layers[l]})`;
+      }
       ctx.fillText(label, padX + l * layerSpacing, h - 4);
     }
     ctx.textAlign = 'left';

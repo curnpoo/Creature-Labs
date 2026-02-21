@@ -1,30 +1,43 @@
 /**
  * Fitness Function Parameters
- * Controls rewards and penalties for evolved behaviors
+ * Controls rewards and penalties for evolved behaviors.
+ *
+ * Fields used directly in Simulation.creatureScore():
+ *   distanceWeight, coordinationBonusWeight, actuationJerkPenalty,
+ *   groundSlipPenalty, spinThreshold, spinPenalty, stumblePenalty, backwardsPenalty
+ *
+ * Legacy fields kept for config/index.js backward compatibility
+ * (referenced as CONFIG.defaultSpeedRewardWeight etc.) but not applied in the score:
+ *   speedWeight, stabilityWeight, stumblePenaltyWeight, jitterPenalty, spinAccumulatedPenalty
  */
 export const FITNESS_CONFIG = {
-  // Primary Rewards
-  distanceWeight: 250,          // Reward for distance traveled (primary objective)
-  speedWeight: 0.25,            // Reward for movement speed
-  stabilityWeight: 1.0,         // Reward for upright/stable posture
-  rewardStability: true,        // Enable by default - gentle upright encouragement helps locomotion
+  // PRIMARY reward: distance traveled × this multiplier
+  distanceWeight: 10,
 
-  // Gait Quality Penalties (REDUCED to allow learning)
-  spinPenalty: 2000,            // Penalty for spinning - reduced from 15000
-  spinAccumulatedPenalty: 20,   // Penalty for total accumulated spin - reduced from 150
-  jitterPenalty: 5,             // Penalty for erratic muscle actuation - reduced from 60
-  groundSlipPenalty: 5,         // Penalty for slipping on ground - reduced from 35
-  airtimePenalty: 0.1,          // Penalty for time spent airborne - reduced from 0.3
-  stumblePenalty: 2,            // Penalty for stumbling - reduced from 15
-  stumblePenaltyWeight: 2,     // UI-configurable stumble penalty weight
+  // REAL GAIT BONUS: reward anti-phase muscle alternation (walking pattern)
+  coordinationBonusWeight: 2,
 
-  // Advanced Penalties
-  energyViolationPenalty: 500,  // Penalty for suspicious energy gains (exploit detection)
+  // ANTI-FLAIL: penalize chaotic high-frequency actuation changes
+  actuationJerkPenalty: 5,
 
-  // Penalty Scaling
-  gaitPenaltyScale: 1.5,        // Multiplier for gait penalties when stability is enabled
-  distanceScaling: 0.02,        // Distance-based penalty scaling (longer = stricter)
+  // ANTI-DRAG: penalize grounded nodes sliding horizontally
+  groundSlipPenalty: 0.15,
 
-  // Actuation Bonuses
-  actuationLevelBonus: 0.8,     // Speed bonus for high actuation (0.2 base + 0.8 × actuation)
+  // ANTI-SPIN: sustained rotation threshold and per-unit penalty
+  spinThreshold: 0.5,
+  spinPenalty: 6,
+
+  // ANTI-COLLAPSE: penalty per stumble event
+  stumblePenalty: 3,
+
+  // ANTI-BACKWARDS: extra multiplier for negative distance
+  backwardsPenalty: 8,
+
+  // --- Legacy fields (read by config/index.js, not applied in creatureScore) ---
+  speedWeight: 0,
+  stabilityWeight: 0,
+  stumblePenaltyWeight: 3,
+  jitterPenalty: 5,
+  spinAccumulatedPenalty: 0,
+  rewardStability: false,
 };

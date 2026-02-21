@@ -154,10 +154,50 @@ export class Simulation {
     };
   }
 
+  _setupWorldListeners() {
+    this.world.on('begin-contact', (contact) => {
+      const fixtureA = contact.getFixtureA();
+      const fixtureB = contact.getFixtureB();
+      const bodyA = fixtureA.getBody();
+      const bodyB = fixtureB.getBody();
+      if (bodyA.creatureId === bodyB.creatureId) {
+        if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB)) {
+          contact.setEnabled(false);
+        }
+      }
+    });
+    this.world.on('pre-solve', (contact) => {
+      const fixtureA = contact.getFixtureA();
+      const fixtureB = contact.getFixtureB();
+      const bodyA = fixtureA.getBody();
+      const bodyB = fixtureB.getBody();
+      if (bodyA.creatureId === bodyB.creatureId) {
+        if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB)) {
+          contact.setEnabled(false);
+        }
+      }
+    });
+  }
+
+  _recreateWorld() {
+    if (this.world) {
+      cleanup(this.world);
+      this.world = null;
+    }
+    // Reset challenge body references — they belonged to the old world
+    this.challengeBodies = [];
+    this.world = createEngine(this.gravity);
+    this._setupWorldListeners();
+    this.ground = createGround(this.world, this.getGroundY(), { friction: this.groundFriction });
+    this.rebuildChallengeBodies();
+  }
+
   spawnGeneration(dnaArray = null, winnerArchitecture = null) {
     // console.log('Spawning generation');
     this.creatures.forEach(c => c.destroy());
     this.creatures = [];
+    this._recreateWorld();        // fresh physics world each generation
+    this.simTimeElapsed = 0;      // fresh gait clock each generation
 
     const bounds = this.designBounds();
     // console.log('Design bounds:', bounds);
@@ -214,44 +254,6 @@ export class Simulation {
 
     this.stopLoop();
     this.clearSimulation();
-
-    this.world = createEngine(this.gravity); // Earth gravity ~9.8 m/s²
-
-    // Set up collision filtering
-this.world.on('begin-contact', (contact) => {
-  const fixtureA = contact.getFixtureA();
-  const fixtureB = contact.getFixtureB();
-  const bodyA = fixtureA.getBody();
-  const bodyB = fixtureB.getBody();
-
-  // Skip collision ONLY between DIRECTLY connected bodies (jointed together)
-  // Non-connected bodies from same creature should collide (self-collision)
-  if (bodyA.creatureId === bodyB.creatureId) {
-    if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB)) {
-      contact.setEnabled(false); // Connected bodies don't collide
-    }
-  }
-});
-
-this.world.on('pre-solve', (contact) => {
-  const fixtureA = contact.getFixtureA();
-  const fixtureB = contact.getFixtureB();
-  const bodyA = fixtureA.getBody();
-  const bodyB = fixtureB.getBody();
-
-  // Skip collision ONLY between DIRECTLY connected bodies (jointed together)
-  // Non-connected bodies from same creature should collide (self-collision)
-  if (bodyA.creatureId === bodyB.creatureId) {
-    if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB)) {
-      contact.setEnabled(false); // Connected bodies don't collide
-    }
-    // else: non-connected bodies DO collide (prevents folding)
-  }
-});
-
-    this.ground = createGround(this.world, this.getGroundY(), {
-      friction: this.groundFriction
-    });
 
     this.generation = 1;
     this.timer = this.simDuration;
@@ -492,52 +494,48 @@ this.world = null;
 
   creatureScore(creature) {
     const fitness = creature.getFitnessSnapshot();
-    const progressX = Number.isFinite(fitness.maxX) ? fitness.maxX : creature.getX();
-    const distance = this.distMetersContinuousFromX(progressX);
-    const gaitPenaltyScale = this.rewardStability ? 1.5 : 1.0;
+    const distance = this.distMetersContinuousFromX(
+      Number.isFinite(fitness.maxX) ? fitness.maxX : creature.getX()
+    );
 
-    const distanceScale = 1 + distance * 0.02;
+    // ANTI-LAUNCH: distance capped at 200m — a launch covers 8000m but only 200m counts.
+    // A creature must walk faster to score above this, not launch harder.
+    const cappedDistance = Math.min(distance, 200);
 
-    const energyBonus = this.energyEnabled && fitness.energyEfficiency > 0
-      ? fitness.energyEfficiency * this.energyEfficiencyBonus
-      : 0;
+    // ANTI-LAUNCH: discount reward by square of grounded ratio.
+    // 80% airborne → (0.2)² = 0.04× reward. 20% airborne → (0.8)² = 0.64× reward.
+    // Real locomotion requires sustained ground contact; launches spend most time flying.
+    const groundedRatio = Math.max(0, 1 - fitness.airtimePct / 100);
+    const airtimeDiscount = Math.max(0.02, groundedRatio * groundedRatio);
 
-    // SIMPLIFIED FITNESS: Distance-first approach
-    // Let creatures discover walking naturally, only penalize extremes
-    
-    // Base score: primarily distance traveled
-    let score = distance * 10; // Strong distance reward
-    
-    // Small bonus for speed (encourages forward movement)
-    score += fitness.speed * 0.5;
-    
-    // Energy efficiency bonus (if enabled)
-    score += energyBonus;
-    
-    // ONLY EXTREME PENALTIES:
-    // 1. Falling over (stumbles) - moderate penalty
-    score -= fitness.stumbles * 2;
-    
-    // 2. Excessive spinning (> 1 rad/s sustained) - creatures shouldn't just spin
-    if (fitness.spin > 1.0) {
-      score -= (fitness.spin - 1.0) * 5;
+    // PRIMARY: forward displacement, capped and discounted by airtime
+    let score = cappedDistance * 10 * airtimeDiscount;
+
+    // REAL GAIT BONUS: reward anti-phase muscle alternation (walking pattern)
+    score += fitness.coordinationBonus * 2;
+
+    // ANTI-FLAIL: penalize chaotic high-frequency actuation changes
+    score -= fitness.actuationJerk * 5;
+
+    // ANTI-DRAG: penalize grounded nodes sliding horizontally
+    score -= fitness.groundSlip * 0.15;
+
+    // ANTI-SPIN: penalize sustained rotation above threshold
+    if (fitness.spin > 0.5) {
+      score -= (fitness.spin - 0.5) * 6;
     }
-    
-    // 3. Going backwards (negative distance)
+
+    // ANTI-COLLAPSE: penalize falling
+    score -= fitness.stumbles * 3;
+
+    // ANTI-BACKWARDS: heavy penalty for moving backwards
     if (distance < 0) {
-      score -= Math.abs(distance) * 5;
-    }
-    
-    // 4. Energy depletion penalty - penalize running out of energy
-    if (this.energyEnabled && fitness.energyViolations > 0) {
-      score -= fitness.energyViolations * 3;
+      score -= Math.abs(distance) * 8;
     }
 
-    // 5. Ground slip penalty - penalize sliding/jitter locomotion
-    // groundSlip = smoothed avg |vx| of grounded nodes (px/s). Jitter keeps ALL nodes sliding
-    // at high speed; real walking has planted feet (near-zero slip).
-    if (this.groundSlipPenaltyWeight > 0 && fitness.groundSlip > 0) {
-      score -= fitness.groundSlip * this.groundSlipPenaltyWeight;
+    // Energy efficiency bonus (only if enabled)
+    if (this.energyEnabled && fitness.energyEfficiency > 0) {
+      score += fitness.energyEfficiency * this.energyEfficiencyBonus;
     }
 
     return score;
@@ -655,9 +653,9 @@ this.world = null;
     }));
 
     const nextGenDNA = Evolution.evolve(evalCreatures, this.popSize, {
-      mutationRate: this.mutationRate,
+      mutationRate: this.effectiveMutationRate(),
       mutationSize: this.mutationSize,
-      eliteCount: this.eliteCount
+      stagnantGens: this.stagnantGens
     });
 
     this.generation++;
@@ -730,15 +728,6 @@ this.world = null;
       // console.log(`Timer: ${this.timer.toFixed(1)}s, Gen: ${this.generation}`);
     }
   }
-
-    // Update ground position (only X changes to follow camera, Y stays fixed)
-    if (this.ground) {
-      const currentPos = this.ground.getPosition();
-      this.ground.setPosition(Vec2(
-        (this.cameraX + window.innerWidth / 2) / SCALE,
-        currentPos.y
-      ));
-    }
 
     // Leader tracking
     const rawLeader = this.getLeader();

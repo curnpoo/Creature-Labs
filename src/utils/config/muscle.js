@@ -4,8 +4,8 @@
  */
 export const MUSCLE_CONFIG = {
   // Base Muscle Properties
-  strength: 2.0,                // Base muscle strength (2.0 = very strong for force-based muscles)
-  moveSpeed: 2.0,               // Muscle response speed (2.0 = quick)
+  strength: 1.0, // Base muscle strength (1.0 = 100%, normal strength)
+  moveSpeed: 0.1, // Muscle response speed (0.1 = slow/minimum)
   range: 1.0,                   // Muscle range multiplier (1.0 = 80% max change with 0.8 amplitude)
   smoothing: 0.10,              // Muscle signal smoothing (0.10 = responsive)
 
