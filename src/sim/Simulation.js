@@ -81,6 +81,7 @@ export class Simulation {
     this.groundSlipPenaltyWeight = CONFIG.defaultGroundSlipPenaltyWeight;
     this.spinPenaltyWeight = CONFIG.defaultSpinPenaltyWeight;
     this.spawnX = 60;
+    this.spawnCenterX = 60; // updated at spawn time to creature's center pixel
 
     // Energy system settings
     this.energyEnabled = CONFIG.defaultEnergyEnabled;
@@ -117,13 +118,14 @@ export class Simulation {
   }
 
   designBounds() {
-    let minX = Infinity, minY = Infinity, maxY = -Infinity;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     this.nodes.forEach(n => {
       minX = Math.min(minX, n.x);
+      maxX = Math.max(maxX, n.x);
       minY = Math.min(minY, n.y);
       maxY = Math.max(maxY, n.y);
     });
-    return { minX, minY, maxY };
+    return { minX, maxX, minY, maxY };
   }
 
   getSimConfig() {
@@ -203,6 +205,7 @@ export class Simulation {
     // console.log('Design bounds:', bounds);
     const relMaxY = bounds.maxY - bounds.minY;
     const startX = this.spawnX;
+    this.spawnCenterX = this.spawnX + (bounds.maxX - bounds.minX) / 2;
     const startY = this.getGroundY() - CONFIG.spawnClearance - CONFIG.nodeRadius - relMaxY;
     // console.log(`Spawn position: (${startX}, ${startY})`);
 
@@ -485,11 +488,11 @@ this.world = null;
   }
 
   distMetersFromX(x) {
-    return Math.max(0, (x - this.spawnX) / SCALE);
+    return Math.max(0, (x - this.spawnCenterX) / SCALE);
   }
 
   distMetersContinuousFromX(x) {
-    return Math.max(0, (x - this.spawnX) / SCALE);
+    return Math.max(0, (x - this.spawnCenterX) / SCALE);
   }
 
   creatureScore(creature) {

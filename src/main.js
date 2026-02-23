@@ -1037,7 +1037,7 @@ lastPanelUpdateFrame = frameCount;
   ctx.font = '12px "JetBrains Mono", monospace';
   const markerSpacingM = 10;
   const markerSpacingPx = markerSpacingM * SCALE;
-  const originPx = sim.spawnX;
+  const originPx = sim.spawnCenterX;
   const firstM = Math.ceil((sim.cameraX - originPx) / markerSpacingPx) * markerSpacingM;
   for (let m = firstM; m * SCALE + originPx < sim.cameraX + viewW; m += markerSpacingM) {
     if (m < 0) continue;

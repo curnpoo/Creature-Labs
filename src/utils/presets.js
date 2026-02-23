@@ -63,20 +63,20 @@ export const PRESETS = [
     name: 'Bipedal Walker',
     description: 'Articulated legs with knees - learns in 50-100 gens',
     nodes: [
-      // Body core (triangle for stability)
-      { id: 0, x: 280, y: 260 }, // Left shoulder
-      { id: 1, x: 320, y: 260 }, // Right shoulder
-      { id: 2, x: 300, y: 240 }, // Head/top
+      // Body core (triangle for stability) — scaled to ~1.9m×3m
+      { id: 0, x: 289, y: 286 }, // Left shoulder
+      { id: 1, x: 311, y: 286 }, // Right shoulder
+      { id: 2, x: 300, y: 275 }, // Head/top
 
       // Left leg
-      { id: 3, x: 270, y: 310 }, // Left hip
-      { id: 4, x: 260, y: 360 }, // Left knee
-      { id: 5, x: 250, y: 400 }, // Left foot
+      { id: 3, x: 283, y: 314 }, // Left hip
+      { id: 4, x: 278, y: 343 }, // Left knee
+      { id: 5, x: 272, y: 365 }, // Left foot
 
       // Right leg
-      { id: 6, x: 330, y: 310 }, // Right hip
-      { id: 7, x: 340, y: 360 }, // Right knee
-      { id: 8, x: 350, y: 400 }  // Right foot
+      { id: 6, x: 317, y: 314 }, // Right hip
+      { id: 7, x: 323, y: 343 }, // Right knee
+      { id: 8, x: 328, y: 365 }  // Right foot
     ],
     constraints: [
       // Body structure (rigid)
@@ -111,26 +111,26 @@ export const PRESETS = [
     name: 'Stable Quadruped',
     description: 'Four-legged walker with spine and articulated legs',
     nodes: [
-      // Spine/body (horizontal)
-      { id: 0, x: 240, y: 280 }, // Front body
-      { id: 1, x: 340, y: 280 }, // Rear body
-      { id: 2, x: 290, y: 260 }, // Mid spine (raised)
+      // Spine/body (horizontal) — scaled to ~3m×2.5m
+      { id: 0, x: 262, y: 300 }, // Front body
+      { id: 1, x: 318, y: 300 }, // Rear body
+      { id: 2, x: 290, y: 288 }, // Mid spine (raised)
 
       // Front left leg
-      { id: 3, x: 220, y: 340 }, // Front left knee
-      { id: 4, x: 210, y: 390 }, // Front left foot
+      { id: 3, x: 251, y: 333 }, // Front left knee
+      { id: 4, x: 245, y: 362 }, // Front left foot
 
       // Front right leg
-      { id: 5, x: 260, y: 340 }, // Front right knee
-      { id: 6, x: 270, y: 390 }, // Front right foot
+      { id: 5, x: 273, y: 333 }, // Front right knee
+      { id: 6, x: 279, y: 362 }, // Front right foot
 
       // Rear left leg
-      { id: 7, x: 320, y: 340 }, // Rear left knee
-      { id: 8, x: 310, y: 390 }, // Rear left foot
+      { id: 7, x: 307, y: 333 }, // Rear left knee
+      { id: 8, x: 301, y: 362 }, // Rear left foot
 
       // Rear right leg
-      { id: 9, x: 360, y: 340 },  // Rear right knee
-      { id: 10, x: 370, y: 390 }  // Rear right foot
+      { id: 9, x: 329, y: 333 },  // Rear right knee
+      { id: 10, x: 335, y: 362 }  // Rear right foot
     ],
     constraints: [
       // Spine structure
@@ -171,17 +171,17 @@ export const PRESETS = [
     name: 'Inchworm Crawler',
     description: 'Wave-based locomotion with segmented body',
     nodes: [
-      // Body segments (6 points in arc)
-      { id: 0, x: 200, y: 300 }, // Front
-      { id: 1, x: 250, y: 290 },
-      { id: 2, x: 300, y: 285 },
-      { id: 3, x: 350, y: 290 },
-      { id: 4, x: 400, y: 300 },
-      { id: 5, x: 450, y: 310 }, // Rear
+      // Body segments (6 points in arc) — scaled to ~3m×1m
+      { id: 0, x: 283, y: 318 }, // Front
+      { id: 1, x: 300, y: 315 },
+      { id: 2, x: 317, y: 313 },
+      { id: 3, x: 333, y: 315 },
+      { id: 4, x: 350, y: 318 },
+      { id: 5, x: 367, y: 322 }, // Rear
 
       // Ground contact points
-      { id: 6, x: 190, y: 360 }, // Front foot
-      { id: 7, x: 460, y: 370 }  // Rear foot
+      { id: 6, x: 280, y: 338 }, // Front foot
+      { id: 7, x: 370, y: 342 }  // Rear foot
     ],
     constraints: [
       // Spine bones
@@ -214,20 +214,20 @@ export const PRESETS = [
     name: 'Spring Hopper',
     description: 'Explosive jumping locomotion with spring mechanism',
     nodes: [
-      // Body core (compact triangle)
-      { id: 0, x: 280, y: 250 },
-      { id: 1, x: 320, y: 250 },
-      { id: 2, x: 300, y: 230 }, // Top
+      // Body core (compact triangle) — scaled to ~2m×3m
+      { id: 0, x: 288, y: 264 },
+      { id: 1, x: 315, y: 264 },
+      { id: 2, x: 302, y: 250 }, // Top
 
       // Spring legs (front and rear)
-      { id: 3, x: 270, y: 300 }, // Front leg mid
-      { id: 4, x: 260, y: 360 }, // Front foot
+      { id: 3, x: 281, y: 299 }, // Front leg mid
+      { id: 4, x: 274, y: 340 }, // Front foot
 
-      { id: 5, x: 330, y: 300 }, // Rear leg mid
-      { id: 6, x: 340, y: 360 }, // Rear foot
+      { id: 5, x: 322, y: 299 }, // Rear leg mid
+      { id: 6, x: 329, y: 340 }, // Rear foot
 
       // Tail for balance
-      { id: 7, x: 350, y: 270 }
+      { id: 7, x: 336, y: 278 }
     ],
     constraints: [
       // Body structure
@@ -264,32 +264,32 @@ export const PRESETS = [
     name: 'Centipede',
     description: 'Many-legged stable walker with wave-like gait',
     nodes: [
-      // Spine (7 segments)
-      { id: 0, x: 180, y: 280 },
-      { id: 1, x: 220, y: 275 },
-      { id: 2, x: 260, y: 272 },
-      { id: 3, x: 300, y: 270 },
-      { id: 4, x: 340, y: 272 },
-      { id: 5, x: 380, y: 275 },
-      { id: 6, x: 420, y: 280 },
+      // Spine (7 segments) — scaled to ~3m×0.7m
+      { id: 0, x: 259, y: 293 },
+      { id: 1, x: 272, y: 291 },
+      { id: 2, x: 286, y: 290 },
+      { id: 3, x: 300, y: 290 },
+      { id: 4, x: 314, y: 290 },
+      { id: 5, x: 328, y: 291 },
+      { id: 6, x: 342, y: 293 },
 
       // Left legs (7 legs)
-      { id: 7, x: 170, y: 330 },
-      { id: 8, x: 210, y: 330 },
-      { id: 9, x: 250, y: 330 },
-      { id: 10, x: 290, y: 330 },
-      { id: 11, x: 330, y: 330 },
-      { id: 12, x: 370, y: 330 },
-      { id: 13, x: 410, y: 330 },
+      { id: 7, x: 255, y: 310 },
+      { id: 8, x: 269, y: 310 },
+      { id: 9, x: 283, y: 310 },
+      { id: 10, x: 297, y: 310 },
+      { id: 11, x: 310, y: 310 },
+      { id: 12, x: 324, y: 310 },
+      { id: 13, x: 338, y: 310 },
 
       // Right legs (7 legs)
-      { id: 14, x: 190, y: 330 },
-      { id: 15, x: 230, y: 330 },
-      { id: 16, x: 270, y: 330 },
-      { id: 17, x: 310, y: 330 },
-      { id: 18, x: 350, y: 330 },
-      { id: 19, x: 390, y: 330 },
-      { id: 20, x: 430, y: 330 }
+      { id: 14, x: 262, y: 310 },
+      { id: 15, x: 276, y: 310 },
+      { id: 16, x: 290, y: 310 },
+      { id: 17, x: 304, y: 310 },
+      { id: 18, x: 317, y: 310 },
+      { id: 19, x: 331, y: 310 },
+      { id: 20, x: 345, y: 310 }
     ],
     constraints: [
       // Spine bones
