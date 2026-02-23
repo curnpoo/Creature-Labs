@@ -633,6 +633,17 @@ flex-direction: column;
     }
 }
 
+/* ─── New Record Flash ─── */
+@keyframes new-record-flash {
+    0%   { color: #ffd700; text-shadow: 0 0 8px rgba(255, 215, 0, 0.9); }
+    40%  { color: #ffd700; text-shadow: 0 0 14px rgba(255, 215, 0, 0.7); }
+    100% { color: inherit; text-shadow: none; }
+}
+
+.hud-new-record {
+    animation: new-record-flash 1.2s ease-out forwards;
+}
+
 /* ─── Gen Summary Overlay ─── */
 #gen-summary {
     position: absolute;

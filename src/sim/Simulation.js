@@ -26,6 +26,8 @@ export class Simulation {
     this.genBestDist = 0;
     this.allTimeBest = 0;
     this.prevAllTimeBest = 0;
+    this.genStartAllTimeBest = 0;
+    this.newRecord = false;
     this.stagnantGens = 0;
     this.progressHistory = [];
     this.ghosts = [];
@@ -259,6 +261,8 @@ this.world.on('pre-solve', (contact) => {
     this.genBestDist = 0;
     this.allTimeBest = 0;
     this.prevAllTimeBest = 0;
+    this.genStartAllTimeBest = 0;
+    this.newRecord = false;
     this.stagnantGens = 0;
     this.progressHistory = [];
     this.ghosts = [];
@@ -483,11 +487,11 @@ this.world = null;
   }
 
   distMetersFromX(x) {
-    return Math.max(0, Math.floor((x - this.spawnX) / 100));
+    return Math.max(0, (x - this.spawnX) / SCALE);
   }
 
   distMetersContinuousFromX(x) {
-    return Math.max(0, (x - this.spawnX) / 100);
+    return Math.max(0, (x - this.spawnX) / SCALE);
   }
 
   creatureScore(creature) {
@@ -556,13 +560,19 @@ this.world = null;
     this.creatures.sort((a, b) => this.creatureScore(b) - this.creatureScore(a));
     const winner = this.creatures[0];
     const winnerFitness = this.creatureScore(winner);
-    const genBest = this.distMetersFromX(winner.getX());
-    this.genBestDist = genBest;
+    // Use winner's recorded peak position (maxX), not current position — creature may have
+    // walked backward after reaching its best point during the generation.
+    const winnerSnapshot = winner.getFitnessSnapshot();
+    const winnerBestX = (Number.isFinite(winnerSnapshot.maxX) && winnerSnapshot.maxX > -Infinity)
+      ? winnerSnapshot.maxX : winner.getX();
+    const genBest = this.distMetersContinuousFromX(winnerBestX);
+    // genBestDist was already being tracked live; take the max to ensure accuracy
+    this.genBestDist = Math.max(this.genBestDist, genBest);
     this.lastGenerationBrain = {
       version: 1,
       createdAt: new Date().toISOString(),
       generation: this.generation,
-      distance: genBest,
+      distance: this.genBestDist,
       fitness: winnerFitness,
       hiddenLayers: this.hiddenLayers,
       neuronsPerLayer: this.neuronsPerLayer,
@@ -596,11 +606,14 @@ this.world = null;
     
     // No stagnation penalty - let creatures take time to discover walking
 
-    this.prevAllTimeBest = this.allTimeBest;
-    if (genBest > this.allTimeBest) {
-      this.allTimeBest = genBest;
-    }
-    this.stagnantGens = this.allTimeBest > this.prevAllTimeBest ? 0 : this.stagnantGens + 1;
+    // allTimeBest is already updated live in the game loop.
+    // Determine stagnation by comparing against the baseline set at generation start.
+    const genImproved = this.allTimeBest > this.genStartAllTimeBest;
+    this.stagnantGens = genImproved ? 0 : this.stagnantGens + 1;
+    // prevAllTimeBest: what it was at the start of this generation (for HUD improvement delta)
+    this.prevAllTimeBest = this.genStartAllTimeBest;
+    // Next generation baseline
+    this.genStartAllTimeBest = this.allTimeBest;
 
     this.progressHistory.push({
       generation: this.generation,
@@ -759,7 +772,24 @@ this.world = null;
 
     const leader = this.visualLeader || rawLeader;
     if (leader) {
-      this.genBestDist = Math.max(this.genBestDist, this.distMetersFromX(leader.getX()));
+      // Track peak distance across ALL creatures using their recorded maxX,
+      // not just the visual leader's current position (creatures can move backward).
+      let liveBestX = this.spawnX;
+      this.creatures.forEach(c => {
+        const peakX = (Number.isFinite(c.stats.maxX) && c.stats.maxX > -Infinity)
+          ? c.stats.maxX : c.getX();
+        if (peakX > liveBestX) liveBestX = peakX;
+      });
+      const liveBestM = this.distMetersContinuousFromX(liveBestX);
+      if (liveBestM > this.genBestDist) {
+        this.genBestDist = liveBestM;
+      }
+      // Update all-time best live so HUD reflects new records immediately
+      if (this.genBestDist > this.allTimeBest) {
+        this.prevAllTimeBest = this.allTimeBest;
+        this.allTimeBest = this.genBestDist;
+        this.newRecord = true;
+      }
       const center = leader.getCenter();
       if (!this.currentGhostPath.length ||
         Math.abs(center.x - this.currentGhostPath[this.currentGhostPath.length - 1].x) > 5) {
