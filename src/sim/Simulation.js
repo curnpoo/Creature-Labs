@@ -407,7 +407,7 @@ this.world = null;
       });
       
       body.createFixture({
-        shape: Box(length / 2 / SCALE, 20 / SCALE),
+        shape: planck.Edge(Vec2(-length / 2 / SCALE, 0), Vec2(length / 2 / SCALE, 0)),
         friction: this.groundFriction,
         restitution: 0
       });
@@ -558,7 +558,9 @@ this.world = null;
     const winner = this.creatures[0];
     const winnerFitness = this.creatureScore(winner);
     const peakX = winner.getFitnessSnapshot().maxX;
-    const genBest = this.distMetersFromX(Number.isFinite(peakX) ? peakX : winner.getX());
+    const winnerDist = this.distMetersFromX(Number.isFinite(peakX) ? peakX : winner.getX());
+    // genBestDist tracks peak of ANY creature during the gen; use the higher of that or winner's distance
+    const genBest = Math.max(winnerDist, this.genBestDist);
     this.genBestDist = 0; // reset for next generation — live tracking will fill it in
     this.lastGenerationBrain = {
       version: 1,

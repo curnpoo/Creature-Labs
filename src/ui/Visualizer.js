@@ -52,15 +52,23 @@ export class Visualizer {
 
     ctx.clearRect(0, 0, w, h);
 
-    // Subtle dark background
-    ctx.fillStyle = 'rgba(6, 8, 14, 0.5)';
+    // Solid dark background for better visibility
+    ctx.fillStyle = 'rgba(8, 12, 20, 0.85)';
     ctx.fillRect(0, 0, w, h);
 
+    // Subtle border/frame effect
+    ctx.strokeStyle = 'rgba(0, 242, 255, 0.15)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(1, 1, w - 2, h - 2);
+
     if (!leader || !leader.brain) {
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.font = '11px "Inter", sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = 'bold 12px "Inter", sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Neural network (waiting for creature…)', w / 2, h / 2 + 4);
+      ctx.fillText('Waiting for creature...', w / 2, h / 2);
+      ctx.font = '10px "Inter", sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fillText('Neural network will appear here', w / 2, h / 2 + 18);
       ctx.textAlign = 'left';
       return;
     }
@@ -86,10 +94,10 @@ export class Visualizer {
     const showChangePulse = msSinceChange < 2000; // 2s flash
 
     // --- Architecture info bar (top of canvas) ---
-    const INFO_H = 20; // pixels reserved at top for info bar
-    const padX = 40;
-    const padY = INFO_H + 8;
-    const padBottom = 18;
+    const INFO_H = 24; // pixels reserved at top for info bar
+    const padX = 30;
+    const padY = INFO_H + 10;
+    const padBottom = 24;
 
     // Info bar background
     if (showChangePulse) {
@@ -98,8 +106,8 @@ export class Visualizer {
       ctx.fillRect(0, 0, w, INFO_H);
     }
 
-    // Architecture text
-    ctx.font = 'bold 10px "Inter", monospace';
+    // Architecture text - larger and more visible
+    ctx.font = 'bold 11px "Inter", monospace';
     ctx.textBaseline = 'middle';
 
     const paramStr = totalParams >= 1000
@@ -114,7 +122,7 @@ export class Visualizer {
     } else {
       const layerStr = hiddenLayers === 1 ? '1 hidden layer' : `${hiddenLayers} hidden layers`;
       archLabel = `${layerStr} × ${neuronsPerLayer} neurons | ${paramStr}`;
-      archColor = showChangePulse ? 'rgba(0,242,255,1)' : 'rgba(0,242,255,0.65)';
+      archColor = showChangePulse ? 'rgba(0,242,255,1)' : 'rgba(0,242,255,0.8)';
     }
 
     // Left-aligned arch info
@@ -128,7 +136,7 @@ export class Visualizer {
       ctx.textAlign = 'right';
       ctx.fillStyle = `rgba(0, 255, 160, ${pulse})`;
       ctx.font = 'bold 10px "Inter", monospace';
-      ctx.fillText('⟳ ARCHITECTURE EVOLVED', w - padX, INFO_H / 2);
+      ctx.fillText('⟳ EVOLVED', w - padX, INFO_H / 2);
     }
 
     ctx.textBaseline = 'alphabetic';
@@ -139,9 +147,9 @@ export class Visualizer {
     const usableH = h - padY - padBottom;
     const layerSpacing = usableW / Math.max(1, numLayers - 1);
 
-    // Determine node radius based on available space
+    // Determine node radius based on available space (larger for better visibility)
     const maxNodesInLayer = Math.max(...layers.map(s => Math.min(s, 20)));
-    const nodeRadius = Math.max(4, Math.min(10, (usableH / maxNodesInLayer) * 0.32));
+    const nodeRadius = Math.max(5, Math.min(14, (usableH / maxNodesInLayer) * 0.35));
 
     // Compute node positions
     const positions = [];
@@ -266,8 +274,8 @@ export class Visualizer {
     }
 
     // --- Layer labels ---
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.font = '9px "Inter", sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = 'bold 10px "Inter", sans-serif';
     ctx.textAlign = 'center';
     for (let l = 0; l < numLayers; l++) {
       let label;
@@ -278,7 +286,7 @@ export class Visualizer {
       } else {
         label = `H${l}(${layers[l]})`;
       }
-      ctx.fillText(label, padX + l * layerSpacing, h - 4);
+      ctx.fillText(label, padX + l * layerSpacing, h - 6);
     }
     ctx.textAlign = 'left';
   }

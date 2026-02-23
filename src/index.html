@@ -86,14 +86,14 @@
                 <button
                     class="btn-tool text-purple-300 hover:text-purple-200"
                     id="tool-pan"
-                    title="Toggle Pan Mode (or hold Space)"
+                    title="Pan Canvas"
                 >
                     <i class="fas fa-hand"></i>
                 </button>
                 <button
                     class="btn-tool text-blue-300 hover:text-blue-200"
                     id="tool-reset-view"
-                    title="Reset Zoom & Pan"
+                    title="Reset View"
                 >
                     <i class="fas fa-expand"></i>
                 </button>
@@ -261,34 +261,6 @@
                         </div>
                     </div>
 
-                    <!-- Neural Panel -->
-                    <div
-                        id="panel-neural"
-                        class="sim-panel grid-lines"
-                        style="flex: 1; border-radius: 0; border: none; overflow: hidden; display: flex; flex-direction: column;"
-                    >
-                        <div
-                            class="sim-panel-title"
-                            style="border-color: var(--secondary); flex-shrink: 0;"
-                        >
-                            <span><i class="fas fa-brain mr-1"></i> Neural
-                                Network</span>
-                            <span class="text-[var(--secondary)]">LIVE</span>
-                        </div>
-                        <div style="display: flex; flex: 1; min-height: 0;">
-                            <div style="flex: 0 0 380px; min-width: 0">
-                                <canvas
-                                    id="nn-canvas"
-                                    width="380"
-                                    height="92"
-                                    class="w-full h-full"
-                                ></canvas>
-                            </div>
-                            <div id="top-metrics-container" style="display: none;">
-                                <!-- Individual metric mini-graphs will be inserted here -->
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
                 <!-- ═══ RIGHT PANEL: Controls ═══ -->
@@ -986,35 +958,44 @@ style="grid-area: bottom; border-top: 1px solid var(--border-color); border-radi
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
+                </div><!-- end panel-scorecard -->
 
-            <!-- ─── Toggle Tab Buttons (Visible clickable tabs) ─── -->
                 <!-- Canvas area (invisible, just occupies grid space) -->
                 <div class="sim-canvas-area"></div>
 
-                <!-- ═══ LEFT PANEL: Evolution Progress ═══ -->
+                <!-- ═══ LEFT PANEL: NN + Evolution ═══ -->
                 <div
                     id="panel-progress-left"
                     class="sim-panel"
-                    style="grid-area: left; width: 320px; border-right: 1px solid var(--border-color); border-radius: 0;"
                 >
+                    <!-- Neural Network Visualization -->
                     <div
                         class="sim-panel-title"
-                        style="border-color: rgba(0, 242, 255, 0.3)"
+                        style="border-color: var(--secondary); flex-shrink: 0;"
                     >
-                        <span><i class="fas fa-dna mr-1"></i> Evolution</span>
-                        <span id="left-graph-meta" class="text-cyan-300"
-                        >G1</span>
+                        <span><i class="fas fa-brain mr-1"></i> Neural Network</span>
+                        <span class="text-[var(--secondary)]">LIVE</span>
+                    </div>
+                    <div id="left-nn-container" style="flex: 0 0 200px; min-height: 200px; background: rgba(6, 8, 14, 0.6); border-bottom: 1px solid var(--border-color);">
+                        <canvas
+                            id="nn-canvas"
+                            width="300"
+                            height="200"
+                            class="w-full h-full"
+                            style="display: block;"
+                        ></canvas>
                     </div>
 
-                    <!-- ═══ EVOLUTION FEEDBACK ═══ -->
+                    <!-- Evolution Health -->
+                    <div
+                        class="sim-panel-title"
+                        style="border-color: rgba(0, 242, 255, 0.3); flex-shrink: 0;"
+                    >
+                        <span><i class="fas fa-heartbeat mr-1"></i> Evolution Health</span>
+                        <span id="left-graph-meta" class="text-cyan-300">G1</span>
+                    </div>
                     <div id="evolution-feedback" style="padding: 0 10px 6px; flex-shrink: 0;">
-                        <div class="sim-panel-title" style="padding: 6px 0; border: none">
-                            <span><i class="fas fa-heartbeat mr-1"></i> Evolution Health</span>
-                            <span id="evo-status-badge" class="evo-status-badge severity-info">○ Starting</span>
-                        </div>
-
+                        <div id="evo-status-badge" class="evo-status-badge severity-info">○ Starting</div>
                         <div style="padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px; margin-bottom: 8px">
                             <div id="evo-message" class="text-xs text-gray-300" style="font-family: 'JetBrains Mono', monospace">
                                 Analyzing evolution progress...
@@ -1108,10 +1089,8 @@ id="sandbox-slip-left"
 </div>
 </div>
                     </div>
-
-                    <!-- Individual metric graphs container -->
-                    <div id="left-metrics-container" style="padding: 4px 8px 8px; display: flex; flex-direction: column; gap: 4px;"></div>
                 </div>
+            </div><!-- end sim-chrome -->
 
             <div class="edge-tab-rail edge-top-rail pointer-events-auto">
                 <button

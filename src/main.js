@@ -639,7 +639,8 @@ function setTool(tool, btn) {
     bone: 'Drag joint to joint to add rigid bones.',
     muscle: 'Drag joint to joint to add muscles.',
     move: 'Drag joints to reposition.',
-    erase: 'Click node or link to delete.'
+    erase: 'Click node or link to delete.',
+    pan: 'Click and drag to pan the canvas.'
   };
   const hintEl = document.getElementById('hint-text');
   if (hintEl) hintEl.textContent = hints[tool] || '';
@@ -653,11 +654,8 @@ document.getElementById('tool-muscle').onclick = e => setTool('muscle', e.curren
 document.getElementById('tool-polygon').onclick = e => setTool('polygon', e.currentTarget);
 document.getElementById('tool-move').onclick = e => setTool('move', e.currentTarget);
 document.getElementById('tool-erase').onclick = e => setTool('erase', e.currentTarget);
+document.getElementById('tool-pan').onclick = e => setTool('pan', e.currentTarget);
 document.getElementById('tool-undo').onclick = () => designer.undo();
-document.getElementById('tool-pan').onclick = (e) => {
-  const isPanMode = designer.togglePanMode();
-  e.currentTarget.classList.toggle('active', isPanMode);
-};
 document.getElementById('tool-reset-view').onclick = () => designer.resetView();
 document.getElementById('tool-save').onclick = () => designer.saveToFile();
 document.getElementById('tool-load').onclick = () => document.getElementById('design-file-input').click();
@@ -1011,7 +1009,7 @@ lastPanelUpdateFrame = frameCount;
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Challenge terrain line
+  // Challenge terrain line (zero thickness physics, thin visual)
   if (sim.groundProfile.length > 1) {
     ctx.beginPath();
     ctx.moveTo(sim.groundProfile[0].x, sim.groundProfile[0].y);
@@ -1019,7 +1017,7 @@ lastPanelUpdateFrame = frameCount;
       ctx.lineTo(sim.groundProfile[i].x, sim.groundProfile[i].y);
     }
     ctx.strokeStyle = '#ffb347';
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 4;
     ctx.stroke();
   }
 

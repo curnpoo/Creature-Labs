@@ -178,14 +178,37 @@ canvas {
     inset: 0;
     z-index: 10;
     display: grid;
-    grid-template-columns: min-content 1fr min-content;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-columns: 300px 1fr min-content;
+    grid-template-rows: auto 1fr auto;
     grid-template-areas:
         "top-bar    top-bar   top-bar"
         "left       canvas    right"
         "bottom     bottom    bottom";
     pointer-events: none;
     gap: 0;
+    align-items: start;
+}
+
+#panel-top-bar {
+    grid-column: 1 / 4;
+    grid-row: 1;
+    z-index: 12;
+}
+
+#panel-progress-left {
+    grid-area: left;
+    grid-row: 2;
+    width: 340px;
+    min-width: 280px;
+    max-width: 380px;
+    border-right: 1px solid var(--border-color);
+    border-radius: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    z-index: 50;
+    position: relative;
+    transform: translateY(3px);
 }
 
 /* ─── Sim Panel (shared base) ─── */
@@ -213,13 +236,13 @@ canvas {
     align-items: center;
 }
 
-/* ─── Top Bar (HUD + Neural) ─── */
+/* ─── Top Bar (HUD only now) ─── */
 #panel-top-bar {
     grid-area: top-bar;
     display: flex;
     gap: 0;
     border-bottom: 1px solid var(--border-color);
-    max-height: 140px;
+    max-height: 90px;
     z-index: 12;
 }
 
@@ -242,13 +265,17 @@ canvas {
 /* ─── Left Panel ─── */
 #panel-progress-left {
     grid-area: left;
-    width: 240px;
-    min-width: 200px;
+    grid-row: 2;
+    align-self: center;
+    width: 300px;
+    max-width: 300px;
     border-right: 1px solid var(--border-color);
-    border-radius: 0;
+    border-radius: 0 6px 6px 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    z-index: 20;
+    margin-top: 4px;
 }
 
 #left-metrics-container {

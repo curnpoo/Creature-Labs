@@ -4,7 +4,7 @@
  */
 export const VISUAL_CONFIG = {
   // Camera
-  defaultZoom: 1.0,             // Default zoom level
+  defaultZoom: 1.8,             // Default zoom level
   cameraMode: 'lock',           // Camera mode: 'lock' or 'free'
 
   // Ghost/History

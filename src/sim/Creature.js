@@ -1068,7 +1068,7 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
       ctx.fillStyle = isLeader ? 'rgba(139, 92, 246, 0.5)' : 'rgba(139, 92, 246, 0.15)';
       ctx.fill();
       ctx.strokeStyle = isLeader ? 'rgba(139, 92, 246, 0.9)' : 'rgba(139, 92, 246, 0.3)';
-      ctx.lineWidth = isLeader ? 3 : 1;
+      ctx.lineWidth = isLeader ? 1.5 : 0.5;
       ctx.globalAlpha = isLeader ? 1 : 0.25;
       ctx.stroke();
     });
@@ -1094,7 +1094,7 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
         ctx.lineWidth = 1;
       } else {
         ctx.strokeStyle = isLeader ? '#9aa4af' : 'rgba(154,164,175,0.25)';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 1.5;
       }
       ctx.globalAlpha = isLeader ? 1 : 0.12;
       ctx.stroke();
@@ -1118,10 +1118,10 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
       // Visual thickness: THICKER when contracted, THINNER when extended
       // Negative extension = contracted = very thick
       // Positive extension = stretched = thin
-      const baseWidth = isLeader ? 6 : 3;
+      const baseWidth = isLeader ? 3 : 1.5;
       const normalizedExt = Math.max(-1, Math.min(1, extension * 3)); // Scale for visual effect
       const thickness = baseWidth * (1.8 - normalizedExt * 0.8); // 2.6x when contracted, 1x when extended
-      ctx.lineWidth = Math.max(2, Math.min(14, thickness));
+      ctx.lineWidth = Math.max(1, Math.min(7, thickness));
 
       // Color: BLUE for extended (stretched), RED for contracted, gray when relaxed
       // Colors get MORE vibrant with activation
@@ -1154,7 +1154,7 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
     this.bodies.forEach(b => {
       const pos = b.getPosition();
       ctx.beginPath();
-      ctx.arc(pos.x * SCALE, pos.y * SCALE, isLeader ? 6 : 3, 0, Math.PI * 2);
+      ctx.arc(pos.x * SCALE, pos.y * SCALE, isLeader ? 3.5 : 1.5, 0, Math.PI * 2);
       ctx.fillStyle = isLeader ? '#15171b' : 'rgba(0,0,0,0.15)';
       ctx.fill();
       ctx.strokeStyle = isLeader ? '#00f2ff' : 'rgba(0,242,255,0.2)';
