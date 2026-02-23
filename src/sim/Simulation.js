@@ -675,6 +675,7 @@ this.world = null;
 
     this.generation++;
     this.timer = this.simDuration;
+    this.genBestDist = 0; // Reset per-generation counter for next generation
     this.visualLeader = null;
 
     // Pass winner's architecture for inheritance
