@@ -8,7 +8,7 @@ import { Visualizer } from './ui/Visualizer.js';
 import { ProgressChart } from './ui/ProgressChart.js';
 import { EvolutionMonitor } from './utils/EvolutionMonitor.js';
 import { EvolutionFeedback } from './ui/EvolutionFeedback.js';
-import { Vec2 } from './sim/Physics.js';
+import { Vec2, SCALE } from './sim/Physics.js';
 
 
 // --- State ---
@@ -1035,8 +1035,14 @@ lastPanelUpdateFrame = frameCount;
   // Distance markers
   ctx.fillStyle = 'rgba(255,255,255,0.22)';
   ctx.font = '12px "JetBrains Mono", monospace';
-  for (let x = Math.floor(sim.cameraX / 100) * 100; x < sim.cameraX + viewW; x += 100) {
-    ctx.fillText(`${Math.floor(x / 100)}m`, x, gY + 24);
+  const markerSpacingM = 10;
+  const markerSpacingPx = markerSpacingM * SCALE;
+  const originPx = sim.spawnX;
+  const firstM = Math.ceil((sim.cameraX - originPx) / markerSpacingPx) * markerSpacingM;
+  for (let m = firstM; m * SCALE + originPx < sim.cameraX + viewW; m += markerSpacingM) {
+    if (m < 0) continue;
+    const px = originPx + m * SCALE;
+    ctx.fillText(`${m}m`, px, gY + 24);
   }
 
   drawGhosts(ctx);
