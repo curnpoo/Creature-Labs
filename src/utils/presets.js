@@ -1,362 +1,340 @@
 /**
- * Working Creature Presets
- * Designed for realistic locomotion with proper body structure,
- * articulated limbs, and coordinated muscle groups.
+ * Creature Presets
  *
- * Ordered from simplest (learns fast) to complex (powerful but slow to evolve)
+ * Design principles (from user-designed creatures):
+ *  - Rigid triangulated body cores (bones), few actuators (muscles)
+ *  - Muscles connect body to feet for locomotion
+ *  - High bone:muscle ratio = stable structure, controllable motion
+ *  - All creatures 2-3m max dimension at SCALE=30
+ *
+ * Ordered simplest to most complex.
  */
 export const PRESETS = [
+  // ── 1. Triangle Walker ──────────────────────────────────────────────
+  // Based on user Example 3. Rigid triangle body + 2 muscled legs.
+  // Simplest design that can learn a walking gait.
   {
-    name: 'Simple Hopper',
-    description: 'Easiest to evolve - 3 nodes, 1 muscle, learns in 10-20 gens',
+    name: 'Triangle Walker',
+    description: '5 nodes — rigid triangle body, 2 muscled legs',
     nodes: [
-      { id: 0, x: 280, y: 280 }, // Body left
-      { id: 1, x: 320, y: 280 }, // Body right
-      { id: 2, x: 300, y: 350 }  // Foot
+      { id: 0, x: 275, y: 280 }, // Body top-left
+      { id: 1, x: 325, y: 280 }, // Body top-right
+      { id: 2, x: 300, y: 310 }, // Body bottom / hip
+      { id: 3, x: 262, y: 348 }, // Left foot
+      { id: 4, x: 338, y: 348 }  // Right foot
     ],
     constraints: [
-      { type: 'bone', n1: 0, n2: 1 },  // Body
-      { type: 'bone', n1: 0, n2: 2 },  // Left leg
-      { type: 'bone', n1: 1, n2: 2 },  // Right leg
-      { type: 'muscle', n1: 0, n2: 2 } // Spring muscle
-    ]
-  },
-
-  {
-    name: 'Basic Walker',
-    description: 'Simple 4-node walker - 2 legs, 2 muscles, learns in 20-40 gens',
-    nodes: [
-      { id: 0, x: 280, y: 270 }, // Body left
-      { id: 1, x: 320, y: 270 }, // Body right
-      { id: 2, x: 270, y: 340 }, // Left foot
-      { id: 3, x: 330, y: 340 }  // Right foot
-    ],
-    constraints: [
-      { type: 'bone', n1: 0, n2: 1 },  // Body
-      { type: 'bone', n1: 0, n2: 2 },  // Left leg
-      { type: 'bone', n1: 1, n2: 3 },  // Right leg
-      { type: 'muscle', n1: 0, n2: 2 }, // Left muscle
-      { type: 'muscle', n1: 1, n2: 3 }  // Right muscle
-    ]
-  },
-
-  {
-    name: 'Tripod Walker',
-    description: 'Stable 3-leg design - learns in 30-50 gens',
-    nodes: [
-      { id: 0, x: 300, y: 260 }, // Body center
-      { id: 1, x: 260, y: 340 }, // Left foot
-      { id: 2, x: 300, y: 340 }, // Center foot
-      { id: 3, x: 340, y: 340 }  // Right foot
-    ],
-    constraints: [
-      { type: 'bone', n1: 0, n2: 1 },
-      { type: 'bone', n1: 0, n2: 2 },
-      { type: 'bone', n1: 0, n2: 3 },
-      { type: 'muscle', n1: 0, n2: 1 },
-      { type: 'muscle', n1: 0, n2: 2 },
-      { type: 'muscle', n1: 0, n2: 3 }
-    ]
-  },
-
-  {
-    name: 'Bipedal Walker',
-    description: 'Articulated legs with knees - learns in 50-100 gens',
-    nodes: [
-      // Body core (triangle for stability) — scaled to ~1.9m×3m
-      { id: 0, x: 289, y: 286 }, // Left shoulder
-      { id: 1, x: 311, y: 286 }, // Right shoulder
-      { id: 2, x: 300, y: 275 }, // Head/top
-
-      // Left leg
-      { id: 3, x: 283, y: 314 }, // Left hip
-      { id: 4, x: 278, y: 343 }, // Left knee
-      { id: 5, x: 272, y: 365 }, // Left foot
-
-      // Right leg
-      { id: 6, x: 317, y: 314 }, // Right hip
-      { id: 7, x: 323, y: 343 }, // Right knee
-      { id: 8, x: 328, y: 365 }  // Right foot
-    ],
-    constraints: [
-      // Body structure (rigid)
+      // Rigid triangulated body
       { type: 'bone', n1: 0, n2: 1 },
       { type: 'bone', n1: 0, n2: 2 },
       { type: 'bone', n1: 1, n2: 2 },
-      { type: 'bone', n1: 0, n2: 3 },
-      { type: 'bone', n1: 1, n2: 6 },
-
-      // Left leg bones
-      { type: 'bone', n1: 3, n2: 4 },
-      { type: 'bone', n1: 4, n2: 5 },
-
-      // Right leg bones
-      { type: 'bone', n1: 6, n2: 7 },
-      { type: 'bone', n1: 7, n2: 8 },
-
-      // Left leg muscles (hip and knee control)
-      { type: 'muscle', n1: 0, n2: 4 }, // Hip flexor
-      { type: 'muscle', n1: 3, n2: 5 }, // Knee extension
-
-      // Right leg muscles (hip and knee control)
-      { type: 'muscle', n1: 1, n2: 7 }, // Hip flexor
-      { type: 'muscle', n1: 6, n2: 8 }, // Knee extension
-
-      // Cross-body stabilization
-      { type: 'muscle', n1: 3, n2: 6 }  // Hip stabilizer
+      // Left leg (2 muscles)
+      { type: 'muscle', n1: 0, n2: 3 },
+      { type: 'muscle', n1: 2, n2: 3 },
+      // Right leg (2 muscles)
+      { type: 'muscle', n1: 1, n2: 4 },
+      { type: 'muscle', n1: 2, n2: 4 }
     ]
   },
 
+  // ── 2. Box Biped ────────────────────────────────────────────────────
+  // Fully braced rectangular body + 2 simple legs.
+  // More stable than triangle, fewer muscles = easier to evolve.
   {
-    name: 'Stable Quadruped',
-    description: 'Four-legged walker with spine and articulated legs',
+    name: 'Box Biped',
+    description: '6 nodes — braced rectangle body, 2 legs',
     nodes: [
-      // Spine/body (horizontal) — scaled to ~3m×2.5m
-      { id: 0, x: 262, y: 300 }, // Front body
-      { id: 1, x: 318, y: 300 }, // Rear body
-      { id: 2, x: 290, y: 288 }, // Mid spine (raised)
-
-      // Front left leg
-      { id: 3, x: 251, y: 333 }, // Front left knee
-      { id: 4, x: 245, y: 362 }, // Front left foot
-
-      // Front right leg
-      { id: 5, x: 273, y: 333 }, // Front right knee
-      { id: 6, x: 279, y: 362 }, // Front right foot
-
-      // Rear left leg
-      { id: 7, x: 307, y: 333 }, // Rear left knee
-      { id: 8, x: 301, y: 362 }, // Rear left foot
-
-      // Rear right leg
-      { id: 9, x: 329, y: 333 },  // Rear right knee
-      { id: 10, x: 335, y: 362 }  // Rear right foot
+      { id: 0, x: 278, y: 278 }, // Top-left
+      { id: 1, x: 322, y: 278 }, // Top-right
+      { id: 2, x: 278, y: 312 }, // Bottom-left
+      { id: 3, x: 322, y: 312 }, // Bottom-right
+      { id: 4, x: 268, y: 348 }, // Left foot
+      { id: 5, x: 332, y: 348 }  // Right foot
     ],
     constraints: [
-      // Spine structure
+      // Fully braced rectangle (6 bones)
+      { type: 'bone', n1: 0, n2: 1 },
+      { type: 'bone', n1: 1, n2: 3 },
+      { type: 'bone', n1: 3, n2: 2 },
+      { type: 'bone', n1: 2, n2: 0 },
+      { type: 'bone', n1: 0, n2: 3 }, // Diagonal brace
+      { type: 'bone', n1: 1, n2: 2 }, // Diagonal brace
+      // Legs (1 muscle each)
+      { type: 'muscle', n1: 2, n2: 4 },
+      { type: 'muscle', n1: 3, n2: 5 }
+    ]
+  },
+
+  // ── 3. Diamond Hopper ──────────────────────────────────────────────
+  // Diamond-shaped body, feet below. Good for bouncing gaits.
+  {
+    name: 'Diamond Hopper',
+    description: '6 nodes — diamond body, spring-loaded legs',
+    nodes: [
+      { id: 0, x: 300, y: 275 }, // Top
+      { id: 1, x: 275, y: 300 }, // Left
+      { id: 2, x: 325, y: 300 }, // Right
+      { id: 3, x: 300, y: 320 }, // Bottom / hip
+      { id: 4, x: 268, y: 350 }, // Left foot
+      { id: 5, x: 332, y: 350 }  // Right foot
+    ],
+    constraints: [
+      // Fully braced diamond (6 bones)
       { type: 'bone', n1: 0, n2: 1 },
       { type: 'bone', n1: 0, n2: 2 },
-      { type: 'bone', n1: 1, n2: 2 },
-
-      // Front left leg
-      { type: 'bone', n1: 0, n2: 3 },
-      { type: 'bone', n1: 3, n2: 4 },
-      { type: 'muscle', n1: 0, n2: 4 }, // Leg control
-
-      // Front right leg
-      { type: 'bone', n1: 0, n2: 5 },
-      { type: 'bone', n1: 5, n2: 6 },
-      { type: 'muscle', n1: 0, n2: 6 }, // Leg control
-
-      // Rear left leg
-      { type: 'bone', n1: 1, n2: 7 },
-      { type: 'bone', n1: 7, n2: 8 },
-      { type: 'muscle', n1: 1, n2: 8 }, // Leg control
-
-      // Rear right leg
-      { type: 'bone', n1: 1, n2: 9 },
-      { type: 'bone', n1: 9, n2: 10 },
-      { type: 'muscle', n1: 1, n2: 10 }, // Leg control
-
-      // Leg coordination muscles
-      { type: 'muscle', n1: 3, n2: 5 },  // Front leg sync
-      { type: 'muscle', n1: 7, n2: 9 },  // Rear leg sync
-
-      // Spine flexibility
-      { type: 'muscle', n1: 0, n2: 1 }   // Spine contraction
-    ]
-  },
-
-  {
-    name: 'Inchworm Crawler',
-    description: 'Wave-based locomotion with segmented body',
-    nodes: [
-      // Body segments (6 points in arc) — scaled to ~3m×1m
-      { id: 0, x: 283, y: 318 }, // Front
-      { id: 1, x: 300, y: 315 },
-      { id: 2, x: 317, y: 313 },
-      { id: 3, x: 333, y: 315 },
-      { id: 4, x: 350, y: 318 },
-      { id: 5, x: 367, y: 322 }, // Rear
-
-      // Ground contact points
-      { id: 6, x: 280, y: 338 }, // Front foot
-      { id: 7, x: 370, y: 342 }  // Rear foot
-    ],
-    constraints: [
-      // Spine bones
-      { type: 'bone', n1: 0, n2: 1 },
-      { type: 'bone', n1: 1, n2: 2 },
+      { type: 'bone', n1: 1, n2: 3 },
       { type: 'bone', n1: 2, n2: 3 },
-      { type: 'bone', n1: 3, n2: 4 },
-      { type: 'bone', n1: 4, n2: 5 },
-
-      // Feet connections
-      { type: 'bone', n1: 0, n2: 6 },
-      { type: 'bone', n1: 5, n2: 7 },
-
-      // Wave muscles (alternate contractions create wave)
-      { type: 'muscle', n1: 0, n2: 2 }, // Front wave
-      { type: 'muscle', n1: 1, n2: 3 }, // Mid-front wave
-      { type: 'muscle', n1: 2, n2: 4 }, // Mid-rear wave
-      { type: 'muscle', n1: 3, n2: 5 }, // Rear wave
-
-      // Anchoring muscles
-      { type: 'muscle', n1: 0, n2: 6 }, // Front anchor
-      { type: 'muscle', n1: 5, n2: 7 }, // Rear anchor
-
-      // Long-range contraction
-      { type: 'muscle', n1: 0, n2: 4 }  // Body compression
+      { type: 'bone', n1: 0, n2: 3 }, // Vertical brace
+      { type: 'bone', n1: 1, n2: 2 }, // Horizontal brace
+      // Legs
+      { type: 'muscle', n1: 1, n2: 4 },
+      { type: 'muscle', n1: 2, n2: 5 }
     ]
   },
 
+  // ── 4. Lopsided Runner ─────────────────────────────────────────────
+  // Asymmetric body — left leg gets 2 muscles, right gets 1.
+  // Creates unique evolved gaits due to imbalance.
   {
-    name: 'Spring Hopper',
-    description: 'Explosive jumping locomotion with spring mechanism',
+    name: 'Lopsided Runner',
+    description: '6 nodes — asymmetric body, unique gaits',
     nodes: [
-      // Body core (compact triangle) — scaled to ~2m×3m
-      { id: 0, x: 288, y: 264 },
-      { id: 1, x: 315, y: 264 },
-      { id: 2, x: 302, y: 250 }, // Top
-
-      // Spring legs (front and rear)
-      { id: 3, x: 281, y: 299 }, // Front leg mid
-      { id: 4, x: 274, y: 340 }, // Front foot
-
-      { id: 5, x: 322, y: 299 }, // Rear leg mid
-      { id: 6, x: 329, y: 340 }, // Rear foot
-
-      // Tail for balance
-      { id: 7, x: 336, y: 278 }
+      { id: 0, x: 275, y: 280 }, // Top-left
+      { id: 1, x: 310, y: 275 }, // Top-right (higher)
+      { id: 2, x: 335, y: 295 }, // Right body
+      { id: 3, x: 295, y: 310 }, // Bottom center
+      { id: 4, x: 262, y: 350 }, // Left foot (wide)
+      { id: 5, x: 345, y: 340 }  // Right foot (narrow)
     ],
     constraints: [
-      // Body structure
-      { type: 'bone', n1: 0, n2: 1 },
-      { type: 'bone', n1: 0, n2: 2 },
-      { type: 'bone', n1: 1, n2: 2 },
-
-      // Front leg
-      { type: 'bone', n1: 0, n2: 3 },
-      { type: 'bone', n1: 3, n2: 4 },
-
-      // Rear leg
-      { type: 'bone', n1: 1, n2: 5 },
-      { type: 'bone', n1: 5, n2: 6 },
-
-      // Tail
-      { type: 'bone', n1: 1, n2: 7 },
-
-      // Spring muscles (powerful compression)
-      { type: 'muscle', n1: 0, n2: 4 }, // Front spring
-      { type: 'muscle', n1: 1, n2: 6 }, // Rear spring
-      { type: 'muscle', n1: 2, n2: 3 }, // Front assist
-      { type: 'muscle', n1: 2, n2: 5 }, // Rear assist
-
-      // Coordination
-      { type: 'muscle', n1: 3, n2: 5 }, // Leg sync
-
-      // Tail balance
-      { type: 'muscle', n1: 2, n2: 7 }  // Tail control
-    ]
-  },
-
-  {
-    name: 'Centipede',
-    description: 'Many-legged stable walker with wave-like gait',
-    nodes: [
-      // Spine (7 segments) — scaled to ~3m×0.7m
-      { id: 0, x: 259, y: 293 },
-      { id: 1, x: 272, y: 291 },
-      { id: 2, x: 286, y: 290 },
-      { id: 3, x: 300, y: 290 },
-      { id: 4, x: 314, y: 290 },
-      { id: 5, x: 328, y: 291 },
-      { id: 6, x: 342, y: 293 },
-
-      // Left legs (7 legs)
-      { id: 7, x: 255, y: 310 },
-      { id: 8, x: 269, y: 310 },
-      { id: 9, x: 283, y: 310 },
-      { id: 10, x: 297, y: 310 },
-      { id: 11, x: 310, y: 310 },
-      { id: 12, x: 324, y: 310 },
-      { id: 13, x: 338, y: 310 },
-
-      // Right legs (7 legs)
-      { id: 14, x: 262, y: 310 },
-      { id: 15, x: 276, y: 310 },
-      { id: 16, x: 290, y: 310 },
-      { id: 17, x: 304, y: 310 },
-      { id: 18, x: 317, y: 310 },
-      { id: 19, x: 331, y: 310 },
-      { id: 20, x: 345, y: 310 }
-    ],
-    constraints: [
-      // Spine bones
-      { type: 'bone', n1: 0, n2: 1 },
-      { type: 'bone', n1: 1, n2: 2 },
-      { type: 'bone', n1: 2, n2: 3 },
-      { type: 'bone', n1: 3, n2: 4 },
-      { type: 'bone', n1: 4, n2: 5 },
-      { type: 'bone', n1: 5, n2: 6 },
-
-      // Left leg bones
-      { type: 'bone', n1: 0, n2: 7 },
-      { type: 'bone', n1: 1, n2: 8 },
-      { type: 'bone', n1: 2, n2: 9 },
-      { type: 'bone', n1: 3, n2: 10 },
-      { type: 'bone', n1: 4, n2: 11 },
-      { type: 'bone', n1: 5, n2: 12 },
-      { type: 'bone', n1: 6, n2: 13 },
-
-      // Right leg bones
-      { type: 'bone', n1: 0, n2: 14 },
-      { type: 'bone', n1: 1, n2: 15 },
-      { type: 'bone', n1: 2, n2: 16 },
-      { type: 'bone', n1: 3, n2: 17 },
-      { type: 'bone', n1: 4, n2: 18 },
-      { type: 'bone', n1: 5, n2: 19 },
-      { type: 'bone', n1: 6, n2: 20 },
-
-      // Leg muscles (alternating pattern for wave gait)
-      { type: 'muscle', n1: 0, n2: 7 },  // Left 1
-      { type: 'muscle', n1: 1, n2: 15 }, // Right 2
-      { type: 'muscle', n1: 2, n2: 9 },  // Left 3
-      { type: 'muscle', n1: 3, n2: 17 }, // Right 4
-      { type: 'muscle', n1: 4, n2: 11 }, // Left 5
-      { type: 'muscle', n1: 5, n2: 19 }, // Right 6
-      { type: 'muscle', n1: 6, n2: 13 }, // Left 7
-
-      // Spine flexibility muscles
-      { type: 'muscle', n1: 0, n2: 2 }, // Front spine
-      { type: 'muscle', n1: 2, n2: 4 }, // Mid spine
-      { type: 'muscle', n1: 4, n2: 6 }  // Rear spine
-    ]
-  },
-
-  {
-    name: 'Rolling Wheel',
-    description: 'Spins efficiently - exploits physics but fun!',
-    nodes: [
-      { id: 0, x: 270, y: 280 },
-      { id: 1, x: 330, y: 280 },
-      { id: 2, x: 330, y: 340 },
-      { id: 3, x: 270, y: 340 }
-    ],
-    constraints: [
-      // Square frame
+      // Fully braced quad body
       { type: 'bone', n1: 0, n2: 1 },
       { type: 'bone', n1: 1, n2: 2 },
       { type: 'bone', n1: 2, n2: 3 },
       { type: 'bone', n1: 3, n2: 0 },
+      { type: 'bone', n1: 0, n2: 2 }, // Diagonal brace
+      { type: 'bone', n1: 1, n2: 3 }, // Diagonal brace
+      // Left leg (2 muscles — stronger)
+      { type: 'muscle', n1: 3, n2: 4 },
+      { type: 'muscle', n1: 0, n2: 4 },
+      // Right leg (1 muscle — weaker)
+      { type: 'muscle', n1: 2, n2: 5 }
+    ]
+  },
 
-      // Diagonal muscles (alternating contraction creates rotation)
-      { type: 'muscle', n1: 0, n2: 2 },
-      { type: 'muscle', n1: 1, n2: 3 },
+  // ── 5. Tall Biped ──────────────────────────────────────────────────
+  // Tall narrow body with stilt-like legs.
+  {
+    name: 'Tall Biped',
+    description: '6 nodes — tall body, stilt legs',
+    nodes: [
+      { id: 0, x: 300, y: 272 }, // Head
+      { id: 1, x: 300, y: 298 }, // Body center
+      { id: 2, x: 280, y: 312 }, // Left hip
+      { id: 3, x: 320, y: 312 }, // Right hip
+      { id: 4, x: 270, y: 352 }, // Left foot
+      { id: 5, x: 330, y: 352 }  // Right foot
+    ],
+    constraints: [
+      // Fully triangulated upper body
+      { type: 'bone', n1: 0, n2: 1 },
+      { type: 'bone', n1: 0, n2: 2 },
+      { type: 'bone', n1: 0, n2: 3 },
+      { type: 'bone', n1: 1, n2: 2 },
+      { type: 'bone', n1: 1, n2: 3 },
+      { type: 'bone', n1: 2, n2: 3 },
+      // Legs
+      { type: 'muscle', n1: 2, n2: 4 },
+      { type: 'muscle', n1: 3, n2: 5 }
+    ]
+  },
 
-      // Side muscles (for balance and control)
-      { type: 'muscle', n1: 0, n2: 1 },
-      { type: 'muscle', n1: 2, n2: 3 }
+  // ── 6. Tripod ──────────────────────────────────────────────────────
+  // Fully triangulated body with 3 feet. Very stable.
+  {
+    name: 'Tripod',
+    description: '7 nodes — 3-legged, very stable',
+    nodes: [
+      { id: 0, x: 300, y: 278 }, // Top
+      { id: 1, x: 272, y: 305 }, // Body left
+      { id: 2, x: 328, y: 305 }, // Body right
+      { id: 3, x: 300, y: 310 }, // Body bottom
+      { id: 4, x: 260, y: 348 }, // Left foot
+      { id: 5, x: 340, y: 348 }, // Right foot
+      { id: 6, x: 300, y: 350 }  // Center foot
+    ],
+    constraints: [
+      // Fully triangulated body (6 bones)
+      { type: 'bone', n1: 0, n2: 1 },
+      { type: 'bone', n1: 0, n2: 2 },
+      { type: 'bone', n1: 0, n2: 3 },
+      { type: 'bone', n1: 1, n2: 2 },
+      { type: 'bone', n1: 1, n2: 3 },
+      { type: 'bone', n1: 2, n2: 3 },
+      // 3 legs
+      { type: 'muscle', n1: 1, n2: 4 },
+      { type: 'muscle', n1: 2, n2: 5 },
+      { type: 'muscle', n1: 3, n2: 6 }
+    ]
+  },
+
+  // ── 7. Zigzag ──────────────────────────────────────────────────────
+  // Wider triangulated body, 3 legs spread underneath.
+  {
+    name: 'Zigzag',
+    description: '7 nodes — wide body, 3 offset legs',
+    nodes: [
+      { id: 0, x: 268, y: 282 }, // Top-left
+      { id: 1, x: 300, y: 275 }, // Top-center
+      { id: 2, x: 332, y: 282 }, // Top-right
+      { id: 3, x: 300, y: 305 }, // Body center
+      { id: 4, x: 258, y: 340 }, // Left foot
+      { id: 5, x: 300, y: 348 }, // Center foot
+      { id: 6, x: 342, y: 340 }  // Right foot
+    ],
+    constraints: [
+      // Triangulated wide body
+      { type: 'bone', n1: 0, n2: 1 },
+      { type: 'bone', n1: 1, n2: 2 },
+      { type: 'bone', n1: 0, n2: 3 },
+      { type: 'bone', n1: 2, n2: 3 },
+      { type: 'bone', n1: 1, n2: 3 },
+      { type: 'bone', n1: 0, n2: 2 }, // Top brace
+      // 3 legs
+      { type: 'muscle', n1: 0, n2: 4 },
+      { type: 'muscle', n1: 3, n2: 5 },
+      { type: 'muscle', n1: 2, n2: 6 }
+    ]
+  },
+
+  // ── 8. Wide Strider ────────────────────────────────────────────────
+  // Based on user Example 1. Long flat heavily-triangulated body,
+  // 2 feet spread wide, 2 spine-flexing muscles. Very high bone:muscle ratio.
+  {
+    name: 'Wide Strider',
+    description: '8 nodes — long rigid body, 2 spine muscles flex feet',
+    nodes: [
+      { id: 0, x: 289, y: 293 }, // Upper spine left-center
+      { id: 1, x: 324, y: 293 }, // Upper spine right
+      { id: 2, x: 345, y: 327 }, // Right foot
+      { id: 3, x: 319, y: 307 }, // Mid-body right
+      { id: 4, x: 316, y: 293 }, // Upper spine right-center
+      { id: 5, x: 280, y: 293 }, // Upper spine left
+      { id: 6, x: 282, y: 307 }, // Mid-body left
+      { id: 7, x: 255, y: 327 }  // Left foot
+    ],
+    constraints: [
+      // Left triangle (foot, mid, spine)
+      { type: 'bone', n1: 7, n2: 6 },
+      { type: 'bone', n1: 6, n2: 5 },
+      { type: 'bone', n1: 5, n2: 7 },
+      // Mid-body cross-bracing
+      { type: 'bone', n1: 6, n2: 0 },
+      { type: 'bone', n1: 0, n2: 4 },
+      { type: 'bone', n1: 4, n2: 3 },
+      // Right triangle (spine, mid, foot)
+      { type: 'bone', n1: 3, n2: 1 },
+      { type: 'bone', n1: 1, n2: 2 },
+      { type: 'bone', n1: 2, n2: 3 },
+      // Additional bracing
+      { type: 'bone', n1: 6, n2: 3 }, // Mid cross-brace
+      { type: 'bone', n1: 3, n2: 0 }, // Right-to-left
+      { type: 'bone', n1: 6, n2: 4 }, // Left-to-right
+      // Spine-flexing muscles (only 2!)
+      { type: 'muscle', n1: 5, n2: 0 },
+      { type: 'muscle', n1: 4, n2: 1 }
+    ]
+  },
+
+  // ── 9. Hexapod ─────────────────────────────────────────────────────
+  // Wide triangulated body with 3 feet. More ground contact than Tripod.
+  {
+    name: 'Hexapod',
+    description: '9 nodes — wide 6-point body, 3 feet',
+    nodes: [
+      { id: 0, x: 270, y: 285 }, // Body top-left
+      { id: 1, x: 300, y: 280 }, // Body top-center
+      { id: 2, x: 330, y: 285 }, // Body top-right
+      { id: 3, x: 275, y: 308 }, // Body bottom-left
+      { id: 4, x: 300, y: 312 }, // Body bottom-center
+      { id: 5, x: 325, y: 308 }, // Body bottom-right
+      { id: 6, x: 258, y: 345 }, // Left foot
+      { id: 7, x: 300, y: 348 }, // Center foot
+      { id: 8, x: 342, y: 345 }  // Right foot
+    ],
+    constraints: [
+      // Triangulated body (9 bones)
+      { type: 'bone', n1: 0, n2: 1 },
+      { type: 'bone', n1: 1, n2: 2 },
+      { type: 'bone', n1: 0, n2: 3 },
+      { type: 'bone', n1: 1, n2: 4 },
+      { type: 'bone', n1: 2, n2: 5 },
+      { type: 'bone', n1: 3, n2: 4 },
+      { type: 'bone', n1: 4, n2: 5 },
+      { type: 'bone', n1: 0, n2: 4 }, // Cross brace
+      { type: 'bone', n1: 2, n2: 4 }, // Cross brace
+      // 3 legs
+      { type: 'muscle', n1: 3, n2: 6 },
+      { type: 'muscle', n1: 4, n2: 7 },
+      { type: 'muscle', n1: 5, n2: 8 }
+    ]
+  },
+
+  // ── 10. Heavy Runner ───────────────────────────────────────────────
+  // Based on user Example 2. Rigid body box + 2 triangular feet
+  // + mid connector node. 4 muscles give most degrees of freedom.
+  // Most complex — needs many generations but can develop sophisticated gaits.
+  {
+    name: 'Heavy Runner',
+    description: '11 nodes — rigid body, tri-feet, 4 muscles',
+    nodes: [
+      // Left foot triangle
+      { id: 0, x: 255, y: 313 },
+      { id: 1, x: 268, y: 313 },
+      { id: 2, x: 261, y: 334 },
+      // Right foot triangle
+      { id: 3, x: 333, y: 312 },
+      { id: 4, x: 345, y: 312 },
+      { id: 5, x: 339, y: 335 },
+      // Rigid body box (fully braced)
+      { id: 6, x: 280, y: 299 }, // Bottom-left
+      { id: 7, x: 323, y: 300 }, // Bottom-right
+      { id: 8, x: 324, y: 286 }, // Top-right
+      { id: 9, x: 282, y: 285 }, // Top-left
+      // Mid connector
+      { id: 10, x: 301, y: 313 }
+    ],
+    constraints: [
+      // Body box — fully braced rectangle (6 bones)
+      { type: 'bone', n1: 6, n2: 9 }, // Left edge
+      { type: 'bone', n1: 9, n2: 8 }, // Top edge
+      { type: 'bone', n1: 8, n2: 7 }, // Right edge
+      { type: 'bone', n1: 7, n2: 6 }, // Bottom edge
+      { type: 'bone', n1: 9, n2: 7 }, // Diagonal brace
+      { type: 'bone', n1: 8, n2: 6 }, // Diagonal brace
+      // Left foot triangle (3 bones)
+      { type: 'bone', n1: 0, n2: 1 },
+      { type: 'bone', n1: 1, n2: 2 },
+      { type: 'bone', n1: 2, n2: 0 },
+      // Right foot triangle (3 bones)
+      { type: 'bone', n1: 3, n2: 4 },
+      { type: 'bone', n1: 4, n2: 5 },
+      { type: 'bone', n1: 5, n2: 3 },
+      // Foot-to-body connections (4 bones)
+      { type: 'bone', n1: 1, n2: 6 }, // Left foot → body left
+      { type: 'bone', n1: 7, n2: 3 }, // Body right → right foot
+      { type: 'bone', n1: 3, n2: 6 }, // Cross brace
+      { type: 'bone', n1: 1, n2: 7 }, // Cross brace
+      // Mid connector bones (4 bones)
+      { type: 'bone', n1: 10, n2: 1 },
+      { type: 'bone', n1: 10, n2: 3 },
+      { type: 'bone', n1: 10, n2: 6 },
+      { type: 'bone', n1: 10, n2: 7 },
+      // 4 muscles — diagonal body-to-foot + connector-to-foot-tip
+      { type: 'muscle', n1: 9, n2: 0 },  // Body top-left → left foot
+      { type: 'muscle', n1: 8, n2: 4 },  // Body top-right → right foot
+      { type: 'muscle', n1: 10, n2: 2 }, // Connector → left foot bottom
+      { type: 'muscle', n1: 10, n2: 5 }  // Connector → right foot bottom
     ]
   }
 ];
