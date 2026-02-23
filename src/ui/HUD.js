@@ -31,12 +31,12 @@ export class HUD {
 
   update(sim) {
     if (this.els.gen) this.els.gen.textContent = String(sim.generation);
-    if (this.els.genBest) this.els.genBest.textContent = `${sim.genBestDist}m`;
-    if (this.els.allBest) this.els.allBest.textContent = `${sim.allTimeBest}m`;
+    if (this.els.genBest) this.els.genBest.textContent = `${sim.genBestDist.toFixed(1)}m`;
+    if (this.els.allBest) this.els.allBest.textContent = `${sim.allTimeBest.toFixed(1)}m`;
 
     const delta = sim.allTimeBest - sim.prevAllTimeBest;
     if (this.els.improve) {
-      this.els.improve.textContent = `${delta >= 0 ? '+' : ''}${delta}m`;
+      this.els.improve.textContent = `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}m`;
       this.els.improve.style.color = delta > 0 ? '#6ee7b7' : '#fca5a5';
     }
     if (this.els.stagnant) this.els.stagnant.textContent = `${sim.stagnantGens}g`;

@@ -208,6 +208,12 @@ export class Evolution {
     // Only mark as changed if values actually differ (avoids spurious transfer overhead)
     const changed = newArch.hiddenLayers !== arch.hiddenLayers ||
                     newArch.neuronsPerLayer !== arch.neuronsPerLayer;
+
+    // ASSERTION: never allow 0 hidden layers
+    if (newArch.hiddenLayers < 1) {
+      throw new Error(`Invalid mutated architecture: hiddenLayers=${newArch.hiddenLayers}`);
+    }
+
     return { architecture: newArch, changed };
   }
 
@@ -224,11 +230,17 @@ export class Evolution {
 
   /**
    * Generate random architecture — always ≥1 hidden layer.
+   * @throws {Error} If hiddenLayers would be < 1
    */
   static randomArchitecture() {
-    return {
-      hiddenLayers: 1 + Math.floor(Math.random() * 2), // 1 or 2 layers, NEVER 0
-      neuronsPerLayer: 8 + Math.floor(Math.random() * 8) // 8–16 neurons
-    };
+    const hiddenLayers = 1 + Math.floor(Math.random() * 2); // 1 or 2 layers, NEVER 0
+    const neuronsPerLayer = 8 + Math.floor(Math.random() * 8); // 8–16 neurons
+
+    // ASSERTION: never allow 0 hidden layers
+    if (hiddenLayers < 1) {
+      throw new Error(`Invalid random architecture: hiddenLayers=${hiddenLayers}`);
+    }
+
+    return { hiddenLayers, neuronsPerLayer };
   }
 }

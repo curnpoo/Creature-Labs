@@ -485,11 +485,11 @@ this.world = null;
   }
 
   distMetersFromX(x) {
-    return Math.max(0, Math.floor((x - this.spawnX) / 100));
+    return Math.max(0, (x - this.spawnX) / SCALE);
   }
 
   distMetersContinuousFromX(x) {
-    return Math.max(0, (x - this.spawnX) / 100);
+    return Math.max(0, (x - this.spawnX) / SCALE);
   }
 
   creatureScore(creature) {
@@ -554,8 +554,9 @@ this.world = null;
     this.creatures.sort((a, b) => this.creatureScore(b) - this.creatureScore(a));
     const winner = this.creatures[0];
     const winnerFitness = this.creatureScore(winner);
-    const genBest = this.distMetersFromX(winner.getX());
-    this.genBestDist = genBest;
+    const peakX = winner.getFitnessSnapshot().maxX;
+    const genBest = this.distMetersFromX(Number.isFinite(peakX) ? peakX : winner.getX());
+    this.genBestDist = 0; // reset for next generation — live tracking will fill it in
     this.lastGenerationBrain = {
       version: 1,
       createdAt: new Date().toISOString(),
@@ -748,7 +749,14 @@ this.world = null;
 
     const leader = this.visualLeader || rawLeader;
     if (leader) {
-      this.genBestDist = Math.max(this.genBestDist, this.distMetersFromX(leader.getX()));
+      // Track peak across all creatures so a backslide can't erase the record
+      const peakThisFrame = this.creatures.reduce((best, c) => {
+        const mx = c.stats.maxX;
+        return Number.isFinite(mx) ? Math.max(best, mx) : best;
+      }, -Infinity);
+      if (Number.isFinite(peakThisFrame)) {
+        this.genBestDist = Math.max(this.genBestDist, this.distMetersFromX(peakThisFrame));
+      }
       const center = leader.getCenter();
       if (!this.currentGhostPath.length ||
         Math.abs(center.x - this.currentGhostPath[this.currentGhostPath.length - 1].x) > 5) {

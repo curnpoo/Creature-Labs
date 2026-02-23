@@ -198,7 +198,7 @@
                     <div
                         id="panel-hud"
                         class="sim-panel"
-                        style="flex: 0 0 auto; min-width: 420px; border-right: 1px solid var(--border-color); border-radius: 0; border: none"
+                        style="flex: 0 0 auto; min-width: 100%; border-right: 1px solid var(--border-color); border-radius: 0; border: none"
                     >
                         <div class="sim-panel-title">
                             <span><i class="fas fa-chart-line mr-1"></i> Live
@@ -208,96 +208,55 @@
                                 class="text-cyan-300 text-[10px]"
                             >TRAIN</span>
                         </div>
-                        <div class="score-grid">
-                            <div>
-                                <div class="score-label">Generation</div>
-                                <div
-                                    class="score-value text-white"
-                                    id="hud-gen"
-                                >
-                                    1
-                                </div>
+                        <div class="stats-board">
+                            <div class="stat-item">
+                                <span class="stat-value text-white" id="hud-gen">1</span>
+                                <span class="stat-label">GEN</span>
                             </div>
-                            <div>
-                                <div class="score-label">Gen Best</div>
-                                <div
-                                    class="score-value text-cyan-300"
-                                    id="hud-genbest"
-                                >
-                                    0m
-                                </div>
+                            <div class="stat-divider"></div>
+                            <div class="stat-item">
+                                <span class="stat-value text-cyan-300" id="hud-genbest">0m</span>
+                                <span class="stat-label">GEN BEST</span>
                             </div>
-                            <div>
-                                <div class="score-label">All-Time</div>
-                                <div
-                                    class="score-value text-[var(--primary)]"
-                                    id="hud-allbest"
-                                >
-                                    0m
-                                </div>
+                            <div class="stat-divider"></div>
+                            <div class="stat-item">
+                                <span class="stat-value text-[var(--primary)]" id="hud-allbest">0m</span>
+                                <span class="stat-label">ALL-TIME</span>
                             </div>
-                            <div>
-                                <div class="score-label">Delta</div>
-                                <div
-                                    class="score-value text-emerald-300"
-                                    id="hud-improve"
-                                >
-                                    +0m
-                                </div>
+                            <div class="stat-divider"></div>
+                            <div class="stat-item">
+                                <span class="stat-value text-emerald-300" id="hud-improve">+0m</span>
+                                <span class="stat-label">DELTA</span>
                             </div>
-                            <div>
-                                <div class="score-label">Stagnant</div>
-                                <div
-                                    class="score-value text-amber-300"
-                                    id="hud-stagnant"
-                                >
-                                    0g
-                                </div>
+                            <div class="stat-divider"></div>
+                            <div class="stat-item">
+                                <span class="stat-value text-amber-300" id="hud-stagnant">0g</span>
+                                <span class="stat-label">STAGNANT</span>
                             </div>
-                            <div>
-                                <div class="score-label">Time Left</div>
-                                <div
-                                    class="score-value text-yellow-300"
-                                    id="hud-time"
-                                >
-                                    8.0s
-                                </div>
+                            <div class="stat-divider"></div>
+                            <div class="stat-item">
+                                <span class="stat-value text-yellow-300" id="hud-time">8.0s</span>
+                                <span class="stat-label">TIME LEFT</span>
                             </div>
-                            <div>
-                                <div class="score-label">Elapsed</div>
-                                <div
-                                    class="score-value text-purple-300"
-                                    id="hud-elapsed"
-                                >
-                                    0:00
-                                </div>
+                            <div class="stat-divider"></div>
+                            <div class="stat-item">
+                                <span class="stat-value text-purple-300" id="hud-elapsed">0:00</span>
+                                <span class="stat-label">ELAPSED</span>
                             </div>
-                            <div>
-                                <div class="score-label">Active</div>
-                                <div
-                                    class="score-value text-lime-300"
-                                    id="hud-poplive"
-                                >
-                                    0/0
-                                </div>
+                            <div class="stat-divider"></div>
+                            <div class="stat-item">
+                                <span class="stat-value text-lime-300" id="hud-poplive">0/0</span>
+                                <span class="stat-label">ACTIVE</span>
                             </div>
-                            <div>
-                                <div class="score-label">FPS</div>
-                                <div
-                                    class="score-value text-gray-400"
-                                    id="hud-fps"
-                                >
-                                    60
-                                </div>
+                            <div class="stat-divider"></div>
+                            <div class="stat-item">
+                                <span class="stat-value text-gray-400" id="hud-fps">60</span>
+                                <span class="stat-label">FPS</span>
                             </div>
-                            <div>
-                                <div class="score-label">Eff. Mut</div>
-                                <div
-                                    class="score-value text-pink-300"
-                                    id="hud-effmut"
-                                >
-                                    8%
-                                </div>
+                            <div class="stat-divider"></div>
+                            <div class="stat-item">
+                                <span class="stat-value text-pink-300" id="hud-effmut">8%</span>
+                                <span class="stat-label">EFF. MUT</span>
                             </div>
                         </div>
                     </div>
@@ -325,7 +284,7 @@
                                     class="w-full h-full"
                                 ></canvas>
                             </div>
-                            <div id="top-metrics-container" style="flex: 1; min-width: 0; border-left: 1px solid var(--border-color); display: flex; gap: 0; padding: 4px;">
+                            <div id="top-metrics-container" style="display: none;">
                                 <!-- Individual metric mini-graphs will be inserted here -->
                             </div>
                         </div>

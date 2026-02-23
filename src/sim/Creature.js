@@ -366,6 +366,11 @@ export class Creature {
     hiddenLayers = Math.max(1, Math.min(6, hiddenLayers));
     neuronsPerLayer = Math.max(4, Math.min(32, neuronsPerLayer));
 
+    // ASSERTION: Neural network MUST have at least 1 hidden layer
+    if (hiddenLayers < 1) {
+      throw new Error(`Invalid architecture: hiddenLayers=${hiddenLayers} (must be >= 1)`);
+    }
+
     const layers = [numInputs];
     for (let i = 0; i < hiddenLayers; i++) {
       layers.push(neuronsPerLayer);
