@@ -7,7 +7,12 @@ export const MUSCLE_CONFIG = {
   strength: 1.0, // Base muscle strength (1.0 = 100%, normal strength)
   moveSpeed: 0.1, // Muscle response speed (0.1 = slow/minimum)
   range: 1.0,                   // Muscle range multiplier (1.0 = 80% max change with 0.8 amplitude)
-  smoothing: 0.10,              // Muscle signal smoothing (0.10 = responsive)
+  smoothing: 0.08,              // Muscle signal smoothing (lower = slower target change)
+  signalRateLimit: 0.08,        // Max activation change per physics step (prevents snap impulses)
+
+  // Spring physics (controls muscle impulse behavior)
+  springConstant: 4.5,          // Lower = less launchy
+  damping: 5.0,                 // Higher = less bounce/jitter
 
   // Ground-Dependent Strength (prevents air-pushing exploits)
   groundedBothBodies: 1.0,      // Strength when both bodies grounded (100%)

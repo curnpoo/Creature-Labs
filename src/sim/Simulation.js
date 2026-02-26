@@ -72,6 +72,12 @@ export class Simulation {
     this.muscleMinLength = CONFIG.defaultMuscleMinLength;
     this.muscleMaxLength = CONFIG.defaultMuscleMaxLength;
     this.muscleSmoothing = CONFIG.defaultMuscleSmoothing;
+    this.muscleSignalRateLimit = CONFIG.defaultMuscleSignalRateLimit;
+    this.muscleSpringConstant = CONFIG.defaultMuscleSpringConstant;
+    this.muscleDamping = CONFIG.defaultMuscleDamping;
+    this.groundedBothBodies = CONFIG.defaultGroundedBothBodies;
+    this.groundedOneBody = CONFIG.defaultGroundedOneBody;
+    this.groundedNoBodies = CONFIG.defaultGroundedNoBodies;
     this.muscleActionBudget = CONFIG.defaultMuscleActionBudget;
     this.distanceRewardWeight = CONFIG.defaultDistanceRewardWeight;
     this.speedRewardWeight = CONFIG.defaultSpeedRewardWeight;
@@ -80,6 +86,14 @@ export class Simulation {
     this.jitterPenaltyWeight = CONFIG.defaultJitterPenaltyWeight;
     this.groundSlipPenaltyWeight = CONFIG.defaultGroundSlipPenaltyWeight;
     this.spinPenaltyWeight = CONFIG.defaultSpinPenaltyWeight;
+    this.coordinationBonusWeight = CONFIG.defaultCoordinationBonusWeight;
+    this.actuationJerkPenalty = CONFIG.defaultActuationJerkPenalty;
+    this.spinThreshold = CONFIG.defaultSpinThreshold;
+    this.stumblePenalty = CONFIG.defaultStumblePenalty;
+    this.backwardsPenalty = CONFIG.defaultBackwardsPenalty;
+    this.groundedRatioBonusWeight = CONFIG.defaultGroundedRatioBonusWeight;
+    this.airtimePenaltyWeight = CONFIG.defaultAirtimePenaltyWeight;
+    this.verticalSpeedPenalty = CONFIG.defaultVerticalSpeedPenalty;
     this.spawnX = 60;
     this.spawnCenterX = 60; // updated at spawn time to creature's center pixel
 
@@ -137,6 +151,12 @@ export class Simulation {
       muscleMinLength: this.muscleMinLength,
       muscleMaxLength: this.muscleMaxLength,
       muscleSmoothing: this.muscleSmoothing,
+      muscleSignalRateLimit: this.muscleSignalRateLimit,
+      muscleSpringConstant: this.muscleSpringConstant,
+      muscleDamping: this.muscleDamping,
+      groundedBothBodies: this.groundedBothBodies,
+      groundedOneBody: this.groundedOneBody,
+      groundedNoBodies: this.groundedNoBodies,
       muscleActionBudget: this.muscleActionBudget,
       bodyFriction: this.bodyFriction,
       bodyStaticFriction: this.bodyStaticFriction,
@@ -512,28 +532,41 @@ this.world = null;
     const airtimeDiscount = Math.max(0.02, groundedRatio * groundedRatio);
 
     // PRIMARY: forward displacement, capped and discounted by airtime
-    let score = cappedDistance * 10 * airtimeDiscount;
+    let score = cappedDistance * this.distanceRewardWeight * airtimeDiscount;
 
     // REAL GAIT BONUS: reward anti-phase muscle alternation (walking pattern)
-    score += fitness.coordinationBonus * 2;
+    score += fitness.coordinationBonus * this.coordinationBonusWeight;
 
     // ANTI-FLAIL: penalize chaotic high-frequency actuation changes
-    score -= fitness.actuationJerk * 5;
+    score -= fitness.actuationJerk * this.actuationJerkPenalty;
 
     // ANTI-DRAG: penalize grounded nodes sliding horizontally
-    score -= fitness.groundSlip * 0.15;
+    score -= fitness.groundSlip * this.groundSlipPenaltyWeight;
 
     // ANTI-SPIN: penalize sustained rotation above threshold
-    if (fitness.spin > 0.5) {
-      score -= (fitness.spin - 0.5) * 6;
+    if (fitness.spin > this.spinThreshold) {
+      score -= (fitness.spin - this.spinThreshold) * this.spinPenaltyWeight;
     }
 
     // ANTI-COLLAPSE: penalize falling
-    score -= fitness.stumbles * 3;
+    score -= fitness.stumbles * this.stumblePenalty;
 
     // ANTI-BACKWARDS: heavy penalty for moving backwards
     if (distance < 0) {
-      score -= Math.abs(distance) * 8;
+      score -= Math.abs(distance) * this.backwardsPenalty;
+    }
+
+    // CONTACT QUALITY: reward sustained ground contact + penalize airtime
+    if (Number.isFinite(fitness.groundedRatio)) {
+      score += fitness.groundedRatio * this.groundedRatioBonusWeight;
+    }
+    if (Number.isFinite(fitness.airtimePct)) {
+      score -= (fitness.airtimePct / 100) * this.airtimePenaltyWeight;
+    }
+
+    // ANTI-JUMP: penalize excessive vertical speed
+    if (Number.isFinite(fitness.verticalSpeed)) {
+      score -= fitness.verticalSpeed * this.verticalSpeedPenalty;
     }
 
     // Energy efficiency bonus (only if enabled)
@@ -797,6 +830,12 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
       c.simConfig.muscleMinLength = this.muscleMinLength;
       c.simConfig.muscleMaxLength = this.muscleMaxLength;
       c.simConfig.muscleSmoothing = this.muscleSmoothing;
+      c.simConfig.muscleSignalRateLimit = this.muscleSignalRateLimit;
+      c.simConfig.muscleSpringConstant = this.muscleSpringConstant;
+      c.simConfig.muscleDamping = this.muscleDamping;
+      c.simConfig.groundedBothBodies = this.groundedBothBodies;
+      c.simConfig.groundedOneBody = this.groundedOneBody;
+      c.simConfig.groundedNoBodies = this.groundedNoBodies;
     c.simConfig.muscleActionBudget = this.muscleActionBudget;
     c.simConfig.selfCollision = this.selfCollision;
     c.simConfig.bodyFriction = this.bodyFriction;

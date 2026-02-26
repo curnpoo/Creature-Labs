@@ -33,6 +33,11 @@ export const FITNESS_CONFIG = {
   // ANTI-BACKWARDS: extra multiplier for negative distance
   backwardsPenalty: 8,
 
+  // CONTACT QUALITY
+  groundedRatioBonusWeight: 4,  // Reward sustained ground contact (walking vs hopping)
+  airtimePenaltyWeight: 0.2,    // Extra penalty per 1.0 airtime ratio (0–1)
+  verticalSpeedPenalty: 0.05,   // Penalize excessive vertical speed (jumping)
+
   // --- Legacy fields (read by config/index.js, not applied in creatureScore) ---
   speedWeight: 0,
   stabilityWeight: 0,
