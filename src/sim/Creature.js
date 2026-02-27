@@ -699,10 +699,22 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
   // NN outputs desired target, muscle moves with realistic physics
   this.muscles.forEach((m, i) => {
       // NN output is the desired target (-1 = contract, 0 = base, +1 = extend)
-      const desiredTarget = outputs[i] || 0;
+      let desiredTarget = outputs[i] || 0;
       
       // Initialize muscle state
       if (m.currentTarget === undefined) m.currentTarget = 0;
+      if (m.actionCooldown === undefined) m.actionCooldown = 0;
+
+      // Action budget: only allow a new target every N frames (default ~0.25s at 60Hz).
+      const actionBudget = Math.max(1, Math.round(this.simConfig.muscleActionBudget ?? 1));
+      if (actionBudget > 1) {
+        if (m.actionCooldown > 0) {
+          m.actionCooldown -= 1;
+          desiredTarget = m.currentTarget; // hold until cooldown expires
+        } else {
+          m.actionCooldown = actionBudget;
+        }
+      }
 
       // Rate-limit how fast the signal can change per physics step.
       // This is the real jitter fix: muscles can't reverse direction faster than
