@@ -23,8 +23,9 @@ export class Controls {
       'val-hidden', 'val-neurons', 'val-elites', 'val-tournament',
       'cam-lock', 'cam-free', 'icon-pause',
       'fitness-tag', 'fitness-speed', 'fitness-stability',
-      'fitness-energy', 'fitness-energy-bar', 'fitness-stumbles', 'fitness-spin',
-      'val-spinpen', 'val-maxenergy', 'val-regen', 'val-energycost', 'val-basedrain'
+      'fitness-energy', 'fitness-energy-bar', 'fitness-upright',
+      'val-spinpen', 'val-maxenergy', 'val-regen', 'val-energycost', 'val-basedrain',
+      'val-maxtilt'
     ];
     ids.forEach(id => {
       this.els[id] = document.getElementById(id);
@@ -81,6 +82,30 @@ export class Controls {
     }
     updateSelfCollisionUI();
 
+    const tiltLimitOn = document.getElementById('tiltlimit-on');
+    const tiltLimitOff = document.getElementById('tiltlimit-off');
+    const updateTiltLimitUI = () => {
+      if (tiltLimitOn) tiltLimitOn.classList.toggle('active', this.sim.tiltLimitEnabled);
+      if (tiltLimitOff) tiltLimitOff.classList.toggle('active', !this.sim.tiltLimitEnabled);
+      const tiltControls = document.getElementById('tilt-limit-controls');
+      if (tiltControls) tiltControls.classList.toggle('hidden', !this.sim.tiltLimitEnabled);
+    };
+    if (tiltLimitOn) {
+      tiltLimitOn.onclick = () => {
+        this.sim.tiltLimitEnabled = true;
+        this.sim.syncCreatureRuntimeSettings();
+        updateTiltLimitUI();
+      };
+    }
+    if (tiltLimitOff) {
+      tiltLimitOff.onclick = () => {
+        this.sim.tiltLimitEnabled = false;
+        this.sim.syncCreatureRuntimeSettings();
+        updateTiltLimitUI();
+      };
+    }
+    updateTiltLimitUI();
+
     const ghostsOn = document.getElementById('ghosts-on');
     const ghostsOff = document.getElementById('ghosts-off');
     const updateGhostsUI = () => {
@@ -136,14 +161,23 @@ export class Controls {
       // Slider 10-100 maps to smoothing 0.010-0.100 (1.0%-10.0% display)
       const val = v / 1000;
       this.sim.muscleSmoothing = val;
+      // Couple rate limit to muscle speed so the control has visible effect.
+      // Keep a floor for stability and cap to avoid snap impulses.
+      this.sim.muscleSignalRateLimit = Math.max(0.01, Math.min(0.35, val * 3));
       if (this.sim.creatures) {
         this.sim.creatures.forEach(c => {
           c.simConfig.muscleSmoothing = val;
+          c.simConfig.muscleSignalRateLimit = this.sim.muscleSignalRateLimit;
         });
       }
     });
     this._bindSlider('inp-musbudget', v => {
       this.sim.muscleActionBudget = v;
+      this.sim.syncCreatureRuntimeSettings();
+    });
+    this._bindSlider('inp-maxtilt', v => {
+      this.sim.maxTiltDeg = v;
+      this.sim.maxTiltRad = (v * Math.PI) / 180;
       this.sim.syncCreatureRuntimeSettings();
     });
 
@@ -365,6 +399,12 @@ export class Controls {
       });
     }
 
+    // Ensure slider thumbs reflect current runtime values on first bind.
+    const musmooth = document.getElementById('inp-musmooth');
+    if (musmooth) musmooth.value = String(Math.round(this.sim.muscleSmoothing * 1000));
+    const musbudget = document.getElementById('inp-musbudget');
+    if (musbudget) musbudget.value = String(Math.round(this.sim.muscleActionBudget));
+
     this.setCameraMode('lock');
     this._updateStabilityMode();
     this.updateLabels();
@@ -422,6 +462,15 @@ export class Controls {
     if (energyOff) energyOff.classList.toggle('active', !this.sim.energyEnabled);
   }
 
+  _updateTiltLimitMode() {
+    const tiltLimitOn = document.getElementById('tiltlimit-on');
+    const tiltLimitOff = document.getElementById('tiltlimit-off');
+    const tiltControls = document.getElementById('tilt-limit-controls');
+    if (tiltLimitOn) tiltLimitOn.classList.toggle('active', this.sim.tiltLimitEnabled);
+    if (tiltLimitOff) tiltLimitOff.classList.toggle('active', !this.sim.tiltLimitEnabled);
+    if (tiltControls) tiltControls.classList.toggle('hidden', !this.sim.tiltLimitEnabled);
+  }
+
   toggleReplayPlay(forceValue = null) {
     if (!this.sim.replayHistory.length) {
       this.sim.replayPlaying = false;
@@ -448,11 +497,12 @@ export class Controls {
     set('val-musminlen', `${Math.round((s.muscleMinLength ?? 0.8) * 100)}%`);
     set('val-musmaxlen', `${Math.round((s.muscleMaxLength ?? 1.1) * 100)}%`);
     set('val-musmooth', `${(s.muscleSmoothing * 100).toFixed(1)}%`);
-    set('val-musbudget', `${Math.round(s.muscleActionBudget)}f`);
+    set('val-musbudget', `${Math.round(s.muscleActionBudget)}f (${(s.muscleActionBudget / 60).toFixed(2)}s)`);
     set('val-maxenergy', `${Math.round(s.maxEnergy)}`);
     set('val-regen', `${Math.round(s.energyRegenRate)}/s`);
     set('val-energycost', `${(s.energyUsagePerActuation || 0.8).toFixed(2)}`);
     set('val-basedrain', `${(s.baseDrain || CONFIG.ENERGY_CONFIG.baseDrain).toFixed(2)}`);
+    set('val-maxtilt', `${Math.round(s.maxTiltDeg || CONFIG.defaultMaxTiltDeg)}°`);
     set('val-slippen', `${s.groundSlipPenaltyWeight}`);
     set('val-mut', `${Math.round(s.mutationRate * 100)}%`);
     set('val-mutsize', `${s.mutationSize.toFixed(2)}x`);
@@ -468,7 +518,7 @@ export class Controls {
   }
 
   updateFitnessPanel(fitness, creature) {
-    const f = fitness || { speed: 0, stability: 0, stumbles: 0, spin: 0 };
+    const f = fitness || { speed: 0, stability: 0, upright: 0.5 };
     if (this.els['fitness-speed']) this.els['fitness-speed'].textContent = `${(f.speed / 100).toFixed(1)} m/s`;
     if (this.els['fitness-stability']) this.els['fitness-stability'].textContent = `${f.stability.toFixed(0)}%`;
 
@@ -482,8 +532,7 @@ export class Controls {
       if (this.els['fitness-energy-bar']) this.els['fitness-energy-bar'].style.width = '0%';
     }
 
-    if (this.els['fitness-stumbles']) this.els['fitness-stumbles'].textContent = String(f.stumbles);
-    if (this.els['fitness-spin']) this.els['fitness-spin'].textContent = f.spin.toFixed(2);
+    if (this.els['fitness-upright']) this.els['fitness-upright'].textContent = `${((f.upright || 0) * 100).toFixed(0)}%`;
   }
 
   resetToDefaults() {
@@ -498,10 +547,15 @@ export class Controls {
     s.muscleMinLength = CONFIG.defaultMuscleMinLength;
     s.muscleMaxLength = CONFIG.defaultMuscleMaxLength;
     s.muscleSmoothing = CONFIG.defaultMuscleSmoothing;
+    s.muscleSignalRateLimit = CONFIG.defaultMuscleSignalRateLimit;
     s.muscleActionBudget = CONFIG.defaultMuscleActionBudget;
     s.mutationRate = CONFIG.defaultMutationRate;
     s.mutationSize = CONFIG.defaultMutationSize;
     s.zoom = CONFIG.defaultZoom;
+    s.tiltLimitEnabled = CONFIG.defaultTiltLimitEnabled;
+    s.maxTiltDeg = CONFIG.defaultMaxTiltDeg;
+    s.maxTiltRad = (s.maxTiltDeg * Math.PI) / 180;
+    s.energyEnabled = CONFIG.defaultEnergyEnabled;
     s.maxEnergy = CONFIG.defaultMaxEnergy;
     s.energyRegenRate = CONFIG.defaultEnergyRegenRate;
     s.energyUsagePerActuation = CONFIG.defaultEnergyUsagePerActuation;
@@ -522,6 +576,7 @@ export class Controls {
       'inp-mut': String(Math.round(s.mutationRate * 100)),
       'inp-mutsize': String(Math.round(s.mutationSize * 100)),
       'inp-zoom': String(Math.round(s.zoom * 100)),
+      'inp-maxtilt': String(Math.round(s.maxTiltDeg)),
       'inp-maxenergy': String(Math.round(s.maxEnergy)),
       'inp-regen': String(Math.round(s.energyRegenRate)),
       'inp-energycost': String(Math.round(s.energyUsagePerActuation * 100)),
@@ -533,6 +588,9 @@ export class Controls {
       const el = document.getElementById(id);
       if (el) el.value = value;
     });
+    this._updateEnergyMode();
+    this._updateTiltLimitMode();
+    s.syncCreatureRuntimeSettings();
     this.updateLabels();
   }
 }

@@ -140,20 +140,18 @@ export class Creature {
       speed: 0,
       stability: 100,
       airtimePct: 0,
-      stumbles: 0,
-      spin: 0,
-      spinAccumulated: 0,
+      upright: 0.5,
       actuationJerk: 0,
       actuationLevel: 0,
       groundSlip: 0,
       groundedRatio: 0,
       verticalSpeed: 0,
       energyViolations: 0,
+      teleportViolations: 0,
       frames: 0,
       airFrames: 0,
       maxX: -Infinity,
       prevCenter: null,
-      stumbleLatched: false
     };
 
   // Energy system
@@ -310,8 +308,8 @@ export class Creature {
     const muscleCount = schemaConstraints.filter(c => c.type === 'muscle').length;
 
     // Compute NN layer sizes - EVOLVING architecture
-    // Inputs: body states (5 per body) + time/gait (3) + muscle states (4 per muscle: length, velocity, prev activation, trend)
-    const numInputs = this.bodies.length * 5 + 3 + muscleCount * 4;
+    // Inputs: body states (5 per body) + time/gait (3) + muscle states (3 per muscle) + upright (1)
+    const numInputs = this.bodies.length * 5 + 3 + muscleCount * 3 + 1;
     const numOutputs = muscleCount;
     
     // Architecture is inherited from DNA/parent, or randomly initialized
@@ -554,6 +552,18 @@ export class Creature {
   }
 
   /**
+   * Unified grounded check so all systems use the same threshold.
+   * @param {planck.Body} body
+   * @param {number} groundY
+   * @returns {boolean}
+   */
+  isBodyGrounded(body, groundY) {
+    const pos = body.getPosition();
+    const threshold = this.simConfig.groundedThreshold ?? CONFIG.defaultGroundedThreshold;
+    return (pos.y * SCALE + CONFIG.nodeRadius) >= (groundY - threshold);
+  }
+
+  /**
    * Build sensory input vector from body states.
    * @param {number} groundY
    * @param {number} time - simulation time
@@ -563,8 +573,8 @@ export class Creature {
     const numBodies = this.bodies.length;
     const numMuscles = this.muscles.length;
     const normFactor = dt * 60;
-    // Inputs: per body (5) + gait phase (3) + per muscle (4)
-    const inputs = new Float32Array(numBodies * 5 + 3 + numMuscles * 4);
+    // Inputs: per body (5) + gait phase (3) + per muscle (3) + upright (1)
+    const inputs = new Float32Array(numBodies * 5 + 3 + numMuscles * 3 + 1);
     const center = this.getCenter();
 
     // Initialize velocity smoothing if needed
@@ -594,21 +604,21 @@ export class Creature {
       inputs[offset + 3] = this.smoothedVelocities[velOffset + 1];
 
       // Ground contact
-      inputs[offset + 4] = ((pos.y * SCALE) + CONFIG.nodeRadius >= groundY - 2) ? 1 : 0;
+      inputs[offset + 4] = this.isBodyGrounded(b, groundY) ? 1 : 0;
     }
 
     const base = numBodies * 5;
     // Gait phase signals - slow sine waves to encourage rhythmic walking
     // Multiple frequencies allow different gait patterns
-    inputs[base] = Math.sin(time * 0.05); // Slow gait cycle (~2 seconds)
-    inputs[base + 1] = Math.cos(time * 0.05); // 90 degrees out of phase
-    inputs[base + 2] = Math.sin(time * 0.15); // Faster component for trot/canter
+    inputs[base] = Math.sin(time * 0.05);   // Slow gait cycle (~2 seconds)
+    inputs[base + 1] = Math.sin(time * 0.025); // Very slow baseline rhythm (~4 seconds) — independent frequency
+    inputs[base + 2] = Math.sin(time * 0.15);  // Faster component for trot/canter
 
     // Muscle state inputs - so NN knows its own muscle positions and limits
     const muscleBase = base + 3;
     for (let i = 0; i < numMuscles; i++) {
       const m = this.muscles[i];
-      const muscleOffset = muscleBase + i * 4;
+      const muscleOffset = muscleBase + i * 3;
 
       // Current muscle length as % of base (0.5 = contracted, 1.0 = rest, 1.5 = extended)
       // Normalized to -1 to 1 range for NN
@@ -618,33 +628,21 @@ export class Creature {
       // Muscle length change velocity - SMOOTHED to prevent noise
       const prevLength = m.prevLength || m.baseLength;
       const rawLengthVelocity = (m.currentLength - prevLength) / Math.max(0.001, m.baseLength);
-      // Smooth the velocity input - normalized by dt
       if (!m.smoothedLengthVelocity) m.smoothedLengthVelocity = 0;
       const muscleVelAlpha = Math.min(0.4, Math.max(0.02, 0.2 * normFactor));
       m.smoothedLengthVelocity = m.smoothedLengthVelocity * (1 - muscleVelAlpha) + rawLengthVelocity * muscleVelAlpha;
-      inputs[muscleOffset + 1] = Math.max(-1, Math.min(1, m.smoothedLengthVelocity * 5)); // Reduced multiplier
+      inputs[muscleOffset + 1] = Math.max(-1, Math.min(1, m.smoothedLengthVelocity * 5));
 
       // Previous muscle activation (what we did last frame) - for coordination
       inputs[muscleOffset + 2] = m.prevActivation || 0;
 
-// Muscle length trend (moving average direction) - for predicting future
-// Use circular buffer for better performance
-if (!m.lengthHistory) {
-m.lengthHistory = new Float32Array(20);
-m.historyIndex = 0;
-m.historyCount = 0;
-}
-m.lengthHistory[m.historyIndex] = lengthRatio;
-m.historyIndex = (m.historyIndex + 1) % 20;
-m.historyCount = Math.min(m.historyCount + 1, 20);
-
-const trend = m.historyCount > 1 ?
-(m.lengthHistory[(m.historyIndex - 1 + 20) % 20] - m.lengthHistory[(m.historyIndex - m.historyCount + 20) % 20]) / m.historyCount : 0;
-inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced multiplier
-
-      // Store previous values for next frame
+      // Store previous length for next frame
       m.prevLength = m.currentLength;
     }
+
+    // Upright sensor: 0 = collapsed/flat, 1 = center is 80px above ground
+    const uprightInput = Math.max(0, Math.min(1, (groundY - center.y) / 80));
+    inputs[numBodies * 5 + 3 + numMuscles * 3] = uprightInput;
 
     return inputs;
   }
@@ -683,8 +681,7 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
     // Pre-calculate which bodies are grounded
     const isGrounded = new Map();
     this.bodies.forEach(b => {
-      const pos = b.getPosition();
-      isGrounded.set(b, (pos.y * SCALE + CONFIG.nodeRadius) >= (groundY - 2));
+      isGrounded.set(b, this.isBodyGrounded(b, groundY));
     });
 
   let totalJerk = 0;
@@ -703,16 +700,17 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
       
       // Initialize muscle state
       if (m.currentTarget === undefined) m.currentTarget = 0;
-      if (m.actionCooldown === undefined) m.actionCooldown = 0;
+      if (m.actionCooldownSec === undefined) m.actionCooldownSec = 0;
 
-      // Action budget: only allow a new target every N frames (default ~0.25s at 60Hz).
+      // Action budget: allow a new target every N/60 seconds (real-time stable across sim speed).
       const actionBudget = Math.max(1, Math.round(this.simConfig.muscleActionBudget ?? 1));
+      const actionBudgetSec = actionBudget / 60;
       if (actionBudget > 1) {
-        if (m.actionCooldown > 0) {
-          m.actionCooldown -= 1;
+        if (m.actionCooldownSec > 0) {
+          m.actionCooldownSec = Math.max(0, m.actionCooldownSec - dt);
           desiredTarget = m.currentTarget; // hold until cooldown expires
         } else {
-          m.actionCooldown = actionBudget;
+          m.actionCooldownSec = actionBudgetSec;
         }
       }
 
@@ -820,6 +818,51 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
       const damping = this.simConfig.muscleDamping ?? 7.5;
       forceMagnitude -= damping * relVelAlong;
 
+      const groundedPair = bodyAGrounded || bodyBGrounded;
+      if (groundedPair) {
+        if (!m.wasGroundedPair) {
+          // Reset grounded slew state on touchdown to avoid inheriting airborne force spikes.
+          m.prevGroundedForceMagnitude = 0;
+        }
+        const groundedDeadbandErrorPx = this.simConfig.groundedDeadbandErrorPx ?? CONFIG.defaultGroundedDeadbandErrorPx;
+        const groundedDeadbandVelPxPerSec = this.simConfig.groundedDeadbandVelPxPerSec ?? CONFIG.defaultGroundedDeadbandVelPxPerSec;
+        const groundedSoftZoneErrorPx = this.simConfig.groundedSoftZoneErrorPx ?? CONFIG.defaultGroundedSoftZoneErrorPx;
+        const groundedSoftZoneForceScale = this.simConfig.groundedSoftZoneForceScale ?? CONFIG.defaultGroundedSoftZoneForceScale;
+        const groundedForceRateLimit = this.simConfig.groundedForceRateLimit ?? CONFIG.defaultGroundedForceRateLimit;
+        const groundedSignFlipDeadband = this.simConfig.groundedSignFlipDeadband ?? CONFIG.defaultGroundedSignFlipDeadband;
+        const groundedMinForceMagnitude = this.simConfig.groundedMinForceMagnitude ?? CONFIG.defaultGroundedMinForceMagnitude;
+        const errorAbs = Math.abs(error);
+        const relVelAbs = Math.abs(relVelAlong);
+
+        // Suppress tiny spring corrections while grounded to avoid solver chatter.
+        if (errorAbs <= groundedDeadbandErrorPx && relVelAbs <= groundedDeadbandVelPxPerSec) {
+          forceMagnitude = 0;
+        } else if (errorAbs < groundedSoftZoneErrorPx) {
+          // Taper force in a soft zone near equilibrium instead of full-strength toggling.
+          const t = errorAbs / Math.max(0.0001, groundedSoftZoneErrorPx);
+          const taperScale = groundedSoftZoneForceScale + (1 - groundedSoftZoneForceScale) * t;
+          forceMagnitude *= taperScale;
+        }
+
+        // Grounded-only force slew limiter and sign-flip suppression to kill high-frequency chatter.
+        const prevGroundedForce = m.prevGroundedForceMagnitude || 0;
+        const forceDelta = forceMagnitude - prevGroundedForce;
+        const limitedDelta = Math.max(-groundedForceRateLimit, Math.min(groundedForceRateLimit, forceDelta));
+        forceMagnitude = prevGroundedForce + limitedDelta;
+        if (prevGroundedForce * forceMagnitude < 0 &&
+            Math.abs(prevGroundedForce) < groundedSignFlipDeadband &&
+            Math.abs(forceMagnitude) < groundedSignFlipDeadband) {
+          forceMagnitude = 0;
+        }
+        if (Math.abs(forceMagnitude) < groundedMinForceMagnitude) {
+          forceMagnitude = 0;
+        }
+        m.prevGroundedForceMagnitude = forceMagnitude;
+      } else {
+        m.prevGroundedForceMagnitude = forceMagnitude;
+      }
+      m.wasGroundedPair = groundedPair;
+
       // Apply force if significant
       if (Math.abs(forceMagnitude) > 1.5) {
         forceMagnitude = Math.max(-90, Math.min(90, forceMagnitude)); // Slightly higher force cap (was 80)
@@ -830,8 +873,10 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
           // Apply force
           const forceX = (forceMagnitude * dirX) / SCALE;
           const forceY = (forceMagnitude * dirY) / SCALE;
-          m.bodyA.applyForceToCenter(Vec2(-forceX, -forceY));
-          m.bodyB.applyForceToCenter(Vec2(forceX, forceY));
+          const groundedVerticalForceScale = this.simConfig.groundedVerticalForceScale ?? CONFIG.defaultGroundedVerticalForceScale;
+          const verticalScale = groundedPair ? groundedVerticalForceScale : 1.0;
+          m.bodyA.applyForceToCenter(Vec2(-forceX, -forceY * verticalScale));
+          m.bodyB.applyForceToCenter(Vec2(forceX, forceY * verticalScale));
         }
       }
       
@@ -886,51 +931,61 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
 
   sampleFitness(dtSec, groundY) {
     if (dtSec <= 0) return;
-    const center = this.getCenter();
+    let center = this.getCenter();
     this.stats.frames++;
-    this.stats.maxX = Math.max(this.stats.maxX, center.x);
 
     if (this.stats.prevCenter) {
       const dx = center.x - this.stats.prevCenter.x;
-      const speed = Math.max(0, dx / Math.max(0.0001, dtSec));
+      const dy = center.y - this.stats.prevCenter.y;
+      const maxHorizontalVelocity = this.simConfig.maxHorizontalVelocity ?? CONFIG.defaultMaxHorizontalVelocity ?? 8;
+      const maxVerticalVelocity = this.simConfig.maxVerticalVelocity ?? CONFIG.defaultMaxVerticalVelocity ?? 12;
+      const maxDxAllowed = (maxHorizontalVelocity * SCALE * dtSec * 2.5) + 12;
+      const maxDyAllowed = (maxVerticalVelocity * SCALE * dtSec * 2.5) + 16;
+      const nonFinite = !Number.isFinite(center.x) || !Number.isFinite(center.y);
+      const teleportLike = nonFinite || Math.abs(dx) > maxDxAllowed || Math.abs(dy) > maxDyAllowed;
+
+      if (teleportLike) {
+        this.stats.teleportViolations += 1;
+        center = {
+          x: this.stats.prevCenter.x + Math.sign(dx || 1) * Math.min(Math.abs(dx || 0), maxDxAllowed),
+          y: this.stats.prevCenter.y + Math.sign(dy || 1) * Math.min(Math.abs(dy || 0), maxDyAllowed)
+        };
+      }
+
+      const safeDx = center.x - this.stats.prevCenter.x;
+      const speed = Math.max(0, safeDx / Math.max(0.0001, dtSec));
       this.stats.speed = this.stats.speed * 0.9 + speed * 0.1;
     }
+
+    this.stats.maxX = Math.max(this.stats.maxX, center.x);
     this.stats.prevCenter = center;
 
-    const onGround = this.bodies.some(b => {
-      const pos = b.getPosition();
-      return (pos.y * SCALE + CONFIG.nodeRadius) >= (groundY - 2);
-    });
+    const onGround = this.bodies.some(b => this.isBodyGrounded(b, groundY));
     if (!onGround) this.stats.airFrames++;
     this.stats.airtimePct = (this.stats.airFrames / Math.max(1, this.stats.frames)) * 100;
 
     let avgVy = 0;
-    let avgOmega = 0;
     let groundedAbsVx = 0;
     let groundedCount = 0;
     const ys = [];
-    
+
     this.bodies.forEach(b => {
       const vel = b.getLinearVelocity();
       const pos = b.getPosition();
       avgVy += Math.abs(vel.y * SCALE);
-      avgOmega += Math.abs(b.getAngularVelocity());
       ys.push(pos.y * SCALE);
-      if ((pos.y * SCALE + CONFIG.nodeRadius) >= (groundY - 2)) {
+      if (this.isBodyGrounded(b, groundY)) {
         groundedAbsVx += Math.abs(vel.x * SCALE);
         groundedCount++;
       }
     });
 
     avgVy /= Math.max(1, this.bodies.length);
-    avgOmega /= Math.max(1, this.bodies.length);
     const avgGroundSlip = groundedAbsVx / Math.max(1, groundedCount);
     const groundedRatio = groundedCount / Math.max(1, this.bodies.length);
     this.stats.groundSlip = this.stats.groundSlip * 0.9 + avgGroundSlip * 0.1;
     this.stats.groundedRatio = this.stats.groundedRatio * 0.9 + groundedRatio * 0.1;
     this.stats.verticalSpeed = this.stats.verticalSpeed * 0.9 + avgVy * 0.1;
-    this.stats.spin = this.stats.spin * 0.9 + avgOmega * 0.1;
-    this.stats.spinAccumulated += Math.abs(avgOmega) * dtSec;
 
     const centerHeight = groundY - center.y;
     const heightRatio = Math.max(0, Math.min(1, centerHeight / 80));
@@ -944,13 +999,8 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
     const targetStability = uprightScore + compactScore + bounceScore;
     this.stats.stability = this.stats.stability * 0.9 + targetStability * 0.1;
 
-    const lowToGround = center.y > (groundY - CONFIG.nodeRadius * 2.2);
-    if (lowToGround && !this.stats.stumbleLatched) {
-      this.stats.stumbles++;
-      this.stats.stumbleLatched = true;
-    } else if (!lowToGround) {
-      this.stats.stumbleLatched = false;
-    }
+    // Upright: 0 = collapsed/inverted, 1 = center is 80px above ground
+    this.stats.upright = this.stats.upright * 0.9 + heightRatio * 0.1;
 
     // Energy conservation check
     let kineticEnergy = 0;
@@ -974,9 +1024,7 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
       speed: this.stats.speed,
       stability: Math.max(0, Math.min(100, this.stats.stability)),
       airtimePct: Math.max(0, Math.min(100, this.stats.airtimePct)),
-      stumbles: this.stats.stumbles,
-      spin: this.stats.spin,
-      spinAccumulated: this.stats.spinAccumulated,
+      upright: Math.max(0, Math.min(1, this.stats.upright)),
       actuationJerk: this.stats.actuationJerk,
       actuationLevel: this.stats.actuationLevel,
       coordinationBonus: Math.max(0, this.stats.coordinationBonus),
@@ -984,6 +1032,7 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
       groundedRatio: this.stats.groundedRatio,
       verticalSpeed: this.stats.verticalSpeed,
       energyViolations: this.stats.energyViolations,
+      teleportViolations: this.stats.teleportViolations,
       energyEfficiency: this.energy.efficiency,
       maxX: this.stats.maxX
     };

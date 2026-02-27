@@ -18,6 +18,14 @@ export const MUSCLE_CONFIG = {
   groundedBothBodies: 1.0,      // Strength when both bodies grounded (100%)
   groundedOneBody: 0.7,         // Strength when one body grounded (70%)
   groundedNoBodies: 0.15,       // Strength when airborne (15% - internal tension only)
+  groundedVerticalForceScale: 0.3, // Vertical muscle-force scale when either endpoint is grounded
+  groundedDeadbandErrorPx: 1.25, // Grounded error deadband where micro spring corrections are ignored
+  groundedDeadbandVelPxPerSec: 10, // Grounded relative velocity deadband along muscle axis
+  groundedSoftZoneErrorPx: 4, // Error range where grounded force is tapered before full force kicks in
+  groundedSoftZoneForceScale: 0.35, // Minimum force scale inside grounded soft-zone
+  groundedForceRateLimit: 10, // Max grounded spring-force change per physics step (prevents rapid force flips)
+  groundedSignFlipDeadband: 8, // Zero tiny grounded force sign flips around equilibrium
+  groundedMinForceMagnitude: 3, // Ignore grounded forces below this post-slew threshold
 
   // Force Limiting
   maxForcePerStep: 0.4,         // Max force per step (as fraction of base length)
@@ -26,7 +34,7 @@ export const MUSCLE_CONFIG = {
   jointFreedom: 1.0, // Joint freedom (1.0 = free, 0.0 = rigid)
 
   // Action Budget (frames between muscle state changes)
-  actionBudget: 15, // ~0.25s at 60Hz (one meaningful action per quarter-second)
+  actionBudget: 30, // ~0.5s at 60Hz — halves max actuation frequency to ~2Hz (anti-spam)
 
   // Muscle Length Limits (as ratio of base length)
   minLength: 0.8,   // 80% - can shrink to 80% of base length

@@ -18,17 +18,14 @@ export const FITNESS_CONFIG = {
   coordinationBonusWeight: 2,
 
   // ANTI-FLAIL: penalize chaotic high-frequency actuation changes
-  actuationJerkPenalty: 5,
+  actuationJerkPenalty: 15,
 
   // ANTI-DRAG: penalize grounded nodes sliding horizontally
   groundSlipPenalty: 0.15,
 
-  // ANTI-SPIN: sustained rotation threshold and per-unit penalty
-  spinThreshold: 0.5,
-  spinPenalty: 6,
-
-  // ANTI-COLLAPSE: penalty per stumble event
-  stumblePenalty: 3,
+  // ANTI-INVERT: penalize low body height (collapsed or upside-down posture)
+  // upright in [0,1] where 1 = center is 80px above ground; penalty kicks in below 0.5
+  uprightPenaltyWeight: 25,
 
   // ANTI-BACKWARDS: extra multiplier for negative distance
   backwardsPenalty: 8,
@@ -41,8 +38,11 @@ export const FITNESS_CONFIG = {
   // --- Legacy fields (read by config/index.js, not applied in creatureScore) ---
   speedWeight: 0,
   stabilityWeight: 0,
-  stumblePenaltyWeight: 3,
+  stumblePenaltyWeight: 0,
   jitterPenalty: 5,
   spinAccumulatedPenalty: 0,
+  spinThreshold: 0,
+  spinPenalty: 0,
+  stumblePenalty: 0,
   rewardStability: false,
 };

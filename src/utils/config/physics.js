@@ -12,6 +12,9 @@ export const PHYSICS_CONFIG = {
   groundFriction: 0.95,         // Ground kinetic friction (0.95 = high grip, prevents sliding exploits)
   groundStaticFriction: 1.0,    // Ground static friction (maximum resistance to start sliding)
   tractionDamping: 0.97,        // Velocity damping on ground contact per step (0.97 = 3% loss/step ≈ 84% loss/sec)
+  groundedThreshold: 2,         // Pixel tolerance for considering a node grounded
+  groundedUpwardDamping: 0.4,   // Grounded upward y-velocity damping (kills bounce recoil)
+  groundedDownwardDamping: 0.85,// Grounded downward y-velocity damping (reduces press-into-ground jitter)
 
   // Body/Node Properties (Matter.js range: 0-1)
   bodyFriction: 0.85,           // Body-to-body kinetic friction (increased to prevent slipping)
@@ -36,6 +39,10 @@ export const PHYSICS_CONFIG = {
   // Anti-Exploit Stabilization
   angularDamping: 0.96,         // Angular velocity damping per step
   maxAngularVelocity: 3,        // Maximum angular velocity (rad/s)
+  maxHorizontalVelocity: 8,     // Hard cap for |vx| (m/s) to prevent ballistic exploit launches
+  maxVerticalVelocity: 12,      // Hard cap for |vy| (m/s) to keep solver stable during impacts
+  tiltLimitEnabled: false,      // Clamp node tilt to maxTiltDeg when enabled
+  maxTiltDeg: 25,               // Max absolute node tilt angle (degrees)
 
   // Visual
   nodeRadius: 10,               // Creature node radius (pixels)

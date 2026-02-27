@@ -28,9 +28,8 @@ export class ProgressChart {
       { id: 'avgstab', label: 'Avg Stability', color: '#34d399', getValue: p => p.avgStability || 0, format: v => `${v.toFixed(0)}%` },
       { id: 'avgact', label: 'Avg Actuation', color: '#818cf8', getValue: p => (p.avgActuation || 0) * 100, format: v => `${v.toFixed(0)}%` },
 
-      // Gait Penalties
-      { id: 'avgspin', label: 'Avg Spin', color: '#f97316', getValue: p => p.avgSpin || 0, format: v => v.toFixed(2) },
-      { id: 'avgstumbles', label: 'Avg Stumbles', color: '#ef4444', getValue: p => p.avgStumbles || 0, format: v => v.toFixed(1) },
+      // Gait Quality
+      { id: 'avgupright', label: 'Avg Upright', color: '#34d399', getValue: p => (p.avgUpright || 0) * 100, format: v => `${v.toFixed(0)}%` },
       { id: 'avgslip', label: 'Avg Ground Slip', color: '#fbbf24', getValue: p => p.avgSlip || 0, format: v => v.toFixed(2) },
 
       // Evolution Metrics
@@ -97,7 +96,7 @@ export class ProgressChart {
 
     // Bottom panel: current run performance metrics
     if (this.bottomContainer) {
-      const bottomMetrics = ['fitness', 'genbest', 'avgspeed', 'avgstab', 'avgspin', 'avgstumbles'];
+      const bottomMetrics = ['fitness', 'genbest', 'avgspeed', 'avgstab', 'avgupright', 'avgslip'];
       bottomMetrics.forEach(metricId => {
         const metric = this.metrics.find(m => m.id === metricId);
         if (metric) {

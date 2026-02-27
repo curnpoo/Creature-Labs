@@ -403,7 +403,7 @@ function updateSandboxStats(leader) {
   if (floatDistEl) floatDistEl.textContent = dist.toFixed(1) + 'm';
   if (floatSpeedEl) floatSpeedEl.textContent = (f.speed / 100).toFixed(1) + ' m/s';
   if (floatStabEl) floatStabEl.textContent = f.stability.toFixed(0) + '%';
-  if (floatFallsEl) floatFallsEl.textContent = String(f.stumbles);
+  if (floatFallsEl) floatFallsEl.textContent = `${((f.upright || 0) * 100).toFixed(0)}%`;
   if (runEl) runEl.textContent = 'RUN ' + sim.sandboxRuns;
   
   // Update right panel stats
@@ -416,7 +416,7 @@ function updateSandboxStats(leader) {
   if (panelDistEl) panelDistEl.textContent = dist.toFixed(1) + 'm';
   if (panelSpeedEl) panelSpeedEl.textContent = (f.speed / 100).toFixed(1) + ' m/s';
   if (panelStabEl) panelStabEl.textContent = f.stability.toFixed(0) + '%';
-  if (panelFallsEl) panelFallsEl.textContent = String(f.stumbles);
+  if (panelFallsEl) panelFallsEl.textContent = `${((f.upright || 0) * 100).toFixed(0)}%`;
   if (panelRunEl) panelRunEl.textContent = 'RUN ' + sim.sandboxRuns;
   
   // Track history for graphs (sample every 6 frames = ~10 samples/sec for 60 seconds)
@@ -573,7 +573,7 @@ function updateSandboxScorecard(leader) {
   set('sandbox-distance', `${dist.toFixed(1)}m`);
   set('sandbox-speed', `${(f.speed / 100).toFixed(1)} m/s`);
   set('sandbox-stability', `${f.stability.toFixed(0)}%`);
-  set('sandbox-falls', String(f.stumbles));
+  set('sandbox-falls', `${((f.upright || 0) * 100).toFixed(0)}%`);
   set('sandbox-slip', (f.groundSlip || 0).toFixed(2));
   set('sandbox-run-label', `Run ${sim.sandboxRuns}`);
 }

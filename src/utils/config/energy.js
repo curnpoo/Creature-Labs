@@ -4,7 +4,7 @@
  */
 export const ENERGY_CONFIG = {
   // Core Energy Settings
-  enabled: true,                // Enable/disable energy system
+  enabled: false,               // Enable/disable energy system
   maxEnergy: 100,               // Maximum energy capacity
   startingEnergy: 100,          // Starting energy (% of max, or absolute value)
 

@@ -65,6 +65,14 @@ export class Simulation {
     this.groundFriction = CONFIG.defaultGroundFriction;
     this.groundStaticFriction = CONFIG.defaultGroundStaticFriction;
     this.tractionDamping = CONFIG.defaultTractionDamping;
+    this.groundedThreshold = CONFIG.defaultGroundedThreshold;
+    this.groundedUpwardDamping = CONFIG.defaultGroundedUpwardDamping;
+    this.groundedDownwardDamping = CONFIG.defaultGroundedDownwardDamping;
+    this.maxHorizontalVelocity = CONFIG.defaultMaxHorizontalVelocity;
+    this.maxVerticalVelocity = CONFIG.defaultMaxVerticalVelocity;
+    this.tiltLimitEnabled = CONFIG.defaultTiltLimitEnabled;
+    this.maxTiltDeg = CONFIG.defaultMaxTiltDeg;
+    this.maxTiltRad = (this.maxTiltDeg * Math.PI) / 180;
     this.bodyFriction = CONFIG.defaultBodyFriction;
     this.bodyStaticFriction = CONFIG.defaultBodyStaticFriction;
     this.bodyAirFriction = CONFIG.defaultBodyAirFriction;
@@ -78,6 +86,14 @@ export class Simulation {
     this.groundedBothBodies = CONFIG.defaultGroundedBothBodies;
     this.groundedOneBody = CONFIG.defaultGroundedOneBody;
     this.groundedNoBodies = CONFIG.defaultGroundedNoBodies;
+    this.groundedVerticalForceScale = CONFIG.defaultGroundedVerticalForceScale;
+    this.groundedDeadbandErrorPx = CONFIG.defaultGroundedDeadbandErrorPx;
+    this.groundedDeadbandVelPxPerSec = CONFIG.defaultGroundedDeadbandVelPxPerSec;
+    this.groundedSoftZoneErrorPx = CONFIG.defaultGroundedSoftZoneErrorPx;
+    this.groundedSoftZoneForceScale = CONFIG.defaultGroundedSoftZoneForceScale;
+    this.groundedForceRateLimit = CONFIG.defaultGroundedForceRateLimit;
+    this.groundedSignFlipDeadband = CONFIG.defaultGroundedSignFlipDeadband;
+    this.groundedMinForceMagnitude = CONFIG.defaultGroundedMinForceMagnitude;
     this.muscleActionBudget = CONFIG.defaultMuscleActionBudget;
     this.distanceRewardWeight = CONFIG.defaultDistanceRewardWeight;
     this.speedRewardWeight = CONFIG.defaultSpeedRewardWeight;
@@ -90,6 +106,7 @@ export class Simulation {
     this.actuationJerkPenalty = CONFIG.defaultActuationJerkPenalty;
     this.spinThreshold = CONFIG.defaultSpinThreshold;
     this.stumblePenalty = CONFIG.defaultStumblePenalty;
+    this.uprightPenaltyWeight = CONFIG.defaultUprightPenaltyWeight;
     this.backwardsPenalty = CONFIG.defaultBackwardsPenalty;
     this.groundedRatioBonusWeight = CONFIG.defaultGroundedRatioBonusWeight;
     this.airtimePenaltyWeight = CONFIG.defaultAirtimePenaltyWeight;
@@ -157,10 +174,23 @@ export class Simulation {
       groundedBothBodies: this.groundedBothBodies,
       groundedOneBody: this.groundedOneBody,
       groundedNoBodies: this.groundedNoBodies,
+      groundedVerticalForceScale: this.groundedVerticalForceScale,
+      groundedDeadbandErrorPx: this.groundedDeadbandErrorPx,
+      groundedDeadbandVelPxPerSec: this.groundedDeadbandVelPxPerSec,
+      groundedSoftZoneErrorPx: this.groundedSoftZoneErrorPx,
+      groundedSoftZoneForceScale: this.groundedSoftZoneForceScale,
+      groundedForceRateLimit: this.groundedForceRateLimit,
+      groundedSignFlipDeadband: this.groundedSignFlipDeadband,
+      groundedMinForceMagnitude: this.groundedMinForceMagnitude,
+      maxHorizontalVelocity: this.maxHorizontalVelocity,
+      maxVerticalVelocity: this.maxVerticalVelocity,
       muscleActionBudget: this.muscleActionBudget,
       bodyFriction: this.bodyFriction,
       bodyStaticFriction: this.bodyStaticFriction,
       bodyAirFriction: this.bodyAirFriction,
+      groundedThreshold: this.groundedThreshold,
+      tiltLimitEnabled: this.tiltLimitEnabled,
+      maxTiltDeg: this.maxTiltDeg,
       hiddenLayers: this.hiddenLayers,
       neuronsPerLayer: this.neuronsPerLayer,
       selfCollision: this.selfCollision,
@@ -506,10 +536,11 @@ this.world = null;
 
   getLeader() {
     if (!this.creatures.length) return null;
-    return this.creatures.reduce(
-      (best, curr) => (curr.getX() > best.getX() ? curr : best),
-      this.creatures[0]
-    );
+    return this.creatures.reduce((best, curr) => {
+      const bestX = Number.isFinite(best?.stats?.maxX) ? best.stats.maxX : best.getX();
+      const currX = Number.isFinite(curr?.stats?.maxX) ? curr.stats.maxX : curr.getX();
+      return currX > bestX ? curr : best;
+    }, this.creatures[0]);
   }
 
   distMetersFromX(x) {
@@ -525,6 +556,7 @@ this.world = null;
     const distance = this.distMetersContinuousFromX(
       Number.isFinite(fitness.maxX) ? fitness.maxX : creature.getX()
     );
+    const signedDistance = (creature.getX() - this.spawnCenterX) / SCALE;
 
     // ANTI-LAUNCH: distance capped at 200m — a launch covers 8000m but only 200m counts.
     // A creature must walk faster to score above this, not launch harder.
@@ -548,17 +580,14 @@ this.world = null;
     // ANTI-DRAG: penalize grounded nodes sliding horizontally
     score -= fitness.groundSlip * this.groundSlipPenaltyWeight;
 
-    // ANTI-SPIN: penalize sustained rotation above threshold
-    if (fitness.spin > this.spinThreshold) {
-      score -= (fitness.spin - this.spinThreshold) * this.spinPenaltyWeight;
+    // ANTI-INVERT: penalize low/collapsed body posture (upright < 0.5 = creature is low or inverted)
+    if (Number.isFinite(fitness.upright)) {
+      score -= Math.max(0, 0.5 - fitness.upright) * this.uprightPenaltyWeight;
     }
 
-    // ANTI-COLLAPSE: penalize falling
-    score -= fitness.stumbles * this.stumblePenalty;
-
     // ANTI-BACKWARDS: heavy penalty for moving backwards
-    if (distance < 0) {
-      score -= Math.abs(distance) * this.backwardsPenalty;
+    if (signedDistance < 0) {
+      score -= Math.abs(signedDistance) * this.backwardsPenalty;
     }
 
     // CONTACT QUALITY: reward sustained ground contact + penalize airtime
@@ -572,6 +601,21 @@ this.world = null;
     // ANTI-JUMP: penalize excessive vertical speed
     if (Number.isFinite(fitness.verticalSpeed)) {
       score -= fitness.verticalSpeed * this.verticalSpeedPenalty;
+    }
+
+    // ANTI-BALLISTIC: strongly punish exploit trajectories (mostly airborne long-distance launches).
+    if (Number.isFinite(fitness.airtimePct) && distance > 60 && fitness.airtimePct > 85) {
+      score -= (distance - 60) * 8;
+    }
+
+    // Penalize physically suspicious energy spikes already tracked by the creature.
+    if (Number.isFinite(fitness.energyViolations) && fitness.energyViolations > 0) {
+      score -= fitness.energyViolations * 0.5;
+    }
+
+    // Any teleport-like event is a hard exploit signal: disqualify from selection.
+    if (Number.isFinite(fitness.teleportViolations) && fitness.teleportViolations > 0) {
+      score -= 5000 * fitness.teleportViolations;
     }
 
     // Energy efficiency bonus (only if enabled)
@@ -616,8 +660,7 @@ this.world = null;
     const avgDist = popDistances.reduce((a, b) => a + b, 0) / Math.max(1, popDistances.length);
     const avgSpeed = popFitness.reduce((a, f) => a + f.speed, 0) / Math.max(1, popFitness.length);
     const avgStability = popFitness.reduce((a, f) => a + f.stability, 0) / Math.max(1, popFitness.length);
-    const avgStumbles = popFitness.reduce((a, f) => a + f.stumbles, 0) / Math.max(1, popFitness.length);
-    const avgSpin = popFitness.reduce((a, f) => a + (f.spin || 0), 0) / Math.max(1, popFitness.length);
+    const avgUpright = popFitness.reduce((a, f) => a + (f.upright || 0), 0) / Math.max(1, popFitness.length);
     const avgSlip = popFitness.reduce((a, f) => a + (f.groundSlip || 0), 0) / Math.max(1, popFitness.length);
     const avgActuation = popFitness.reduce((a, f) => a + (f.actuationLevel || 0), 0) / Math.max(1, popFitness.length);
     
@@ -630,10 +673,9 @@ this.world = null;
     // Small bonuses for good behaviors (not required, just nice)
     evoScore += avgSpeed * 0.1; // Forward movement is good
     
-    // Only penalize clear failures
-    evoScore -= avgStumbles * 0.5; // Falling is actually bad
-    if (avgSpin > 2.0) {
-      evoScore -= (avgSpin - 2.0) * 2; // Only penalize excessive spinning
+    // Penalize population-level collapse
+    if (avgUpright < 0.4) {
+      evoScore -= (0.4 - avgUpright) * 20;
     }
     
     // No stagnation penalty - let creatures take time to discover walking
@@ -651,8 +693,7 @@ this.world = null;
       avgDist,
       avgSpeed,
       avgStability,
-      avgStumbles,
-      avgSpin,
+      avgUpright,
       avgSlip,
       avgActuation,
       evoScore,
@@ -747,19 +788,47 @@ this.world = null;
         // Constant per-step factor (speed-independent): ~1.5% loss per step = ~60% per second
         const angularDampingPerStep = 0.985;
         this.creatures.forEach(c => {
-          c.bodies.forEach(b => {
+          const allBodies = c.polygonBodies && c.polygonBodies.length
+            ? c.bodies.concat(c.polygonBodies)
+            : c.bodies;
+          allBodies.forEach(b => {
             const pos = b.getPosition();
             const vel = b.getLinearVelocity();
-            const grounded = (pos.y * SCALE + CONFIG.nodeRadius) >= (groundY - 1.5);
+            let vx;
+            let vy;
+            const grounded = (pos.y * SCALE + CONFIG.nodeRadius) >= (groundY - this.groundedThreshold);
             if (grounded) {
-              b.setLinearVelocity(Vec2(vel.x * this.tractionDamping, vel.y));
+              const dampedY = vel.y < 0
+                ? vel.y * this.groundedUpwardDamping
+                : vel.y * this.groundedDownwardDamping;
+              vx = vel.x * this.tractionDamping;
+              vy = dampedY;
             } else {
               // Airborne: light linear damping to kill passive oscillations between ground contacts
-              b.setLinearVelocity(Vec2(vel.x * 0.992, vel.y * 0.992));
+              vx = vel.x * 0.992;
+              vy = vel.y * 0.992;
             }
+
+            // Hard velocity safety clamp to kill rare ballistic launches.
+            vx = Math.max(-this.maxHorizontalVelocity, Math.min(this.maxHorizontalVelocity, vx));
+            vy = Math.max(-this.maxVerticalVelocity, Math.min(this.maxVerticalVelocity, vy));
+            b.setLinearVelocity(Vec2(vx, vy));
+
             // Constant per-step angular damping — speed-independent
-            const damped = b.getAngularVelocity() * angularDampingPerStep;
-            b.setAngularVelocity(Math.max(-5, Math.min(5, damped)));
+            let angularVelocity = b.getAngularVelocity() * angularDampingPerStep;
+
+            if (this.tiltLimitEnabled) {
+              const angle = this.normalizeAngleRad(b.getAngle());
+              const clampedAngle = Math.max(-this.maxTiltRad, Math.min(this.maxTiltRad, angle));
+              if (clampedAngle !== angle) {
+                b.setTransform(b.getPosition(), clampedAngle);
+                const pushingFurtherOut = (clampedAngle >= this.maxTiltRad && angularVelocity > 0)
+                  || (clampedAngle <= -this.maxTiltRad && angularVelocity < 0);
+                angularVelocity = pushingFurtherOut ? 0 : angularVelocity * 0.35;
+              }
+            }
+
+            b.setAngularVelocity(Math.max(-5, Math.min(5, angularVelocity)));
           });
         });
       }
@@ -841,14 +910,27 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
       c.simConfig.groundedBothBodies = this.groundedBothBodies;
       c.simConfig.groundedOneBody = this.groundedOneBody;
       c.simConfig.groundedNoBodies = this.groundedNoBodies;
-    c.simConfig.muscleActionBudget = this.muscleActionBudget;
-    c.simConfig.selfCollision = this.selfCollision;
-    c.simConfig.bodyFriction = this.bodyFriction;
-    c.simConfig.bodyStaticFriction = this.bodyStaticFriction;
-    c.simConfig.bodyAirFriction = this.bodyAirFriction;
-    c.simConfig.energyEnabled = this.energyEnabled;
+      c.simConfig.groundedThreshold = this.groundedThreshold;
+      c.simConfig.tiltLimitEnabled = this.tiltLimitEnabled;
+      c.simConfig.maxTiltDeg = this.maxTiltDeg;
+      c.simConfig.groundedVerticalForceScale = this.groundedVerticalForceScale;
+      c.simConfig.groundedDeadbandErrorPx = this.groundedDeadbandErrorPx;
+      c.simConfig.groundedDeadbandVelPxPerSec = this.groundedDeadbandVelPxPerSec;
+      c.simConfig.groundedSoftZoneErrorPx = this.groundedSoftZoneErrorPx;
+      c.simConfig.groundedSoftZoneForceScale = this.groundedSoftZoneForceScale;
+      c.simConfig.groundedForceRateLimit = this.groundedForceRateLimit;
+      c.simConfig.groundedSignFlipDeadband = this.groundedSignFlipDeadband;
+      c.simConfig.groundedMinForceMagnitude = this.groundedMinForceMagnitude;
+      c.simConfig.maxHorizontalVelocity = this.maxHorizontalVelocity;
+      c.simConfig.maxVerticalVelocity = this.maxVerticalVelocity;
+      c.simConfig.muscleActionBudget = this.muscleActionBudget;
+      c.simConfig.selfCollision = this.selfCollision;
+      c.simConfig.bodyFriction = this.bodyFriction;
+      c.simConfig.bodyStaticFriction = this.bodyStaticFriction;
+      c.simConfig.bodyAirFriction = this.bodyAirFriction;
+      c.simConfig.energyEnabled = this.energyEnabled;
 
-    c.updateRuntimeSettings();
+      c.updateRuntimeSettings();
 
       // Update body friction
       c.bodies.forEach(b => {
@@ -875,6 +957,10 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
         fixture = fixture.getNext();
       }
     });
+  }
+
+  normalizeAngleRad(angle) {
+    return Math.atan2(Math.sin(angle), Math.cos(angle));
   }
 
   getLastGenerationBrain() {
