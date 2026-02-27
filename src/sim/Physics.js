@@ -20,14 +20,18 @@ export function createEngine(gravity = 10) {
 }
 
 export function createGround(world, groundY, options = {}) {
+  const thicknessPx = options.thickness ?? 16;
+  const halfHeight = (thicknessPx / 2) / SCALE;
+  const halfWidthPx = options.halfWidth ?? 100000;
+  const halfWidth = halfWidthPx / SCALE;
   const ground = world.createBody({
     type: 'static',
-    position: Vec2(0, groundY / SCALE)
+    position: Vec2(0, (groundY + thicknessPx / 2) / SCALE)
   });
   
-  // Create a long ground plane
+  // Create a thick ground slab (more stable than a zero-thickness edge)
   ground.createFixture({
-    shape: Edge(Vec2(-100000, 0), Vec2(100000, 0)),
+    shape: Box(halfWidth, halfHeight),
     friction: options.friction ?? 0.8,
     restitution: 0.0
   });

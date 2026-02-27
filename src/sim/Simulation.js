@@ -210,7 +210,10 @@ export class Simulation {
     this.challengeBodies = [];
     this.world = createEngine(this.gravity);
     this._setupWorldListeners();
-    this.ground = createGround(this.world, this.getGroundY(), { friction: this.groundFriction });
+    this.ground = createGround(this.world, this.getGroundY(), {
+      friction: this.groundFriction,
+      thickness: 16
+    });
     this.rebuildChallengeBodies();
   }
 
@@ -411,6 +414,8 @@ this.world = null;
 
     // Create ground profile segments
     const bodies = [];
+    const segmentThicknessPx = 10;
+    const segmentHalfHeight = (segmentThicknessPx / 2) / SCALE;
     for (let i = 1; i < this.groundProfile.length; i++) {
       const p1 = this.groundProfile[i - 1];
       const p2 = this.groundProfile[i];
@@ -427,7 +432,7 @@ this.world = null;
       });
       
       body.createFixture({
-        shape: planck.Edge(Vec2(-length / 2 / SCALE, 0), Vec2(length / 2 / SCALE, 0)),
+        shape: Box(length / 2 / SCALE, segmentHalfHeight),
         friction: this.groundFriction,
         restitution: 0
       });

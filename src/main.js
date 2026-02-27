@@ -984,29 +984,15 @@ lastPanelUpdateFrame = frameCount;
   // Background
   ctx.fillStyle = '#060810';
   ctx.fillRect(sim.cameraX, sim.cameraY, viewW, viewH);
-  ctx.fillStyle = '#121520';
+  ctx.fillStyle = '#0b0f18';
   ctx.fillRect(sim.cameraX, gY, viewW, 420);
 
-  // Ground line
-  ctx.strokeStyle = '#00f2ff';
+  // Ground line (simple, high-contrast)
+  ctx.strokeStyle = '#e5e7eb';
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(sim.cameraX, gY);
   ctx.lineTo(sim.cameraX + viewW, gY);
-  ctx.stroke();
-
-  // Grass
-  const startX = Math.floor(sim.cameraX / 20) * 20;
-  const endX = startX + viewW + 40;
-  ctx.beginPath();
-  for (let x = startX; x < endX; x += 12) {
-    const h = Math.sin(x * 0.4) * 4 + 10 + Math.cos(x * 0.03) * 3;
-    const tilt = Math.sin(x * 0.09) * 4;
-    ctx.moveTo(x, gY);
-    ctx.lineTo(x + tilt, gY - h);
-  }
-  ctx.strokeStyle = '#2d8a3e';
-  ctx.lineWidth = 2;
   ctx.stroke();
 
   // Challenge terrain line (zero thickness physics, thin visual)
