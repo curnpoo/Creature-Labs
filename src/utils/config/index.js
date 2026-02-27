@@ -47,6 +47,12 @@ export const CONFIG = {
   defaultMuscleMinLength: MUSCLE_CONFIG.minLength,
   defaultMuscleMaxLength: MUSCLE_CONFIG.maxLength,
   defaultMuscleSmoothing: MUSCLE_CONFIG.smoothing,
+  defaultMuscleSignalRateLimit: MUSCLE_CONFIG.signalRateLimit,
+  defaultMuscleSpringConstant: MUSCLE_CONFIG.springConstant,
+  defaultMuscleDamping: MUSCLE_CONFIG.damping,
+  defaultGroundedBothBodies: MUSCLE_CONFIG.groundedBothBodies,
+  defaultGroundedOneBody: MUSCLE_CONFIG.groundedOneBody,
+  defaultGroundedNoBodies: MUSCLE_CONFIG.groundedNoBodies,
   defaultMuscleActionBudget: MUSCLE_CONFIG.actionBudget,
 
   // Fitness Weights
@@ -57,6 +63,14 @@ export const CONFIG = {
   defaultJitterPenaltyWeight: FITNESS_CONFIG.jitterPenalty,
   defaultGroundSlipPenaltyWeight: FITNESS_CONFIG.groundSlipPenalty,
   defaultSpinPenaltyWeight: FITNESS_CONFIG.spinPenalty,
+  defaultCoordinationBonusWeight: FITNESS_CONFIG.coordinationBonusWeight,
+  defaultActuationJerkPenalty: FITNESS_CONFIG.actuationJerkPenalty,
+  defaultSpinThreshold: FITNESS_CONFIG.spinThreshold,
+  defaultStumblePenalty: FITNESS_CONFIG.stumblePenalty,
+  defaultBackwardsPenalty: FITNESS_CONFIG.backwardsPenalty,
+  defaultGroundedRatioBonusWeight: FITNESS_CONFIG.groundedRatioBonusWeight,
+  defaultAirtimePenaltyWeight: FITNESS_CONFIG.airtimePenaltyWeight,
+  defaultVerticalSpeedPenalty: FITNESS_CONFIG.verticalSpeedPenalty,
 
   // Energy System
   defaultEnergyEnabled: ENERGY_CONFIG.enabled,
@@ -124,7 +138,7 @@ export const PRESETS = {
     moveSpeed: 0.6,
     ...FITNESS_CONFIG,
     spinPenalty: 20000,
-    airtimePenalty: 0.5,
+    airtimePenaltyWeight: 0.5,
   },
 
   // Rapid evolution with reduced constraints

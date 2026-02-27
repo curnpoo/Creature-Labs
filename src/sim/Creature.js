@@ -146,6 +146,8 @@ export class Creature {
       actuationJerk: 0,
       actuationLevel: 0,
       groundSlip: 0,
+      groundedRatio: 0,
+      verticalSpeed: 0,
       energyViolations: 0,
       frames: 0,
       airFrames: 0,
@@ -672,10 +674,11 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
 
     // Apply NN outputs to muscles (tanh output in [-1, 1])
     const strength = this.simConfig.muscleStrength || 1.2;
-    const moveSpeed = Math.max(0.2, Math.min(2.2, this.simConfig.jointMoveSpeed || 1.0));
+    const moveSpeed = Math.max(0.05, Math.min(1.2, this.simConfig.jointMoveSpeed ?? 0.1));
     const rangeScale = this.simConfig.muscleRange ?? 0.8; // Default 80% range
     const smoothingBase = this.simConfig.muscleSmoothing ?? 0.10;
     const smoothing = Math.min(0.5, Math.max(0.01, smoothingBase));
+    const rateLimit = this.simConfig.muscleSignalRateLimit ?? Math.max(0.02, Math.min(0.25, moveSpeed * 0.8));
 
     // Pre-calculate which bodies are grounded
     const isGrounded = new Map();
@@ -696,10 +699,22 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
   // NN outputs desired target, muscle moves with realistic physics
   this.muscles.forEach((m, i) => {
       // NN output is the desired target (-1 = contract, 0 = base, +1 = extend)
-      const desiredTarget = outputs[i] || 0;
+      let desiredTarget = outputs[i] || 0;
       
       // Initialize muscle state
       if (m.currentTarget === undefined) m.currentTarget = 0;
+      if (m.actionCooldown === undefined) m.actionCooldown = 0;
+
+      // Action budget: only allow a new target every N frames (default ~0.25s at 60Hz).
+      const actionBudget = Math.max(1, Math.round(this.simConfig.muscleActionBudget ?? 1));
+      if (actionBudget > 1) {
+        if (m.actionCooldown > 0) {
+          m.actionCooldown -= 1;
+          desiredTarget = m.currentTarget; // hold until cooldown expires
+        } else {
+          m.actionCooldown = actionBudget;
+        }
+      }
 
       // Rate-limit how fast the signal can change per physics step.
       // This is the real jitter fix: muscles can't reverse direction faster than
@@ -707,8 +722,9 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
       // smoothing=0.10 → 0.30/step max → ~4Hz max oscillation (fast walking)
       // smoothing=0.03 → 0.09/step max → ~1.3Hz max (slow, deliberate)
       // smoothing=0.01 → 0.03/step max → ~0.4Hz max (very slow)
-      const maxDeltaPerStep = Math.max(0.005, smoothing * 3.0);
-      const rawDelta = desiredTarget - m.currentTarget;
+      const maxDeltaPerStep = Math.max(0.005, rateLimit * normFactor);
+      const smoothedTarget = m.currentTarget + (desiredTarget - m.currentTarget) * smoothing;
+      const rawDelta = smoothedTarget - m.currentTarget;
       m.currentTarget += Math.sign(rawDelta) * Math.min(Math.abs(rawDelta), maxDeltaPerStep);
       m.currentTarget = Math.max(-1, Math.min(1, m.currentTarget));
 
@@ -724,13 +740,16 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
     const bodyBGrounded = isGrounded.get(m.bodyB) || false;
     if (bodyAGrounded || bodyBGrounded) groundedMuscles++;
 
+    const groundedBoth = this.simConfig.groundedBothBodies ?? 1.0;
+    const groundedOne = this.simConfig.groundedOneBody ?? 0.7;
+    const groundedNone = this.simConfig.groundedNoBodies ?? 0.15;
     let muscleStrengthMultiplier;
       if (bodyAGrounded && bodyBGrounded) {
-        muscleStrengthMultiplier = 1.0;
+        muscleStrengthMultiplier = groundedBoth;
       } else if (bodyAGrounded || bodyBGrounded) {
-        muscleStrengthMultiplier = 0.7;
+        muscleStrengthMultiplier = groundedOne;
       } else {
-        muscleStrengthMultiplier = 0.15;
+        muscleStrengthMultiplier = groundedNone;
       }
 
     // Energy system - use currentTarget (what's actually applied) for accurate cost
@@ -788,7 +807,7 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
 
 // Spring drives muscle to rate-limited target. Fixed constants — strength slider controls cap.
       const error = currentDist - targetLength;
-      const springConstant = 7.0;
+      const springConstant = this.simConfig.muscleSpringConstant ?? 7.0;
       let forceMagnitude = -springConstant * error;
 
       // Velocity damping along muscle axis kills spring oscillation
@@ -798,7 +817,7 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
       const relVelY = (velB.y - velA.y) * SCALE;
       const relVelAlong = relVelX * dirX + relVelY * dirY;
 
-      const damping = 7.5;
+      const damping = this.simConfig.muscleDamping ?? 7.5;
       forceMagnitude -= damping * relVelAlong;
 
       // Apply force if significant
@@ -906,7 +925,10 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
     avgVy /= Math.max(1, this.bodies.length);
     avgOmega /= Math.max(1, this.bodies.length);
     const avgGroundSlip = groundedAbsVx / Math.max(1, groundedCount);
+    const groundedRatio = groundedCount / Math.max(1, this.bodies.length);
     this.stats.groundSlip = this.stats.groundSlip * 0.9 + avgGroundSlip * 0.1;
+    this.stats.groundedRatio = this.stats.groundedRatio * 0.9 + groundedRatio * 0.1;
+    this.stats.verticalSpeed = this.stats.verticalSpeed * 0.9 + avgVy * 0.1;
     this.stats.spin = this.stats.spin * 0.9 + avgOmega * 0.1;
     this.stats.spinAccumulated += Math.abs(avgOmega) * dtSec;
 
@@ -959,6 +981,8 @@ inputs[muscleOffset + 3] = Math.max(-1, Math.min(1, trend * 3)); // Reduced mult
       actuationLevel: this.stats.actuationLevel,
       coordinationBonus: Math.max(0, this.stats.coordinationBonus),
       groundSlip: this.stats.groundSlip,
+      groundedRatio: this.stats.groundedRatio,
+      verticalSpeed: this.stats.verticalSpeed,
       energyViolations: this.stats.energyViolations,
       energyEfficiency: this.energy.efficiency,
       maxX: this.stats.maxX

@@ -17,7 +17,7 @@ export class Controls {
       'val-jointspeed', 'val-joint', 'val-gravity', 'val-groundfric',
       'val-groundstatic', 'val-traction', 'val-bodyfric', 'val-bodystatic',
       'val-bodyair', 'val-musrange', 'val-musmooth', 'val-musminlen', 'val-musmaxlen',
-      'val-distreward',
+      'val-musbudget', 'val-distreward',
       'val-speedreward', 'val-jitterpen', 'val-slippen', 'val-stabmode', 'val-mut',
       'val-mutsize', 'val-zoom', 'val-cam',
       'val-hidden', 'val-neurons', 'val-elites', 'val-tournament',
@@ -141,6 +141,10 @@ export class Controls {
           c.simConfig.muscleSmoothing = val;
         });
       }
+    });
+    this._bindSlider('inp-musbudget', v => {
+      this.sim.muscleActionBudget = v;
+      this.sim.syncCreatureRuntimeSettings();
     });
 
     // Energy system sliders
@@ -444,6 +448,7 @@ export class Controls {
     set('val-musminlen', `${Math.round((s.muscleMinLength ?? 0.8) * 100)}%`);
     set('val-musmaxlen', `${Math.round((s.muscleMaxLength ?? 1.1) * 100)}%`);
     set('val-musmooth', `${(s.muscleSmoothing * 100).toFixed(1)}%`);
+    set('val-musbudget', `${Math.round(s.muscleActionBudget)}f`);
     set('val-maxenergy', `${Math.round(s.maxEnergy)}`);
     set('val-regen', `${Math.round(s.energyRegenRate)}/s`);
     set('val-energycost', `${(s.energyUsagePerActuation || 0.8).toFixed(2)}`);
@@ -493,6 +498,7 @@ export class Controls {
     s.muscleMinLength = CONFIG.defaultMuscleMinLength;
     s.muscleMaxLength = CONFIG.defaultMuscleMaxLength;
     s.muscleSmoothing = CONFIG.defaultMuscleSmoothing;
+    s.muscleActionBudget = CONFIG.defaultMuscleActionBudget;
     s.mutationRate = CONFIG.defaultMutationRate;
     s.mutationSize = CONFIG.defaultMutationSize;
     s.zoom = CONFIG.defaultZoom;
@@ -512,6 +518,7 @@ export class Controls {
       'inp-musminlen': String(Math.round(s.muscleMinLength * 100)),
       'inp-musmaxlen': String(Math.round(s.muscleMaxLength * 100)),
       'inp-musmooth': String(Math.round(s.muscleSmoothing * 1000)),
+      'inp-musbudget': String(Math.round(s.muscleActionBudget)),
       'inp-mut': String(Math.round(s.mutationRate * 100)),
       'inp-mutsize': String(Math.round(s.mutationSize * 100)),
       'inp-zoom': String(Math.round(s.zoom * 100)),
