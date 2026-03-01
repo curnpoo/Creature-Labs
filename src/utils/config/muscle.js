@@ -34,7 +34,7 @@ export const MUSCLE_CONFIG = {
   jointFreedom: 1.0, // Joint freedom (1.0 = free, 0.0 = rigid)
 
   // Action Budget (frames between muscle state changes)
-  actionBudget: 30, // ~0.5s at 60Hz — halves max actuation frequency to ~2Hz (anti-spam)
+  actionBudget: 3, // ~0.05s at 60Hz - responsive enough to walk without chatter spam
 
   // Muscle Length Limits (as ratio of base length)
   minLength: 0.8,   // 80% - can shrink to 80% of base length

@@ -794,25 +794,21 @@ this.world = null;
           allBodies.forEach(b => {
             const pos = b.getPosition();
             const vel = b.getLinearVelocity();
-            let vx;
-            let vy;
+            let vx = vel.x;
+            let vy = vel.y;
             const grounded = (pos.y * SCALE + CONFIG.nodeRadius) >= (groundY - this.groundedThreshold);
             if (grounded) {
-              const dampedY = vel.y < 0
-                ? vel.y * this.groundedUpwardDamping
-                : vel.y * this.groundedDownwardDamping;
-              vx = vel.x * this.tractionDamping;
-              vy = dampedY;
-            } else {
-              // Airborne: light linear damping to kill passive oscillations between ground contacts
-              vx = vel.x * 0.992;
-              vy = vel.y * 0.992;
+              // Remove per-step velocity forcing. Only zero tiny residual drift on contact.
+              if (Math.abs(vx) < 0.015) vx = 0;
+              if (Math.abs(vy) < 0.015) vy = 0;
             }
 
-            // Hard velocity safety clamp to kill rare ballistic launches.
-            vx = Math.max(-this.maxHorizontalVelocity, Math.min(this.maxHorizontalVelocity, vx));
-            vy = Math.max(-this.maxVerticalVelocity, Math.min(this.maxVerticalVelocity, vy));
-            b.setLinearVelocity(Vec2(vx, vy));
+            // Keep hard safety clamps, but avoid overriding the solver unless required.
+            const clampedVx = Math.max(-this.maxHorizontalVelocity, Math.min(this.maxHorizontalVelocity, vx));
+            const clampedVy = Math.max(-this.maxVerticalVelocity, Math.min(this.maxVerticalVelocity, vy));
+            if (clampedVx !== vel.x || clampedVy !== vel.y) {
+              b.setLinearVelocity(Vec2(clampedVx, clampedVy));
+            }
 
             // Constant per-step angular damping — speed-independent
             let angularVelocity = b.getAngularVelocity() * angularDampingPerStep;
