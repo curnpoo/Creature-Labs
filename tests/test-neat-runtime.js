@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { Genome } from '../src/nn/neat/Genome.js';
 import { Population } from '../src/nn/neat/Population.js';
+import { Evolution } from '../src/nn/Evolution.js';
+import { getInnovationTracker } from '../src/nn/neat/index.js';
 import { NODE_TYPES, ACTIVATIONS } from '../src/nn/neat/genes.js';
 
 function buildGenomeA() {
@@ -106,13 +108,56 @@ function testPopulationExportSerializableGenome() {
   assert.ok(Array.isArray(first.genome?.connections), 'Exported genome connections must be a serializable array');
 }
 
+function testEvolutionResetClearsRuntimeState() {
+  const config = {
+    trainingAlgorithm: 'neat',
+    neatMode: true,
+    neatInputCount: 3,
+    neatOutputCount: 2,
+    neatAddNodeRate: 0,
+    neatAddConnRate: 0
+  };
+
+  Evolution.resetNeatState();
+  const tracker = getInnovationTracker();
+
+  const firstGen = Evolution.evolve([], 4, config);
+  assert.ok(Array.isArray(firstGen) && firstGen.length === 4, 'NEAT evolve should return first generation entries');
+  const baselineFirstGenomeId = Number(firstGen[0].genomeId) || 0;
+  assert.ok(baselineFirstGenomeId > 0, 'First evolved genome ID should be positive after reset');
+  assert.ok((Evolution.getNeatStatus()?.innovationCount || 0) > 0, 'Innovation count should initialize above zero');
+
+  const secondGen = Evolution.evolve(
+    firstGen.map((entry, idx) => ({ ...entry, fitness: idx + 1 })),
+    4,
+    config
+  );
+  assert.ok(Array.isArray(secondGen) && secondGen.length === 4, 'Second generation should evolve successfully');
+  const maxIdBeforeReset = Math.max(...secondGen.map(entry => Number(entry.genomeId) || 0));
+  assert.ok(maxIdBeforeReset > 1, 'Genome IDs should advance before reset');
+
+  Evolution.resetNeatState();
+  assert.equal(Evolution.getNeatStatus(), null, 'NEAT status should clear to null on reset');
+  assert.equal(tracker.snapshot().nextInnovation, 1, 'Innovation tracker should reset to 1');
+
+  const freshGen = Evolution.evolve([], 4, config);
+  assert.equal(
+    Number(freshGen[0].genomeId) || 0,
+    baselineFirstGenomeId,
+    'Genome ID sequence should restart to the same baseline after reset'
+  );
+}
+
 function run() {
+  Evolution.resetNeatState();
   testTopoDeterminism();
   testInputToOutputIsAcyclic();
   testCycleGuard();
   testStrictCrossover();
   testSerializableRoundtrip();
   testPopulationExportSerializableGenome();
+  testEvolutionResetClearsRuntimeState();
+  Evolution.resetNeatState();
   console.log('test-neat-runtime: OK');
 }
 

@@ -5,6 +5,11 @@ import { getInnovationTracker } from './InnovationTracker.js';
 let NEXT_GENOME_ID = 1;
 let NEXT_SPECIES_ID = 1;
 
+export function resetPopulationRuntimeCounters() {
+  NEXT_GENOME_ID = 1;
+  NEXT_SPECIES_ID = 1;
+}
+
 function nextGenomeId() {
   const id = NEXT_GENOME_ID;
   NEXT_GENOME_ID += 1;
@@ -15,6 +20,16 @@ function nextSpeciesId() {
   const id = NEXT_SPECIES_ID;
   NEXT_SPECIES_ID += 1;
   return id;
+}
+
+function ensureNextGenomeIdAtLeast(minNextId) {
+  if (!Number.isFinite(minNextId)) return;
+  NEXT_GENOME_ID = Math.max(NEXT_GENOME_ID, Math.floor(minNextId));
+}
+
+function ensureNextSpeciesIdAtLeast(minNextId) {
+  if (!Number.isFinite(minNextId)) return;
+  NEXT_SPECIES_ID = Math.max(NEXT_SPECIES_ID, Math.floor(minNextId));
 }
 
 /**
@@ -135,6 +150,67 @@ export class Population {
     return this.exportNextGeneration();
   }
 
+  /**
+   * Rehydrate runtime NEAT population from already-evolved entries.
+   * Used to resume training sessions without resetting lineage.
+   * @param {object[]} entries
+   * @param {number} popSize
+   * @param {object} [config]
+   * @returns {boolean}
+   */
+  hydrateFromEntries(entries, popSize, config = {}) {
+    this.config = { ...this.config, ...config };
+    const targetSize = Math.max(1, Number(popSize) || 1);
+    const list = Array.isArray(entries) ? entries : [];
+    const parsed = [];
+    const seen = new Set();
+
+    for (let i = 0; i < list.length && parsed.length < targetSize; i++) {
+      const entry = list[i];
+      if (!entry || typeof entry !== 'object') continue;
+      const rawGenome = entry.genome;
+      const hydrated = rawGenome
+        ? (typeof rawGenome.evaluate === 'function' ? rawGenome.clone(rawGenome.id) : Genome.fromSerializable(rawGenome))
+        : null;
+      if (!hydrated) continue;
+      const candidateId = Number(entry.genomeId ?? hydrated.id);
+      if (!Number.isFinite(candidateId) || seen.has(candidateId)) continue;
+      hydrated.id = candidateId;
+      hydrated.fitness = Number.isFinite(entry.fitness) ? Number(entry.fitness) : (Number(hydrated.fitness) || 0);
+      if (Array.isArray(entry.parents)) {
+        hydrated.parentIds = [entry.parents[0] ?? null, entry.parents[1] ?? null];
+      }
+      if (Number.isFinite(entry.generationBorn)) hydrated.generationBorn = Number(entry.generationBorn);
+      if (Number.isFinite(entry.speciesId)) hydrated.speciesId = Number(entry.speciesId);
+      parsed.push(hydrated);
+      seen.add(candidateId);
+    }
+
+    if (!parsed.length) return false;
+
+    const first = parsed[0];
+    this.inputCount = Number(first.inputIds?.length) || 0;
+    this.outputCount = Number(first.outputIds?.length) || 0;
+    if (this.inputCount <= 0 || this.outputCount <= 0) return false;
+
+    while (parsed.length < targetSize) {
+      const genome = Genome.createMinimal(nextGenomeId(), this.inputCount, this.outputCount, this.tracker, this.config);
+      genome.parentIds = [null, null];
+      genome.generationBorn = this.generation;
+      parsed.push(genome);
+    }
+
+    const maxGenomeId = parsed.reduce((max, g) => Math.max(max, Number(g.id) || 0), 0);
+    const maxSpeciesId = parsed.reduce((max, g) => Math.max(max, Number(g.speciesId) || 0), 0);
+    ensureNextGenomeIdAtLeast(maxGenomeId + 1);
+    ensureNextSpeciesIdAtLeast(maxSpeciesId + 1);
+
+    this.genomes = parsed.slice(0, targetSize);
+    this.species = [];
+    this._initialized = true;
+    return true;
+  }
+
   exportNextGeneration() {
     const io = {
       inputCount: this.inputCount,
@@ -189,6 +265,8 @@ export class Population {
     }
     this.species = [];
     this._initialized = true;
+    const maxGenomeId = this.genomes.reduce((max, g) => Math.max(max, Number(g.id) || 0), 0);
+    ensureNextGenomeIdAtLeast(maxGenomeId + 1);
   }
 
   _inferIoShape(creatures, config) {

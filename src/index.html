@@ -66,9 +66,6 @@
                 <button class="btn-tool" id="tool-muscle" title="Add Muscle">
                     <i class="fas fa-dna"></i>
                 </button>
-                <button class="btn-tool" id="tool-polygon" title="Draw Polygon Body">
-                    <i class="fas fa-draw-polygon"></i>
-                </button>
                 <button class="btn-tool" id="tool-move" title="Move">
                     <i class="fas fa-up-down-left-right"></i>
                 </button>
@@ -448,7 +445,6 @@
                         </div>
                         <div class="flex gap-2">
                             <button id="view-training" class="toggle-btn active">Training View</button>
-                            <button id="view-best-run" class="toggle-btn">Best-Run View</button>
                         </div>
                     </div>
 
@@ -467,24 +463,35 @@
 
                     <div class="control-group">
                         <div class="control-label">
-                            Turbo Wall Policy <span class="control-val" id="val-turbo-wall-policy">FULL</span>
+                            Camera <span class="control-val" id="val-cam"
+                            >LOCK</span>
                         </div>
                         <div class="flex gap-2">
-                            <button id="turbo-wall-off" class="toggle-btn">Off</button>
-                            <button id="turbo-wall-soft" class="toggle-btn">Soft</button>
-                            <button id="turbo-wall-full" class="toggle-btn active">Full</button>
-                        </div>
-                        <div class="info-text mt-1">
-                            Off disables wall in turbo. Soft keeps pressure with slower/farther wall.
+                            <button id="cam-lock" class="cam-btn active">
+                                Lock
+                            </button>
+                            <button id="cam-free" class="cam-btn">Free</button>
+                            <button id="cam-reset" class="cam-btn">
+                                Reset
+                            </button>
                         </div>
                     </div>
 
                     <div class="control-group">
-                        <div class="control-label">Best-Run Trigger <span class="control-val" id="val-best-trigger">ALL-TIME</span></div>
-                        <div class="flex gap-2">
-                            <button id="trigger-allbest" class="toggle-btn active">All-Time Best</button>
-                            <button id="trigger-everygen" class="toggle-btn">Every Gen</button>
+                        <div class="control-label">
+                            Simulation Speed <span
+                                class="control-val"
+                                id="val-speed"
+                            >1x</span>
                         </div>
+                        <input
+                            type="range"
+                            id="inp-speed"
+                            min="1"
+                            max="50"
+                            value="1"
+                            step="1"
+                        >
                     </div>
 
                     <!-- Challenges -->
@@ -568,17 +575,6 @@
                                 </div>
                             </div>
                             <div class="fitness-card">
-                                <div class="fitness-card-label">Energy</div>
-                                <div class="fitness-card-value" style="display: flex; flex-direction: column; gap: 4px;">
-                                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <span id="fitness-energy" class="text-violet-300">100%</span>
-                                    </div>
-                                    <div style="width: 100%; height: 6px; background: rgba(139, 92, 246, 0.2); border-radius: 3px; overflow: hidden;">
-                                        <div id="fitness-energy-bar" style="width: 100%; height: 100%; background: linear-gradient(90deg, #8b5cf6, #a78bfa); transition: width 0.2s ease;"></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="fitness-card">
                                 <div class="fitness-card-label">Actuation</div>
                                 <div
                                     class="fitness-card-value text-emerald-400"
@@ -593,64 +589,27 @@
                     <div class="section-divider"></div>
 
                     <div class="control-group">
-                        <div class="control-label">Tilt Limit</div>
-                        <div class="flex gap-2">
-                            <button id="tiltlimit-on" class="toggle-btn">
-                                <i class="fas fa-check mr-1"></i>On
-                            </button>
-                            <button id="tiltlimit-off" class="toggle-btn active">
-                                <i class="fas fa-xmark mr-1"></i>Off
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="control-group hidden" id="tilt-limit-controls">
                         <div class="control-label">
-                            Max Tilt <span class="control-val" id="val-maxtilt">25°</span>
-                        </div>
-                        <input
-                            type="range"
-                            id="inp-maxtilt"
-                            min="5"
-                            max="90"
-                            value="25"
-                            step="1"
-                        >
-                    </div>
-
-                    <!-- Camera -->
-                    <div class="control-group">
-                        <div class="control-label">
-                            Camera <span class="control-val" id="val-cam"
-                            >LOCK</span>
+                            Turbo Wall Policy <span class="control-val" id="val-turbo-wall-policy">FULL</span>
                         </div>
                         <div class="flex gap-2">
-                            <button id="cam-lock" class="cam-btn active">
-                                Lock
-                            </button>
-                            <button id="cam-free" class="cam-btn">Free</button>
-                            <button id="cam-reset" class="cam-btn">
-                                Reset
-                            </button>
+                            <button id="turbo-wall-off" class="toggle-btn">Off</button>
+                            <button id="turbo-wall-soft" class="toggle-btn">Soft</button>
+                            <button id="turbo-wall-full" class="toggle-btn active">Full</button>
+                        </div>
+                        <div class="info-text mt-1">
+                            Off disables wall in turbo. Soft keeps pressure with slower/farther wall.
                         </div>
                     </div>
 
-                    <!-- Sim Speed -->
                     <div class="control-group">
                         <div class="control-label">
-                            Simulation Speed <span
-                                class="control-val"
-                                id="val-speed"
-                            >1x</span>
+                            Turbo History Poles <span class="control-val" id="val-turbo-poles">5</span>
                         </div>
-                        <input
-                            type="range"
-                            id="inp-speed"
-                            min="1"
-                            max="50"
-                            value="1"
-                            step="1"
-                        >
+                        <input id="inp-turbo-poles" type="range" min="1" max="20" value="5" step="1" class="w-full accent-cyan-400" />
+                        <div class="info-text mt-1">
+                            Turbo-only: show recent best-distance poles with newest most visible.
+                        </div>
                     </div>
 
                     <!-- Death Wall Speed -->
@@ -717,7 +676,7 @@
                             type="range"
                             id="inp-duration"
                             min="4"
-                            max="60"
+                            max="300"
                             value="30"
                             step="1"
                         >
@@ -924,104 +883,8 @@ step="10"
               >
             </div>
 
-            <div class="section-divider"></div>
-                    <div class="section-title text-violet-400">
-                        Energy System
-                    </div>
-
-                    <div class="control-group">
-                        <div class="control-label">
-                            Max Energy <span
-                                class="control-val"
-                                id="val-maxenergy"
-                            >100</span>
-                        </div>
-                        <input
-                            type="range"
-                            id="inp-maxenergy"
-                            min="50"
-                            max="300"
-                            value="100"
-                            step="10"
-                        >
-                    </div>
-
-                    <div class="control-group">
-                        <div class="control-label">
-                            Regen Rate <span
-                                class="control-val"
-                                id="val-regen"
-                            >35/s</span>
-                        </div>
-                        <input
-                            type="range"
-                            id="inp-regen"
-                            min="10"
-                            max="100"
-                            value="35"
-                            step="5"
-                        >
-                    </div>
-
-<div class="control-group">
-<div class="control-label">
-Energy Cost <span
-class="control-val"
-id="val-energycost"
->0.80</span>
-</div>
-<input
-type="range"
-id="inp-energycost"
-min="20"
-max="200"
-value="80"
-step="10"
->
-</div>
-
-<div class="control-group">
-<div class="control-label">
-Base Drain <span
-class="control-val"
-id="val-basedrain"
->0.02</span>
-</div>
-<input
-type="range"
-id="inp-basedrain"
-min="0"
-max="10"
-value="2"
-step="1"
->
-</div>
-
-<div class="control-group">
-<div class="control-label">Energy System</div>
-<div class="flex gap-2 mt-1">
-<button id="energy-on" class="toggle-btn flex-1"><i class="fas fa-check mr-1"></i>On</button>
-<button id="energy-off" class="toggle-btn flex-1"><i class="fas fa-xmark mr-1"></i>Off</button>
-</div>
-</div>
-
                     <div class="section-divider"></div>
                     <div class="section-title text-pink-400">Fitness Penalties</div>
-
-                    <div class="control-group">
-                        <div class="control-label">
-                            Ground Slip Penalty <span class="control-val" id="val-slippen">5</span>
-                        </div>
-                        <input
-                            type="range"
-                            id="inp-slippen"
-                            min="0"
-                            max="20"
-                            value="5"
-                            step="1"
-                        >
-                        <span class="text-xs text-gray-500">(0=off · higher=penalize jitter sliding more)</span>
-                    </div>
 
                     <div class="section-divider"></div>
                     <div class="section-title text-pink-400">Mutation</div>

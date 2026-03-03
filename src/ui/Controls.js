@@ -23,14 +23,12 @@ export class Controls {
       'val-groundstatic', 'val-traction', 'val-bodyfric', 'val-bodystatic',
       'val-bodyair', 'val-musrange', 'val-musmooth', 'val-musminlen', 'val-musmaxlen',
       'val-musbudget', 'val-distreward',
-      'val-speedreward', 'val-jitterpen', 'val-slippen', 'val-stabmode', 'val-mut',
+      'val-speedreward', 'val-jitterpen', 'val-stabmode', 'val-mut',
       'val-mutsize', 'val-zoom', 'val-cam',
       'val-hidden', 'val-neurons', 'val-elites', 'val-tournament',
       'cam-lock', 'cam-free', 'icon-pause',
-      'fitness-tag', 'fitness-speed', 'fitness-stability',
-      'fitness-energy', 'fitness-energy-bar', 'fitness-upright',
-      'val-spinpen', 'val-maxenergy', 'val-regen', 'val-energycost', 'val-basedrain',
-      'val-maxtilt', 'val-wall-speed', 'val-wall-start', 'val-viewmode', 'val-engine', 'turbo-status', 'val-best-trigger', 'val-turbo-wall-policy',
+      'fitness-tag', 'fitness-speed', 'fitness-stability', 'fitness-upright',
+      'val-spinpen', 'val-wall-speed', 'val-wall-start', 'val-viewmode', 'val-engine', 'turbo-status', 'val-turbo-wall-policy', 'val-turbo-poles',
       'testing-last-run', 'testing-health', 'testing-scope', 'testing-copy-compact', 'testing-copy-full',
       'neat-mode-badge', 'neat-species-count', 'neat-innovation-count', 'neat-champion-complexity', 'nn-control-hint',
       'dbg-intent-hz', 'dbg-osc-hz', 'dbg-delta-sec', 'dbg-micro-index', 'dbg-grounded-slip',
@@ -72,30 +70,6 @@ export class Controls {
       };
     }
 
-    const tiltLimitOn = document.getElementById('tiltlimit-on');
-    const tiltLimitOff = document.getElementById('tiltlimit-off');
-    const updateTiltLimitUI = () => {
-      if (tiltLimitOn) tiltLimitOn.classList.toggle('active', this.sim.tiltLimitEnabled);
-      if (tiltLimitOff) tiltLimitOff.classList.toggle('active', !this.sim.tiltLimitEnabled);
-      const tiltControls = document.getElementById('tilt-limit-controls');
-      if (tiltControls) tiltControls.classList.toggle('hidden', !this.sim.tiltLimitEnabled);
-    };
-    if (tiltLimitOn) {
-      tiltLimitOn.onclick = () => {
-        this.sim.tiltLimitEnabled = true;
-        this.sim.syncCreatureRuntimeSettings();
-        updateTiltLimitUI();
-      };
-    }
-    if (tiltLimitOff) {
-      tiltLimitOff.onclick = () => {
-        this.sim.tiltLimitEnabled = false;
-        this.sim.syncCreatureRuntimeSettings();
-        updateTiltLimitUI();
-      };
-    }
-    updateTiltLimitUI();
-
     const ghostsOn = document.getElementById('ghosts-on');
     const ghostsOff = document.getElementById('ghosts-off');
     const updateGhostsUI = () => {
@@ -123,6 +97,10 @@ export class Controls {
       this.sim.deathWallStartBehindMeters = Math.max(0, v);
       if (this.sim.resetDeathWall) this.sim.resetDeathWall();
     }, true);
+    this._bindSlider('inp-turbo-poles', v => {
+      if (this.sim.setTurboGenPoleCount) this.sim.setTurboGenPoleCount(v);
+      else this.sim.turboGenPoleCount = Math.max(1, Math.min(20, Math.round(v)));
+    });
     this._bindSlider('inp-zoom', v => { this.sim.zoom = v / 100; });
     this._bindSlider('inp-duration', v => {
       this.sim.simDuration = v;
@@ -171,45 +149,9 @@ export class Controls {
       this.sim.muscleActionBudget = v;
       this.sim.syncCreatureRuntimeSettings();
     });
-    this._bindSlider('inp-maxtilt', v => {
-      this.sim.maxTiltDeg = v;
-      this.sim.maxTiltRad = (v * Math.PI) / 180;
-      this.sim.syncCreatureRuntimeSettings();
-    });
-
-    // Energy system sliders
-    this._bindSlider('inp-maxenergy', v => {
-      this.sim.maxEnergy = v;
-      this.sim.creatures.forEach(c => {
-        if (c.energy) {
-          c.energy.max = v;
-          c.energy.current = Math.min(c.energy.current, v);
-        }
-      });
-    });
-    this._bindSlider('inp-regen', v => {
-      this.sim.energyRegenRate = v;
-      this.sim.creatures.forEach(c => {
-        if (c.energy) c.energy.regenRate = v;
-      });
-    });
-    this._bindSlider('inp-energycost', v => {
-      this.sim.energyUsagePerActuation = v / 100;
-      this.sim.creatures.forEach(c => {
-        if (c.energy) c.energy.usagePerActuation = v / 100;
-      });
-    });
-    this._bindSlider('inp-basedrain', v => {
-      this.sim.baseDrain = v / 100;
-      this.sim.creatures.forEach(c => {
-        if (c.energy) c.energy.baseDrain = v / 100;
-      });
-    });
-
     this._bindSlider('inp-distreward', v => { this.sim.distanceRewardWeight = v; });
     this._bindSlider('inp-speedreward', v => { this.sim.speedRewardWeight = v / 100; });
     this._bindSlider('inp-jitterpen', v => { this.sim.jitterPenaltyWeight = v; });
-    this._bindSlider('inp-slippen', v => { this.sim.groundSlipPenaltyWeight = v; });
     this._bindSlider('inp-spinpen', v => { this.sim.spinPenaltyWeight = v; });
     this._bindSlider('inp-mut', v => { this.sim.mutationRate = v / 100; });
     this._bindSlider('inp-mutsize', v => { this.sim.mutationSize = v / 100; });
@@ -227,33 +169,6 @@ export class Controls {
       this._updateStabilityMode();
       this.updateLabels();
     };
-
-    // Energy system toggle
-    const energyOn = document.getElementById('energy-on');
-    const energyOff = document.getElementById('energy-off');
-    const updateEnergyUI = () => {
-      if (energyOn) energyOn.classList.toggle('active', this.sim.energyEnabled);
-      if (energyOff) energyOff.classList.toggle('active', !this.sim.energyEnabled);
-      // Sync to all creatures
-      this.sim.creatures.forEach(c => {
-        if (c.energy) c.energy.enabled = this.sim.energyEnabled;
-      });
-    };
-    if (energyOn) {
-      energyOn.onclick = () => {
-        this.sim.energyEnabled = true;
-        this.sim.syncCreatureRuntimeSettings();
-        updateEnergyUI();
-      };
-    }
-    if (energyOff) {
-      energyOff.onclick = () => {
-        this.sim.energyEnabled = false;
-        this.sim.syncCreatureRuntimeSettings();
-        updateEnergyUI();
-      };
-    }
-    updateEnergyUI();
 
     // Camera buttons
     const camLock = document.getElementById('cam-lock');
@@ -283,9 +198,7 @@ export class Controls {
     if (replayPlay) replayPlay.onclick = () => this.toggleReplayPlay();
 
     const viewTrainingBtn = document.getElementById('view-training');
-    const viewBestRunBtn = document.getElementById('view-best-run');
     if (viewTrainingBtn) viewTrainingBtn.onclick = () => this.setViewMode('training');
-    if (viewBestRunBtn) viewBestRunBtn.onclick = () => this.setViewMode('bestRun');
 
     const engineNormalBtn = document.getElementById('engine-normal');
     const engineTurboBtn = document.getElementById('engine-turbo');
@@ -297,10 +210,6 @@ export class Controls {
     if (turboWallOffBtn) turboWallOffBtn.onclick = () => this.setTurboWallPolicy('off');
     if (turboWallSoftBtn) turboWallSoftBtn.onclick = () => this.setTurboWallPolicy('soft');
     if (turboWallFullBtn) turboWallFullBtn.onclick = () => this.setTurboWallPolicy('full');
-    const triggerAllBestBtn = document.getElementById('trigger-allbest');
-    const triggerEveryGenBtn = document.getElementById('trigger-everygen');
-    if (triggerAllBestBtn) triggerAllBestBtn.onclick = () => this.setBestRunTrigger('allTimeBest');
-    if (triggerEveryGenBtn) triggerEveryGenBtn.onclick = () => this.setBestRunTrigger('everyGen');
     const testingOffBtn = document.getElementById('testing-off');
     const testingOnBtn = document.getElementById('testing-on');
     if (testingOffBtn) testingOffBtn.onclick = () => this.setTestingMode(false);
@@ -484,12 +393,13 @@ export class Controls {
     if (wallSpeed) wallSpeed.value = String(Math.round(this.sim.deathWallSpeedMps * 100));
     const wallStart = document.getElementById('inp-wall-start');
     if (wallStart) wallStart.value = String(this.sim.deathWallStartBehindMeters.toFixed(1));
+    const turboPoles = document.getElementById('inp-turbo-poles');
+    if (turboPoles) turboPoles.value = String(Math.max(1, Math.min(20, Math.round(this.sim.turboGenPoleCount || 5))));
 
     this.setCameraMode('lock');
     this.setViewMode(this.sim.viewMode || 'training');
     this.setTrainingMode(this.sim.trainingMode || 'normal');
     this.setTurboWallPolicy(this.sim.turboWallPolicy || 'full');
-    this.setBestRunTrigger(this.sim.bestRunTrigger || 'everyGen');
     this.setTestingMode(this.sim.testingModeEnabled || false);
     this._updateStabilityMode();
     this._updateAlgorithmModeUI();
@@ -522,13 +432,11 @@ export class Controls {
   }
 
   setViewMode(mode) {
-    if (this.sim.setViewMode) this.sim.setViewMode(mode);
+    if (this.sim.setViewMode) this.sim.setViewMode('training');
     const viewTraining = document.getElementById('view-training');
-    const viewBestRun = document.getElementById('view-best-run');
     if (viewTraining) viewTraining.classList.toggle('active', this.sim.viewMode === 'training');
-    if (viewBestRun) viewBestRun.classList.toggle('active', this.sim.viewMode === 'bestRun');
     if (this.els['val-viewmode']) {
-      this.els['val-viewmode'].textContent = this.sim.viewMode === 'bestRun' ? 'BEST RUN' : 'TRAINING';
+      this.els['val-viewmode'].textContent = 'TRAINING';
     }
     this.updateLabels();
   }
@@ -553,18 +461,6 @@ export class Controls {
     if (off) off.classList.toggle('active', this.sim.turboWallPolicy === 'off');
     if (soft) soft.classList.toggle('active', this.sim.turboWallPolicy === 'soft');
     if (full) full.classList.toggle('active', this.sim.turboWallPolicy === 'full');
-    this.updateLabels();
-  }
-
-  setBestRunTrigger(mode) {
-    if (this.sim.setBestRunTrigger) this.sim.setBestRunTrigger(mode);
-    const allBest = document.getElementById('trigger-allbest');
-    const everyGen = document.getElementById('trigger-everygen');
-    if (allBest) allBest.classList.toggle('active', this.sim.bestRunTrigger === 'allTimeBest');
-    if (everyGen) everyGen.classList.toggle('active', this.sim.bestRunTrigger === 'everyGen');
-    if (this.els['val-best-trigger']) {
-      this.els['val-best-trigger'].textContent = this.sim.bestRunTrigger === 'everyGen' ? 'EVERY GEN' : 'ALL-TIME';
-    }
     this.updateLabels();
   }
 
@@ -617,22 +513,6 @@ export class Controls {
       el.disabled = neatMode;
       el.setAttribute('aria-disabled', neatMode ? 'true' : 'false');
     });
-  }
-
-  _updateEnergyMode() {
-    const energyOn = document.getElementById('energy-on');
-    const energyOff = document.getElementById('energy-off');
-    if (energyOn) energyOn.classList.toggle('active', this.sim.energyEnabled);
-    if (energyOff) energyOff.classList.toggle('active', !this.sim.energyEnabled);
-  }
-
-  _updateTiltLimitMode() {
-    const tiltLimitOn = document.getElementById('tiltlimit-on');
-    const tiltLimitOff = document.getElementById('tiltlimit-off');
-    const tiltControls = document.getElementById('tilt-limit-controls');
-    if (tiltLimitOn) tiltLimitOn.classList.toggle('active', this.sim.tiltLimitEnabled);
-    if (tiltLimitOff) tiltLimitOff.classList.toggle('active', !this.sim.tiltLimitEnabled);
-    if (tiltControls) tiltControls.classList.toggle('hidden', !this.sim.tiltLimitEnabled);
   }
 
   toggleReplayPlay(forceValue = null) {
@@ -826,12 +706,6 @@ export class Controls {
     set('val-musmaxlen', `${Math.round((s.muscleMaxLength ?? 1.1) * 100)}%`);
     set('val-musmooth', `${(s.muscleSmoothing * 100).toFixed(2)}%`);
     set('val-musbudget', `${Math.round(s.muscleActionBudget)}f (${(s.muscleActionBudget / 60).toFixed(2)}s)`);
-    set('val-maxenergy', `${Math.round(s.maxEnergy)}`);
-    set('val-regen', `${Math.round(s.energyRegenRate)}/s`);
-    set('val-energycost', `${(s.energyUsagePerActuation || 0.8).toFixed(2)}`);
-    set('val-basedrain', `${(s.baseDrain || CONFIG.ENERGY_CONFIG.baseDrain).toFixed(2)}`);
-    set('val-maxtilt', `${Math.round(s.maxTiltDeg || CONFIG.defaultMaxTiltDeg)}°`);
-    set('val-slippen', `${s.groundSlipPenaltyWeight}`);
     set('val-mut', `${Math.round(s.mutationRate * 100)}%`);
     set('val-mutsize', `${s.mutationSize.toFixed(2)}x`);
     if (neatMode) {
@@ -846,11 +720,11 @@ export class Controls {
       set('val-tournament', `${Math.round(s.tournamentSize || 0)}`);
     }
     set('val-zoom', `${s.zoom.toFixed(2)}x`);
-    set('val-viewmode', s.viewMode === 'bestRun' ? 'BEST RUN' : 'TRAINING');
+    set('val-viewmode', 'TRAINING');
     set('val-engine', s.trainingMode === 'turbo' ? 'ON' : 'OFF');
     set('turbo-status', (s.turboStatus || 'idle').toUpperCase());
     set('val-turbo-wall-policy', (s.turboWallPolicy || 'full').toUpperCase());
-    set('val-best-trigger', s.bestRunTrigger === 'everyGen' ? 'EVERY GEN' : 'ALL-TIME');
+    set('val-turbo-poles', `${Math.max(1, Math.min(20, Math.round(s.turboGenPoleCount || 5)))}`);
     const testSnapshot = s.getTurboTestSnapshot ? s.getTurboTestSnapshot() : null;
     set('testing-scope', 'Turbo Verification');
     if (testSnapshot?.last) {
@@ -920,16 +794,6 @@ export class Controls {
     const slip = Number.isFinite(f.groundSlipRate) ? f.groundSlipRate : (f.groundSlip || 0);
     if (this.els['fitness-stability']) this.els['fitness-stability'].textContent = slip.toFixed(2);
 
-    // Energy bar
-    if (creature && creature.energy && creature.energy.enabled) {
-      const energyPct = (creature.energy.current / creature.energy.max) * 100;
-      if (this.els['fitness-energy']) this.els['fitness-energy'].textContent = `${energyPct.toFixed(0)}%`;
-      if (this.els['fitness-energy-bar']) this.els['fitness-energy-bar'].style.width = `${energyPct}%`;
-    } else {
-      if (this.els['fitness-energy']) this.els['fitness-energy'].textContent = 'N/A';
-      if (this.els['fitness-energy-bar']) this.els['fitness-energy-bar'].style.width = '0%';
-    }
-
     if (this.els['fitness-upright']) this.els['fitness-upright'].textContent = `${((f.actuationLevel || 0) * 100).toFixed(0)}%`;
   }
 
@@ -950,26 +814,24 @@ export class Controls {
     s.mutationRate = CONFIG.defaultMutationRate;
     s.mutationSize = CONFIG.defaultMutationSize;
     s.zoom = CONFIG.defaultZoom;
-    s.tiltLimitEnabled = CONFIG.defaultTiltLimitEnabled;
+    s.tiltLimitEnabled = false;
     s.maxTiltDeg = CONFIG.defaultMaxTiltDeg;
     s.maxTiltRad = (s.maxTiltDeg * Math.PI) / 180;
-    s.energyEnabled = CONFIG.defaultEnergyEnabled;
-    s.maxEnergy = CONFIG.defaultMaxEnergy;
-    s.energyRegenRate = CONFIG.defaultEnergyRegenRate;
-    s.energyUsagePerActuation = CONFIG.defaultEnergyUsagePerActuation;
-    s.baseDrain = CONFIG.ENERGY_CONFIG.baseDrain;
+    s.energyEnabled = false;
     s.deathWallSpeedMps = CONFIG.defaultDeathWallSpeedMps ?? 1.0;
     s.deathWallStartBehindMeters = CONFIG.defaultDeathWallStartBehindMeters ?? 10;
     if (s.resetDeathWall) s.resetDeathWall();
     s.turboWallPolicy = 'full';
+    if (s.setTurboGenPoleCount) s.setTurboGenPoleCount(5);
+    else s.turboGenPoleCount = 5;
     if (s.setTrainingMode) s.setTrainingMode('normal');
     if (s.setViewMode) s.setViewMode('training');
-    if (s.setBestRunTrigger) s.setBestRunTrigger('allTimeBest');
 
     const sliderValues = {
       'inp-speed': String(Math.round(s.simSpeed)),
       'inp-wall-speed': String(Math.round(s.deathWallSpeedMps * 100)),
       'inp-wall-start': s.deathWallStartBehindMeters.toFixed(1),
+      'inp-turbo-poles': String(Math.max(1, Math.min(20, Math.round(s.turboGenPoleCount || 5)))),
       'inp-duration': String(Math.round(s.simDuration)),
       'inp-pop': String(Math.round(s.popSize)),
       'inp-strength': String(Math.round((s.muscleStrength / (CONFIG.defaultMuscleStrength || 1)) * 100)),
@@ -982,25 +844,16 @@ export class Controls {
       'inp-musbudget': String(Math.round(s.muscleActionBudget)),
       'inp-mut': String(Math.round(s.mutationRate * 100)),
       'inp-mutsize': String(Math.round(s.mutationSize * 100)),
-      'inp-zoom': String(Math.round(s.zoom * 100)),
-      'inp-maxtilt': String(Math.round(s.maxTiltDeg)),
-      'inp-maxenergy': String(Math.round(s.maxEnergy)),
-      'inp-regen': String(Math.round(s.energyRegenRate)),
-      'inp-energycost': String(Math.round(s.energyUsagePerActuation * 100)),
-      'inp-basedrain': String(Math.round(s.baseDrain * 100)),
-      'inp-slippen': String(s.groundSlipPenaltyWeight)
+      'inp-zoom': String(Math.round(s.zoom * 100))
     };
 
     Object.entries(sliderValues).forEach(([id, value]) => {
       const el = document.getElementById(id);
       if (el) el.value = value;
     });
-    this._updateEnergyMode();
-    this._updateTiltLimitMode();
     this.setTrainingMode(s.trainingMode || 'normal');
     this.setTurboWallPolicy(s.turboWallPolicy || 'full');
-    this.setViewMode(s.viewMode || 'training');
-    this.setBestRunTrigger(s.bestRunTrigger || 'everyGen');
+    this.setViewMode('training');
     s.syncCreatureRuntimeSettings();
     this.updateLabels();
   }

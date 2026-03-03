@@ -1,5 +1,5 @@
 import { gaussianRandom } from './NeuralNetwork.js';
-import { Population as NeatPopulation } from './neat/index.js';
+import { Population as NeatPopulation, getInnovationTracker, resetPopulationRuntimeCounters } from './neat/index.js';
 
 let neatPopulation = null;
 let neatSignature = '';
@@ -11,6 +11,26 @@ let neatStatus = null;
  * - NEAT mode: graph genome evolution with speciation and innovation tracking.
  */
 export class Evolution {
+  static _refreshNeatStatus() {
+    if (!neatPopulation || !Array.isArray(neatPopulation.genomes) || !neatPopulation.genomes.length) {
+      neatStatus = null;
+      return;
+    }
+    const champ = neatPopulation.genomes.reduce(
+      (best, g) => (!best || (g.fitness || -Infinity) > (best.fitness || -Infinity) ? g : best),
+      null
+    );
+    const innovationCount = Math.max(0, ((neatPopulation.tracker?.snapshot?.().nextInnovation || 1) - 1));
+    neatStatus = {
+      generation: Number(neatPopulation.generation) || 0,
+      speciesCount: Array.isArray(neatPopulation.species) ? neatPopulation.species.length : 0,
+      innovationCount,
+      championComplexity: champ
+        ? { nodes: champ.nodes?.size || 0, connections: champ.connections?.size || 0 }
+        : null
+    };
+  }
+
   /**
    * Evolve next generation.
    * @param {object[]} creatures - Array of { dna: Float32Array, fitness: number, architecture?: object, genome?: object }
@@ -46,18 +66,7 @@ export class Evolution {
 
     const next = neatPopulation.evolve(creatures, popSize, config);
     if (next.length > 0) {
-      const firstMeta = next[0]?.neatMeta || {};
-      const champ = neatPopulation.genomes
-        ? neatPopulation.genomes.reduce((best, g) => (!best || (g.fitness || -Infinity) > (best.fitness || -Infinity) ? g : best), null)
-        : null;
-      neatStatus = {
-        generation: Number(firstMeta.generation) || 0,
-        speciesCount: Number(firstMeta.speciesCount) || 0,
-        innovationCount: Number(firstMeta.innovationCount) || 0,
-        championComplexity: champ
-          ? { nodes: champ.nodes?.size || 0, connections: champ.connections?.size || 0 }
-          : null
-      };
+      Evolution._refreshNeatStatus();
       return next;
     }
 
@@ -236,10 +245,44 @@ export class Evolution {
     return neatStatus ? { ...neatStatus } : null;
   }
 
+  /**
+   * Restore the NEAT runtime population from serialized generation entries.
+   * @param {object[]} entries
+   * @param {number} popSize
+   * @param {object} [config]
+   * @returns {boolean}
+   */
+  static syncNeatPopulation(entries, popSize, config = {}) {
+    const mergedConfig = {
+      ...config,
+      trainingAlgorithm: 'neat',
+      neatMode: true
+    };
+    const signature = Evolution._neatStateSignature(popSize, mergedConfig);
+    if (!neatPopulation || signature !== neatSignature) {
+      neatPopulation = new NeatPopulation(mergedConfig);
+      neatSignature = signature;
+    }
+    if (typeof neatPopulation.hydrateFromEntries !== 'function') return false;
+    const ok = neatPopulation.hydrateFromEntries(entries, popSize, mergedConfig);
+    if (ok) {
+      Evolution._refreshNeatStatus();
+      return true;
+    }
+    return false;
+  }
+
   static resetNeatState() {
     neatPopulation = null;
     neatSignature = '';
     neatStatus = null;
+    const tracker = getInnovationTracker?.();
+    if (tracker && typeof tracker.reset === 'function') {
+      tracker.reset();
+    }
+    if (typeof resetPopulationRuntimeCounters === 'function') {
+      resetPopulationRuntimeCounters();
+    }
   }
 
   /**

@@ -1,4 +1,4 @@
-import { createNode, createBone, createMuscle, createPolygonBody, cleanup, SCALE, planck, World, Vec2, Body, Circle, Edge, PrismaticJoint, DistanceJoint, RevoluteJoint } from '../sim/Physics.js';
+import { createNode, createBone, createMuscle, createAngleLimiter, cleanup, SCALE, planck, World, Vec2, Body, Circle, Edge, PrismaticJoint, DistanceJoint, RevoluteJoint } from '../sim/Physics.js';
 import { NeuralNetwork, gaussianRandom } from '../nn/NeuralNetwork.js';
 import { Genome } from '../nn/neat/Genome.js';
 import { DenseBrainController } from '../nn/runtime/DenseBrainController.js';
@@ -122,22 +122,20 @@ export class Creature {
    * @param {number} originY
    * @param {object[]} schemaNodes
    * @param {object[]} schemaConstraints
-   * @param {object[]} schemaPolygons - Array of { id, vertices: [{x,y}], internalNodes: [nodeIds] }
    * @param {{dna: Float32Array, architecture?: {hiddenLayers: number, neuronsPerLayer: number}}|null} dna - NN weights + optional architecture, null for random init
    * @param {number} minX
    * @param {number} minY
    * @param {object} simConfig - { jointFreedom, muscleStrength, jointMoveSpeed, muscleRange, muscleSmoothing }
    */
-  constructor(world, originX, originY, schemaNodes, schemaConstraints, schemaPolygons, dna, minX, minY, simConfig = {}, creatureId = 0) {
+  constructor(world, originX, originY, schemaNodes, schemaConstraints, dna, minX, minY, simConfig = {}, creatureId = 0) {
     this.world = world;
     this.id = creatureId;
     this.bodies = []; // Array of planck.Body (nodes)
-    this.polygonBodies = []; // Array of planck.Body (solid polygon bodies)
     this.muscles = []; // Array of { joint: PrismaticJoint, bodyA: Body, bodyB: Body, baseLength: number, currentLength: number, index: number }
     this.bones = []; // Array of DistanceJoint
     this.angleLimiters = []; // Array of DistanceJoint
+    this.fixedNodeCount = 0;
     this.simConfig = simConfig;
-    this.polygonData = []; // Will be populated with world-space vertices during creation
     this.dead = false;
 
     this.stats = {
@@ -180,6 +178,30 @@ export class Creature {
     efficiency: 1.0
   };
 
+    const fixedNodeIds = new Set(
+      schemaNodes
+        .filter(n => !!n.fixed)
+        .map(n => n.id)
+    );
+    this.fixedNodeCount = fixedNodeIds.size;
+
+    const boneAdjacencyByNodeId = new Map();
+    const boneEdgeSet = new Set();
+    const addBoneNeighbor = (from, to) => {
+      if (!boneAdjacencyByNodeId.has(from)) boneAdjacencyByNodeId.set(from, new Set());
+      boneAdjacencyByNodeId.get(from).add(to);
+    };
+    schemaConstraints.forEach(schema => {
+      if (schema.type !== 'bone') return;
+      const n1 = Number(schema.n1);
+      const n2 = Number(schema.n2);
+      if (!Number.isFinite(n1) || !Number.isFinite(n2) || n1 === n2) return;
+      const key = n1 < n2 ? `${n1}:${n2}` : `${n2}:${n1}`;
+      boneEdgeSet.add(key);
+      addBoneNeighbor(n1, n2);
+      addBoneNeighbor(n2, n1);
+    });
+
     // Create physics bodies (nodes)
     const bodyMap = {};
     const category = 0x0002;
@@ -208,116 +230,6 @@ export class Creature {
       b.nodeId = n.id; // Store original node ID for reference
       bodyMap[n.id] = b;
       this.bodies.push(b);
-    });
-
-    // Create polygon bodies (solid body parts)
-    const polygonBodyMap = {}; // Map polygon ID to physics body
-    const nodeInsidePolygon = new Map(); // Map node ID to polygon IDs it's inside
-    
-    (schemaPolygons || []).forEach((poly, polyIdx) => {
-      // Transform vertices to world space
-      const worldVertices = poly.vertices.map(v => ({
-        x: originX + (v.x - minX),
-        y: originY + (v.y - minY)
-      }));
-      
-      const polyBody = createPolygonBody(
-        this.world,
-        worldVertices,
-        {
-          friction: simConfig.bodyFriction ?? 0.6,
-          linearDamping: simConfig.bodyAirFriction ?? 0,
-          angularDamping: 0.05,
-          restitution: 0,
-          categoryBits: 0x0004, // Polygon category
-          maskBits: 0x0001,      // Only collide with ground (0x0001), NOT other creatures' nodes/polygons
-          group: group
-        }
-      );
-      
-      if (polyBody) {
-        polyBody.creatureId = this.id;
-        polyBody.polygonId = poly.id;
-        polygonBodyMap[poly.id] = polyBody;
-        this.polygonBodies.push(polyBody);
-        
-        // Calculate polygon centroid for finding closest nodes
-        let cx = 0, cy = 0;
-        worldVertices.forEach(v => { cx += v.x; cy += v.y; });
-        cx /= worldVertices.length;
-        cy /= worldVertices.length;
-        
-        // Find nodes closest to polygon centroid (attach up to 4 closest nodes)
-        const nodeDistances = [];
-        this.bodies.forEach(nodeBody => {
-          const nodePos = nodeBody.getPosition();
-          const nodeX = nodePos.x * SCALE;
-          const nodeY = nodePos.y * SCALE;
-          const dist = Math.sqrt((nodeX - cx) ** 2 + (nodeY - cy) ** 2);
-          nodeDistances.push({ nodeId: nodeBody.nodeId, dist, nodeBody });
-        });
-        
-        // Sort by distance and attach closest nodes (up to 4)
-        nodeDistances.sort((a, b) => a.dist - b.dist);
-        const maxAttach = Math.min(4, nodeDistances.length);
-        const detectedInternalNodes = [];
-        for (let i = 0; i < maxAttach; i++) {
-          // Only attach nodes that are reasonably close (within 3x polygon size)
-          const polySize = Math.sqrt((worldVertices[0].x - cx) ** 2 + (worldVertices[0].y - cy) ** 2);
-          if (nodeDistances[i].dist < polySize * 3) {
-            detectedInternalNodes.push(nodeDistances[i].nodeId);
-            nodeDistances[i].nodeBody.attachToPolygon = poly.id;
-          }
-        }
-        
-        // Track which nodes are attached to this polygon
-        this.polygonData.push({
-          id: poly.id,
-          vertices: worldVertices,
-          internalNodes: detectedInternalNodes,
-          centroid: { x: cx, y: cy }
-        });
-        
-        // Track internal nodes for collision filtering
-        detectedInternalNodes.forEach(nodeId => {
-          if (!nodeInsidePolygon.has(nodeId)) {
-            nodeInsidePolygon.set(nodeId, []);
-          }
-          nodeInsidePolygon.get(nodeId).push(poly.id);
-        });
-      }
-    });
-
-    // Store internal node info for collision filtering
-    this.nodeInsidePolygon = nodeInsidePolygon;
-
-    // ATTACH NODES TO POLYGON BODIES
-    // Create joints connecting internal nodes to their polygon body
-    nodeInsidePolygon.forEach((polygonIds, nodeId) => {
-      const nodeBody = bodyMap[nodeId];
-      if (!nodeBody) return;
-      
-      // Attach to first polygon (if multiple overlap)
-      const polygonId = polygonIds[0];
-      const polyBody = polygonBodyMap[polygonId];
-      if (!polyBody) return;
-      
-      // Create a revolute joint (hinge) to attach node to polygon
-      const nodePos = nodeBody.getPosition();
-      
-      const joint = world.createJoint(RevoluteJoint({
-        bodyA: polyBody,
-        bodyB: nodeBody,
-        anchor: nodePos,
-        collideConnected: false
-      }));
-      
-      // Store reference to this joint
-      if (!this.polygonJoints) this.polygonJoints = [];
-      this.polygonJoints.push(joint);
-      
-      // Mark this node as attached to polygon
-      nodeBody.attachedToPolygon = polygonId;
     });
 
     // Count muscles for NN output size
@@ -505,6 +417,13 @@ export class Creature {
       }
     });
 
+    this._createFixedNodeAngleLimiters(
+      bodyMap,
+      fixedNodeIds,
+      boneAdjacencyByNodeId,
+      boneEdgeSet
+    );
+
     // Track connected bodies for collision filtering.
     const bodyConnects = new Map();
     this.bodies.forEach(b => bodyConnects.set(b, new Set()));
@@ -537,6 +456,84 @@ export class Creature {
     this._lengthDeltaAbsAccum = 0;
     this._microActuationAccum = 0;
     this._lastInputCenter = this.getCenter();
+  }
+
+  _selectFixedNodeNeighborPairs(neighborIds, centerBody, bodyMap) {
+    if (!Array.isArray(neighborIds) || neighborIds.length < 2) return [];
+    if (neighborIds.length === 2) return [[neighborIds[0], neighborIds[1]]];
+    if (neighborIds.length === 3) {
+      return [
+        [neighborIds[0], neighborIds[1]],
+        [neighborIds[0], neighborIds[2]],
+        [neighborIds[1], neighborIds[2]]
+      ];
+    }
+
+    const center = centerBody.getPosition();
+    const sorted = neighborIds
+      .slice()
+      .sort((a, b) => {
+        const pa = bodyMap[a].getPosition();
+        const pb = bodyMap[b].getPosition();
+        const aa = Math.atan2(pa.y - center.y, pa.x - center.x);
+        const ab = Math.atan2(pb.y - center.y, pb.x - center.x);
+        return aa - ab;
+      });
+
+    const pairs = [];
+    for (let i = 0; i < sorted.length; i++) {
+      const a = sorted[i];
+      const b = sorted[(i + 1) % sorted.length];
+      if (a === b) continue;
+      pairs.push([a, b]);
+    }
+    return pairs;
+  }
+
+  _createFixedNodeAngleLimiters(bodyMap, fixedNodeIds, boneAdjacencyByNodeId, boneEdgeSet) {
+    if (!fixedNodeIds || fixedNodeIds.size === 0) return;
+    const createdPairKeys = new Set();
+
+    fixedNodeIds.forEach(nodeId => {
+      const centerBody = bodyMap[nodeId];
+      if (!centerBody) return;
+      const neighbors = Array.from(boneAdjacencyByNodeId.get(nodeId) || [])
+        .filter(otherId => otherId !== nodeId && !!bodyMap[otherId]);
+      if (neighbors.length < 2) return;
+
+      const candidatePairs = this._selectFixedNodeNeighborPairs(neighbors, centerBody, bodyMap);
+      let createdForNode = 0;
+      for (let i = 0; i < candidatePairs.length; i++) {
+        if (createdForNode >= 6) break;
+        const [rawA, rawB] = candidatePairs[i];
+        const a = Number(rawA);
+        const b = Number(rawB);
+        if (!Number.isFinite(a) || !Number.isFinite(b) || a === b) continue;
+        const pairKey = a < b ? `${a}:${b}` : `${b}:${a}`;
+        if (boneEdgeSet.has(pairKey)) continue;
+        if (createdPairKeys.has(pairKey)) continue;
+        const bodyA = bodyMap[a];
+        const bodyB = bodyMap[b];
+        if (!bodyA || !bodyB) continue;
+
+        const posA = bodyA.getPosition();
+        const posB = bodyB.getPosition();
+        const dx = (posB.x - posA.x) * SCALE;
+        const dy = (posB.y - posA.y) * SCALE;
+        const lengthPx = Math.sqrt(dx * dx + dy * dy);
+        if (!Number.isFinite(lengthPx) || lengthPx < 1) continue;
+
+        const limiter = createAngleLimiter(this.world, bodyA, bodyB, lengthPx, {
+          frequencyHz: 0,
+          dampingRatio: 1.0
+        });
+        limiter.isAngleLimiter = true;
+        limiter.fixedNodeId = nodeId;
+        this.angleLimiters.push(limiter);
+        createdPairKeys.add(pairKey);
+        createdForNode++;
+      }
+    });
   }
 
   _computeSpan() {
@@ -1037,21 +1034,8 @@ export class Creature {
       if (joint) this.world.destroyJoint(joint);
     });
     
-    // Destroy polygon joints
-    if (this.polygonJoints) {
-      this.polygonJoints.forEach(joint => {
-        if (joint) this.world.destroyJoint(joint);
-      });
-      this.polygonJoints = [];
-    }
-    
     // Destroy all bodies
     this.bodies.forEach(b => {
-      if (b) this.world.destroyBody(b);
-    });
-    
-    // Destroy polygon bodies
-    this.polygonBodies.forEach(b => {
       if (b) this.world.destroyBody(b);
     });
     
@@ -1059,8 +1043,6 @@ export class Creature {
     this.bones = [];
     this.angleLimiters = [];
     this.bodies = [];
-    this.polygonBodies = [];
-    this.polygonData = [];
   }
 
   draw(ctx, isLeader) {
@@ -1076,47 +1058,6 @@ export class Creature {
       ctx.fill();
       ctx.restore();
     }
-
-    // Draw polygon bodies (solid body parts)
-    this.polygonBodies.forEach((polyBody, idx) => {
-      const bodyPos = polyBody.getPosition();
-      const bodyAngle = polyBody.getAngle();
-      
-      // Get vertices directly from physics fixtures
-      const worldVertices = [];
-      for (let f = polyBody.getFixtureList(); f; f = f.getNext()) {
-        const shape = f.getShape();
-        if (shape.getType() === 'polygon') {
-          const vertices = shape.m_vertices;
-          vertices.forEach(v => {
-            // Transform local vertex to world space
-            const cos = Math.cos(bodyAngle);
-            const sin = Math.sin(bodyAngle);
-            const worldX = (v.x * cos - v.y * sin + bodyPos.x) * SCALE;
-            const worldY = (v.x * sin + v.y * cos + bodyPos.y) * SCALE;
-            worldVertices.push({ x: worldX, y: worldY });
-          });
-        }
-      }
-      
-      if (worldVertices.length < 3) return;
-      
-      // Draw filled polygon using transformed vertices
-      ctx.beginPath();
-      ctx.moveTo(worldVertices[0].x, worldVertices[0].y);
-      for (let i = 1; i < worldVertices.length; i++) {
-        ctx.lineTo(worldVertices[i].x, worldVertices[i].y);
-      }
-      ctx.closePath();
-      
-      // Fill with semi-transparent purple
-      ctx.fillStyle = isLeader ? 'rgba(139, 92, 246, 0.5)' : 'rgba(139, 92, 246, 0.15)';
-      ctx.fill();
-      ctx.strokeStyle = isLeader ? 'rgba(139, 92, 246, 0.9)' : 'rgba(139, 92, 246, 0.3)';
-      ctx.lineWidth = isLeader ? 1.5 : 0.5;
-      ctx.globalAlpha = isLeader ? 1 : 0.25;
-      ctx.stroke();
-    });
 
     // Draw bones and muscles
     [...this.bones, ...this.angleLimiters].forEach(joint => {

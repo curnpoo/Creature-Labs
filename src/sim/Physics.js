@@ -1,8 +1,7 @@
 import planck from 'planck-js';
 import { PHYSICS_CONFIG } from '../utils/config/physics.js';
-import earcut from 'earcut';
 
-const { World, Vec2, Body, Circle, Box, Edge, Polygon, PrismaticJoint, DistanceJoint, RevoluteJoint } = planck;
+const { World, Vec2, Body, Circle, Box, Edge, PrismaticJoint, DistanceJoint, RevoluteJoint } = planck;
 
 // Scale factor: Planck uses meters, we use pixels
 // 30 pixels = 1 meter
@@ -73,62 +72,6 @@ export function createNode(world, x, y, radius, options = {}) {
   return body;
 }
 
-// Create a solid polygon body (static, for creature body parts)
-export function createPolygonBody(world, vertices, options = {}) {
-  if (vertices.length < 3) return null;
-  
-  // Convert vertices to flat array for earcut
-  const flatVertices = [];
-  vertices.forEach(v => {
-    flatVertices.push(v.x / SCALE, v.y / SCALE);
-  });
-  
-  // Triangulate the polygon
-  const triangles = earcut(flatVertices);
-  
-  // Calculate centroid for body position
-  let cx = 0, cy = 0;
-  vertices.forEach(v => {
-    cx += v.x;
-    cy += v.y;
-  });
-  cx = (cx / vertices.length) / SCALE;
-  cy = (cy / vertices.length) / SCALE;
-  
-  // Create solid body at centroid (DYNAMIC so creatures can move it)
-  const body = world.createBody({
-    type: 'dynamic',
-    position: Vec2(cx, cy),
-    linearDamping: options.linearDamping ?? 0.0,
-    angularDamping: options.angularDamping ?? 0.05
-  });
-  
-  // Create fixtures for each triangle
-  for (let i = 0; i < triangles.length; i += 3) {
-    const i0 = triangles[i] * 2;
-    const i1 = triangles[i + 1] * 2;
-    const i2 = triangles[i + 2] * 2;
-    
-    const triangleVertices = [
-      Vec2(flatVertices[i0] - cx, flatVertices[i0 + 1] - cy),
-      Vec2(flatVertices[i1] - cx, flatVertices[i1 + 1] - cy),
-      Vec2(flatVertices[i2] - cx, flatVertices[i2 + 1] - cy)
-    ];
-    
-    body.createFixture({
-      shape: Polygon(triangleVertices),
-      density: 2.0, // Dense so it has mass but isn't too heavy
-      friction: options.friction ?? 0.6,
-      restitution: options.restitution ?? 0.0,
-      filterCategoryBits: options.categoryBits ?? 0x0002,
-      filterMaskBits: options.maskBits ?? 0x0003,
-      filterGroupIndex: options.group ?? 0
-    });
-  }
-  
-  return body;
-}
-
 // Create a rigid bone (distance joint) - BONES CANNOT STRETCH
 export function createBone(world, bodyA, bodyAOffset, bodyB, bodyBOffset, length, options = {}) {
   const joint = world.createJoint(DistanceJoint({
@@ -139,6 +82,22 @@ export function createBone(world, bodyA, bodyAOffset, bodyB, bodyBOffset, length
     length: length / SCALE,
     localAnchorA: bodyAOffset ? Vec2(bodyAOffset.x / SCALE, bodyAOffset.y / SCALE) : Vec2(0, 0),
     localAnchorB: bodyBOffset ? Vec2(bodyBOffset.x / SCALE, bodyBOffset.y / SCALE) : Vec2(0, 0)
+  }));
+
+  return joint;
+}
+
+// Create a local angle-lock brace between two neighboring bodies around a fixed node.
+// This is implemented as a stiff distance joint and intentionally does not pin to world.
+export function createAngleLimiter(world, bodyA, bodyB, length, options = {}) {
+  const joint = world.createJoint(DistanceJoint({
+    bodyA: bodyA,
+    bodyB: bodyB,
+    frequencyHz: options.frequencyHz ?? 22,
+    dampingRatio: options.dampingRatio ?? 1.0,
+    length: Math.max(0, Number(length) || 0) / SCALE,
+    localAnchorA: options.bodyAOffset ? Vec2(options.bodyAOffset.x / SCALE, options.bodyAOffset.y / SCALE) : Vec2(0, 0),
+    localAnchorB: options.bodyBOffset ? Vec2(options.bodyBOffset.x / SCALE, options.bodyBOffset.y / SCALE) : Vec2(0, 0)
   }));
 
   return joint;

@@ -33,11 +33,19 @@ export class HUD {
 
   update(sim) {
     const safe = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
+    const latestProgress = Array.isArray(sim.progressHistory) && sim.progressHistory.length
+      ? sim.progressHistory[sim.progressHistory.length - 1]
+      : null;
+    const latestGenBest = Number.isFinite(Number(latestProgress?.genBest))
+      ? Number(latestProgress.genBest)
+      : 0;
+    const liveGenBest = safe(sim.genBestDist, 0);
+    const genBestDisplay = Math.max(liveGenBest, latestGenBest);
     const generationChanged = this.lastGeneration !== null && sim.generation > this.lastGeneration;
     const allTimeBestImproved = this.lastAllTimeBest !== null && sim.allTimeBest > this.lastAllTimeBest + 1e-6;
 
     if (this.els.gen) this.els.gen.textContent = String(sim.generation);
-    if (this.els.genBest) this.els.genBest.textContent = `${safe(sim.genBestDist).toFixed(2)}m`;
+    if (this.els.genBest) this.els.genBest.textContent = `${genBestDisplay.toFixed(2)}m`;
     if (this.els.allBest) this.els.allBest.textContent = `${safe(sim.allTimeBest).toFixed(2)}m`;
 
     if (generationChanged && sim.trainingMode === 'normal' && !sim.sandboxMode && this.els.gen) {
@@ -51,7 +59,14 @@ export class HUD {
       this.els.allBest.classList.add('stat-gold-flash');
     }
 
-    const delta = safe(sim.allTimeBest) - safe(sim.prevAllTimeBest);
+    // Delta is generation-relative:
+    // - positive when this generation sets a new record,
+    // - negative when this generation regresses below all-time best.
+    const prevAll = safe(sim.prevAllTimeBest);
+    const allBest = safe(sim.allTimeBest);
+    const delta = latestGenBest > prevAll + 1e-6
+      ? (latestGenBest - prevAll)
+      : (latestGenBest - allBest);
     if (this.els.improve) {
       this.els.improve.textContent = `${delta >= 0 ? '+' : ''}${delta.toFixed(2)}m`;
       this.els.improve.style.color = delta > 0 ? '#6ee7b7' : '#fca5a5';

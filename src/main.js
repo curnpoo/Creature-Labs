@@ -127,7 +127,6 @@ function setScreen(name) {
     const design = designer.getDesign();
     sim.nodes = design.nodes;
     sim.constraints = design.constraints;
-    sim.polygons = design.polygons || [];
     resizeCanvases();
     worldCtx = worldCanvas.getContext('2d');
     simSessionStarted = false;
@@ -567,9 +566,29 @@ function updateSandboxStats(leader) {
   
   const gd = sim._sandboxGraphData;
   const currentSimTime = Number.isFinite(sim.simTimeElapsed) ? sim.simTimeElapsed : 0;
-  if (!Number.isFinite(gd.lastSampleSimTime)) {
+
+  // If simulation time rewound (new sandbox run), reset graph time state automatically.
+  if (!Number.isFinite(gd.lastSampleSimTime) || currentSimTime + 1e-6 < gd.lastSampleSimTime) {
     gd.lastSampleSimTime = currentSimTime;
+    gd.distance = [];
+    gd.speed = [];
+    gd.stability = [];
+    gd.actuation = [];
+    gd.sampleTimes = [];
   }
+
+  // Seed first point immediately so graph activates on first run/resume.
+  if (!gd.sampleTimes.length) {
+    gd.distance.push(dist);
+    gd.speed.push(speedMps);
+    gd.stability.push(slip);
+    gd.actuation.push(actuation);
+    gd.sampleTimes.push(currentSimTime);
+    gd.lastSampleSimTime = currentSimTime;
+    drawSandboxGraphs();
+    return;
+  }
+
   const simDelta = currentSimTime - gd.lastSampleSimTime;
   if (simDelta < gd.sampleIntervalSimSec) return;
   gd.lastSampleSimTime = currentSimTime;
@@ -775,18 +794,31 @@ function persistBrainLibrary() {
   localStorage.setItem(BRAIN_LIBRARY_KEY, JSON.stringify(brainLibrary));
 }
 
-function renderBrainLibrary() {
-  const select = document.getElementById('brain-library-select');
+function updateBrainLibraryMeta(selectedId = '') {
   const meta = document.getElementById('brain-library-meta');
-  if (!select || !meta) return;
+  if (!meta) return;
+  if (!brainLibrary.length) {
+    meta.textContent = 'Run at least one generation, then save.';
+    return;
+  }
+  const selected = brainLibrary.find(b => b.id === selectedId) || brainLibrary[0];
+  const mode = sim.sandboxMode ? 'Sandbox ON' : 'Sandbox OFF';
+  const selectedDist = Number.isFinite(selected.distance) ? formatTwoDecimals(selected.distance) : '0.00';
+  meta.textContent = `${mode} · ${selected.name || 'Brain'} · ${selectedDist}m · ${new Date(selected.createdAt).toLocaleString()}`;
+}
 
+function renderBrainLibrary(preferredId = null) {
+  const select = document.getElementById('brain-library-select');
+  if (!select) return;
+
+  const previousValue = preferredId ?? select.value;
   select.innerHTML = '';
   if (!brainLibrary.length) {
     const opt = document.createElement('option');
     opt.value = '';
     opt.textContent = 'No saved brains';
     select.appendChild(opt);
-    meta.textContent = 'Run at least one generation, then save.';
+    updateBrainLibraryMeta('');
     return;
   }
 
@@ -799,11 +831,9 @@ function renderBrainLibrary() {
     select.appendChild(opt);
   });
 
-  if (!select.value) select.value = brainLibrary[0].id;
-  const selected = brainLibrary.find(b => b.id === select.value) || brainLibrary[0];
-  const mode = sim.sandboxMode ? 'Sandbox ON' : 'Sandbox OFF';
-  const selectedDist = Number.isFinite(selected.distance) ? formatTwoDecimals(selected.distance) : '0.00';
-  meta.textContent = `${mode} · ${selected.name || 'Brain'} · ${selectedDist}m · ${new Date(selected.createdAt).toLocaleString()}`;
+  const hasPrevious = previousValue && brainLibrary.some(b => b.id === previousValue);
+  select.value = hasPrevious ? previousValue : brainLibrary[0].id;
+  updateBrainLibraryMeta(select.value);
 }
 
 function loadCreatureCatalog() {
@@ -840,14 +870,6 @@ function computeDesignBounds(design) {
     minY = Math.min(minY, n.y);
     maxX = Math.max(maxX, n.x);
     maxY = Math.max(maxY, n.y);
-  });
-  (design.polygons || []).forEach(poly => {
-    (poly.vertices || []).forEach(v => {
-      minX = Math.min(minX, v.x);
-      minY = Math.min(minY, v.y);
-      maxX = Math.max(maxX, v.x);
-      maxY = Math.max(maxY, v.y);
-    });
   });
   if (!Number.isFinite(minX)) return null;
   return { minX, minY, maxX, maxY };
@@ -892,20 +914,6 @@ function generateDesignThumbnail(design, width = 220, height = 140) {
   const nodeMap = new Map((design.nodes || []).map(n => [n.id, n]));
   const tx = x => x * scale + offsetX;
   const ty = y => y * scale + offsetY;
-
-  (design.polygons || []).forEach(poly => {
-    const verts = poly.vertices || [];
-    if (verts.length < 3) return;
-    ctx.beginPath();
-    ctx.moveTo(tx(verts[0].x), ty(verts[0].y));
-    for (let i = 1; i < verts.length; i++) ctx.lineTo(tx(verts[i].x), ty(verts[i].y));
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(168,85,247,0.45)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(196,181,253,0.72)';
-    ctx.lineWidth = 1.6;
-    ctx.stroke();
-  });
 
   (design.constraints || []).forEach(c => {
     const a = nodeMap.get(c.n1);
@@ -992,7 +1000,7 @@ function setTool(tool, btn) {
 
   const hints = {
     node: 'Click to add joints. Click on bone to split.',
-    joint: 'Click joint to toggle Fixed/Hinge.',
+    joint: 'Click joint to toggle Fixed/Hinge. Fixed = lock bone angle at this node (bone links only).',
     bone: 'Drag joint to joint to add rigid bones.',
     muscle: 'Drag joint to joint to add muscles.',
     move: 'Drag joints to reposition.',
@@ -1008,7 +1016,6 @@ document.getElementById('tool-node').onclick = e => setTool('node', e.currentTar
 document.getElementById('tool-joint').onclick = e => setTool('joint', e.currentTarget);
 document.getElementById('tool-bone').onclick = e => setTool('bone', e.currentTarget);
 document.getElementById('tool-muscle').onclick = e => setTool('muscle', e.currentTarget);
-document.getElementById('tool-polygon').onclick = e => setTool('polygon', e.currentTarget);
 document.getElementById('tool-move').onclick = e => setTool('move', e.currentTarget);
 document.getElementById('tool-erase').onclick = e => setTool('erase', e.currentTarget);
 document.getElementById('tool-pan').onclick = e => setTool('pan', e.currentTarget);
@@ -1151,7 +1158,6 @@ controls.bind({
     const design = designer.getDesign();
     sim.nodes = design.nodes;
     sim.constraints = design.constraints;
-    sim.polygons = design.polygons || [];
     sim.exitSandboxMode();
     controls.setCameraMode('lock');
     startTrainingNow();
@@ -1173,7 +1179,6 @@ controls.bind({
     const design = designer.getDesign();
     sim.nodes = design.nodes;
     sim.constraints = design.constraints;
-    sim.polygons = design.polygons || [];
     controls.setCameraMode('lock');
     startTrainingNow();
   },
@@ -1264,7 +1269,7 @@ if (brainSaveBtn) {
 
 const brainSelect = document.getElementById('brain-library-select');
 if (brainSelect) {
-  brainSelect.onchange = () => renderBrainLibrary();
+  brainSelect.onchange = () => updateBrainLibraryMeta(brainSelect.value);
 }
 
 const sandboxRunBtn = document.getElementById('btn-sandbox-run');
@@ -1294,8 +1299,7 @@ if (sandboxRunBtn) {
       if (picked.design && Array.isArray(picked.design.nodes) && Array.isArray(picked.design.constraints)) {
         designer.loadDesign({
           nodes: picked.design.nodes,
-          constraints: picked.design.constraints,
-          nextId: Math.max(...picked.design.nodes.map(n => n.id)) + 1
+          constraints: picked.design.constraints
         });
       }
       resetControlSettingsForNewCreature();
@@ -1305,7 +1309,6 @@ if (sandboxRunBtn) {
       const design = designer.getDesign();
       sim.nodes = design.nodes;
       sim.constraints = design.constraints;
-      sim.polygons = design.polygons || [];
       startTrainingNow({ startPaused: true });
       controls.setCameraMode('lock');
       renderBrainLibrary();
@@ -1342,7 +1345,7 @@ worldCanvas.addEventListener('click', e => {
   if (challengeTool === 'ground') {
     sim.addGroundPoint({ x: p.x, y: p.y });
   } else if (challengeTool === 'obstacle') {
-    sim.addObstacle({ x: p.x, y: p.y - 20, w: 60, h: 40 });
+    sim.addObstacle({ x: p.x, y: p.y, w: 60, h: 40 });
   } else if (challengeTool === 'triangle') {
     sim.addTriangleObstacle({ x: p.x, y: p.y - 25, w: 50, h: 50 });
   }
@@ -1418,6 +1421,40 @@ function drawTurboAllTimeBestGlow(ctx, groundY) {
     ctx.lineWidth = 3;
     ctx.shadowColor = 'rgba(250, 204, 21, 0.95)';
     ctx.shadowBlur = 16;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  ctx.restore();
+}
+
+function drawTurboGenerationPoles(ctx, groundY) {
+  if (sim.trainingMode !== 'turbo' || sim.sandboxMode) return;
+  const history = sim.getTurboGenPoleHistory ? sim.getTurboGenPoleHistory() : [];
+  if (!Array.isArray(history) || !history.length) return;
+
+  const total = history.length;
+  ctx.save();
+  for (let i = 0; i < total; i++) {
+    const entry = history[i];
+    const t = total <= 1 ? 1 : ((i + 1) / total); // oldest -> newest
+    const alpha = 0.12 + (t * t * 0.78);
+    const x = Number.isFinite(entry?.x)
+      ? entry.x
+      : (sim.spawnCenterX + (Math.max(0, Number(entry?.distance) || 0) * SCALE));
+    const poleTop = groundY - (68 + 92 * t);
+    const poleBottom = groundY + 8;
+
+    const gradient = ctx.createLinearGradient(x, poleTop, x, poleBottom);
+    gradient.addColorStop(0, `rgba(103, 232, 249, ${Math.max(0.08, alpha * 0.45)})`);
+    gradient.addColorStop(1, `rgba(34, 211, 238, ${alpha})`);
+
+    ctx.beginPath();
+    ctx.moveTo(x, poleTop);
+    ctx.lineTo(x, poleBottom);
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 1.2 + (t * 2.2);
+    ctx.shadowColor = `rgba(34, 211, 238, ${Math.min(0.9, alpha + 0.1)})`;
+    ctx.shadowBlur = 2 + (10 * t);
     ctx.stroke();
     ctx.shadowBlur = 0;
   }
@@ -1601,8 +1638,21 @@ frameCount++;
 
 // Camera follow — center creature in visible canvas area (between panels)
 // Cache panel dimensions and update only every 5 frames for performance
+const turboLineFollow = sim.trainingMode === 'turbo' && !sim.sandboxMode;
 const lockFocusPoint = sim.cameraMode === 'lock'
-  ? (bestRunSample?.headPoint || (leader ? leader.getCenter() : null))
+  ? (
+      (
+        turboLineFollow && sim.getTurboGenPoleHistory
+          ? (() => {
+              const poles = sim.getTurboGenPoleHistory();
+              const latest = Array.isArray(poles) && poles.length ? poles[poles.length - 1] : null;
+              return latest && Number.isFinite(latest.x) ? { x: latest.x, y: gY - 80 } : null;
+            })()
+          : null
+      )
+      || (!turboLineFollow ? bestRunSample?.headPoint : null)
+      || (leader ? leader.getCenter() : null)
+    )
   : null;
 
 if (lockFocusPoint) {
@@ -1724,8 +1774,13 @@ lastPanelUpdateFrame = frameCount;
   }
 
   if (viewMode === 'bestRun' || viewMode === 'training') {
-    drawTurboAllTimeBestGlow(ctx, gY);
-    drawBestRunSpotlight(ctx, bestRunSample);
+    drawTurboGenerationPoles(ctx, gY);
+    if (sim.trainingMode !== 'turbo') {
+      drawTurboAllTimeBestGlow(ctx, gY);
+    }
+    if (sim.trainingMode !== 'turbo') {
+      drawBestRunSpotlight(ctx, bestRunSample);
+    }
   }
   
   // DEBUG: Visual indicator of camera bounds

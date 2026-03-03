@@ -27,8 +27,7 @@ function buildToyDesign() {
       { type: 'bone', n1: 2, n2: 3 },
       { type: 'bone', n1: 1, n2: 3 },
       { type: 'muscle', n1: 1, n2: 2, minLength: 0.85, maxLength: 1.2 }
-    ],
-    polygons: []
+    ]
   };
 }
 
@@ -109,10 +108,7 @@ const scoreWeights = {
 
 function applyStabilization(creature, simConfig, groundY) {
   const angularDampingPerStep = 0.985;
-  const allBodies = creature.polygonBodies && creature.polygonBodies.length
-    ? creature.bodies.concat(creature.polygonBodies)
-    : creature.bodies;
-  allBodies.forEach(b => {
+  creature.bodies.forEach(b => {
     const pos = b.getPosition();
     const vel = b.getLinearVelocity();
     let vx = vel.x;
@@ -154,7 +150,6 @@ function evaluateSharedWorld(pop, design, simConfig, spawnCenterX) {
     startY,
     design.nodes,
     design.constraints,
-    design.polygons,
     dnaObj,
     bounds.minX,
     bounds.minY,
@@ -204,7 +199,6 @@ function evaluateIsolatedWorlds(pop, design, simConfig, spawnCenterX) {
       startY,
       design.nodes,
       design.constraints,
-      design.polygons,
       dnaObj,
       bounds.minX,
       bounds.minY,
@@ -253,7 +247,7 @@ function main() {
   const relMaxY = bounds.maxY - bounds.minY;
   const startY = GROUND_Y - CONFIG.spawnClearance - CONFIG.nodeRadius - relMaxY;
   const proto = new Creature(
-    protoWorld, SPAWN_X, startY, design.nodes, design.constraints, design.polygons,
+    protoWorld, SPAWN_X, startY, design.nodes, design.constraints,
     null, bounds.minX, bounds.minY, simConfig, 0
   );
   const baseDNA = Array.from(proto.dna);

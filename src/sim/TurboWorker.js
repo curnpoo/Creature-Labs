@@ -133,9 +133,7 @@ function evaluateBatchShared(payload) {
   const relMaxY = bounds.maxY - bounds.minY;
   const startY = groundY - payload.spawnClearance - payload.nodeRadius - relMaxY;
   let deathWallX = spawnCenterX - simConfig.deathWallStartBehindMeters * SCALE;
-  const deathWall = simConfig.deathWallEnabled
-    ? createDeathWall(world, deathWallX, groundY, simConfig.deathWallThicknessPx)
-    : null;
+  let deathWall = null;
   const pendingDeathWallKills = new Set();
   const queueDeathWallKill = (bodyA, bodyB) => {
     const wallA = bodyA?.isDeathWall === true;
@@ -182,7 +180,6 @@ function evaluateBatchShared(payload) {
       startY,
       design.nodes,
       design.constraints,
-      design.polygons,
       dnaObj,
       bounds.minX,
       bounds.minY,
@@ -203,6 +200,22 @@ function evaluateBatchShared(payload) {
     };
   });
   const recordById = new Map(records.map(r => [r.creature.id, r]));
+
+  // Match main-thread behavior: anchor wall behind the true leftmost spawned body.
+  let leftmostSpawnX = Number.POSITIVE_INFINITY;
+  records.forEach((record) => {
+    (record.creature.bodies || []).forEach((body) => {
+      const pos = body.getPosition();
+      if (!pos) return;
+      const x = (pos.x * SCALE) - payload.nodeRadius;
+      if (Number.isFinite(x)) leftmostSpawnX = Math.min(leftmostSpawnX, x);
+    });
+  });
+  const deathWallAnchorX = Number.isFinite(leftmostSpawnX) ? leftmostSpawnX : spawnCenterX;
+  deathWallX = deathWallAnchorX - simConfig.deathWallStartBehindMeters * SCALE;
+  if (simConfig.deathWallEnabled) {
+    deathWall = createDeathWall(world, deathWallX, groundY, simConfig.deathWallThicknessPx);
+  }
 
   let simTimeElapsed = 0;
   let timer = simConfig.simDuration;
@@ -249,10 +262,7 @@ function evaluateBatchShared(payload) {
     // Minimal post-step safety clamps only (no non-physical traction or angle teleporting).
     records.forEach(r => {
       if (r.creature.dead) return;
-      const allBodies = r.creature.polygonBodies && r.creature.polygonBodies.length
-        ? r.creature.bodies.concat(r.creature.polygonBodies)
-        : r.creature.bodies;
-      allBodies.forEach(b => {
+      r.creature.bodies.forEach(b => {
         const vel = b.getLinearVelocity();
         let vx = vel.x;
         const vy = vel.y;

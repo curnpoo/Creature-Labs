@@ -67,6 +67,8 @@ export class Simulation {
     this.turboWallPolicy = 'full';
     this.turboWallSoftSpeedScale = 0.35;
     this.turboWallSoftStartScale = 1.8;
+    this.turboGenPoleHistory = [];
+    this.turboGenPoleCount = 5;
     this.bestRunQueue = [];
     this.bestRunActive = null;
     this.bestRunCursor = 0;
@@ -125,7 +127,7 @@ export class Simulation {
     this.groundNoSlipEnabled = CONFIG.defaultGroundNoSlipEnabled ?? true;
     this.groundNoSlipFactor = CONFIG.defaultGroundNoSlipFactor ?? 0.1;
     this.groundNoSlipEpsilon = CONFIG.defaultGroundNoSlipEpsilon ?? 0.02;
-    this.tiltLimitEnabled = CONFIG.defaultTiltLimitEnabled;
+    this.tiltLimitEnabled = false;
     this.maxTiltDeg = CONFIG.defaultMaxTiltDeg;
     this.maxTiltRad = (this.maxTiltDeg * Math.PI) / 180;
     this.bodyFriction = CONFIG.defaultBodyFriction;
@@ -176,6 +178,7 @@ export class Simulation {
     this.verticalSpeedPenalty = CONFIG.defaultVerticalSpeedPenalty;
     this.spawnX = 60;
     this.spawnCenterX = 60; // updated at spawn time to creature's center pixel
+    this.spawnLeftmostX = 60; // updated at spawn time to creature's leftmost point (pixels)
     this.deathWallEnabled = CONFIG.defaultDeathWallEnabled ?? true;
     this.deathWallStartBehindMeters = CONFIG.defaultDeathWallStartBehindMeters ?? 20;
     this.deathWallSpeedMps = CONFIG.defaultDeathWallSpeedMps ?? 1.0;
@@ -189,7 +192,7 @@ export class Simulation {
     this.noSlipTangentialSamples = 0;
 
     // Energy system settings
-    this.energyEnabled = CONFIG.defaultEnergyEnabled;
+    this.energyEnabled = false;
     this.maxEnergy = CONFIG.defaultMaxEnergy;
     this.energyRegenRate = CONFIG.defaultEnergyRegenRate;
     this.energyUsagePerActuation = CONFIG.defaultEnergyUsagePerActuation;
@@ -215,7 +218,6 @@ export class Simulation {
     // Design data
     this.nodes = [];
     this.constraints = [];
-    this.polygons = [];
   }
 
   getGroundY() {
@@ -234,7 +236,8 @@ export class Simulation {
   }
 
   resetDeathWall() {
-    this.deathWallX = this.spawnCenterX - this.deathWallStartBehindMeters * SCALE;
+    const anchorX = Number.isFinite(this.spawnLeftmostX) ? this.spawnLeftmostX : this.spawnCenterX;
+    this.deathWallX = anchorX - this.deathWallStartBehindMeters * SCALE;
     this.pendingDeathWallKills.clear();
     this.deathWallKillsThisGen = 0;
     if (this.deathWallBody) {
@@ -407,7 +410,7 @@ export class Simulation {
     const relMaxY = bounds.maxY - bounds.minY;
     const startX = this.spawnX;
     this.spawnCenterX = this.spawnX + (bounds.maxX - bounds.minX) / 2;
-    this.resetDeathWall();
+    this.spawnLeftmostX = startX;
     const startY = this.getGroundY() - CONFIG.spawnClearance - CONFIG.nodeRadius - relMaxY;
     // console.log(`Spawn position: (${startX}, ${startY})`);
 
@@ -428,7 +431,7 @@ export class Simulation {
       // console.log(`Creating creature ${i}`);
       const creature = new Creature(
         this.world, startX, startY,
-        this.nodes, this.constraints, this.polygons,
+        this.nodes, this.constraints,
         dna, bounds.minX, bounds.minY,
         creatureConfig,
         i
@@ -442,6 +445,19 @@ export class Simulation {
     // console.log(`Spawned ${this.creatures.length} creatures`);
     // DEBUG: Check creatures spawned correctly
     const validCreatures = this.creatures.filter(c => c.bodies.length > 0).length;
+
+    // Anchor death wall behind the actual leftmost spawned body point.
+    let leftmost = Number.POSITIVE_INFINITY;
+    this.creatures.forEach((creature) => {
+      (creature.bodies || []).forEach((body) => {
+        const pos = body.getPosition();
+        if (!pos) return;
+        const x = (pos.x * SCALE) - CONFIG.nodeRadius;
+        if (Number.isFinite(x)) leftmost = Math.min(leftmost, x);
+      });
+    });
+    this.spawnLeftmostX = Number.isFinite(leftmost) ? leftmost : startX;
+    this.resetDeathWall();
     const creaturesWithMuscles = this.creatures.filter(c => c.muscles.length > 0).length;
     if (validCreatures !== this.creatures.length) {
       console.error(`Gen ${this.generation}: Only ${validCreatures}/${this.creatures.length} creatures have bodies!`);
@@ -497,6 +513,7 @@ export class Simulation {
     if (typeof Evolution.resetNeatState === 'function') {
       Evolution.resetNeatState();
     }
+    this.neatStatus = null;
 
     this.generation = 1;
     this.timer = this.simDuration;
@@ -601,6 +618,7 @@ this.brainHistory = [];
 this.replayHistory = [];
 this.turboLatestRun = null;
 this.turboAllTimeBestRun = null;
+this.turboGenPoleHistory = [];
 this.bestRunQueue = [];
 this.bestRunActive = null;
 this.bestRunCursor = 0;
@@ -614,6 +632,8 @@ this.lastTurboGenerationSummary = null;
 this._turboGenerationDNA = null;
 this._turboRunning = false;
 this.turboStatus = this.turboEnabled ? 'warming' : 'idle';
+this.neatStatus = null;
+this._sandboxGraphData = null;
 
 if (this.world) {
 cleanup(this.world);
@@ -1338,7 +1358,7 @@ this.world = null;
   }
 
   setViewMode(mode) {
-    this.viewMode = mode === 'bestRun' ? 'bestRun' : 'training';
+    this.viewMode = 'training';
   }
 
   setTrainingMode(mode) {
@@ -1377,7 +1397,7 @@ this.world = null;
   }
 
   setBestRunTrigger(mode) {
-    this.bestRunTrigger = mode === 'everyGen' ? 'everyGen' : 'allTimeBest';
+    this.bestRunTrigger = 'everyGen';
   }
 
   setTestingMode(enabled) {
@@ -1390,6 +1410,18 @@ this.world = null;
   setTurboWallPolicy(policy) {
     const normalized = (policy === 'off' || policy === 'soft' || policy === 'full') ? policy : 'full';
     this.turboWallPolicy = normalized;
+  }
+
+  setTurboGenPoleCount(count) {
+    const next = Math.max(1, Math.min(20, Math.round(Number(count) || 5)));
+    this.turboGenPoleCount = next;
+    if (this.turboGenPoleHistory.length > next) {
+      this.turboGenPoleHistory = this.turboGenPoleHistory.slice(-next);
+    }
+  }
+
+  getTurboGenPoleHistory() {
+    return Array.isArray(this.turboGenPoleHistory) ? this.turboGenPoleHistory : [];
   }
 
   resolveTurboWallConfig() {
@@ -1454,7 +1486,6 @@ this.world = null;
     return {
       nodes: this.nodes,
       constraints: this.constraints,
-      polygons: this.polygons || [],
       bounds
     };
   }
@@ -1611,6 +1642,16 @@ this.world = null;
     const isAllTimeBest = genBest > this.allTimeBest;
     if (isAllTimeBest) this.allTimeBest = genBest;
     this.stagnantGens = this.allTimeBest > this.prevAllTimeBest ? 0 : this.stagnantGens + 1;
+    const poleDistance = Math.max(0, Number(genBest) || 0);
+    this.turboGenPoleHistory.push({
+      generation: this.generation,
+      distance: poleDistance,
+      x: this.spawnCenterX + poleDistance * SCALE,
+      isAllTimeBest
+    });
+    if (this.turboGenPoleHistory.length > this.turboGenPoleCount) {
+      this.turboGenPoleHistory = this.turboGenPoleHistory.slice(-this.turboGenPoleCount);
+    }
     this.progressHistory.push({
       generation: this.generation,
       genBest,
@@ -1940,6 +1981,12 @@ this.world = null;
   buildDiagnosticsSnapshot() {
     const scoreWeights = extractScoreWeights(this);
     const leader = this.getLeader();
+    const designFixedNodeCount = Array.isArray(this.nodes)
+      ? this.nodes.reduce((count, node) => count + (node?.fixed ? 1 : 0), 0)
+      : 0;
+    const leaderAngleLimiterCount = Array.isArray(leader?.angleLimiters)
+      ? leader.angleLimiters.length
+      : 0;
     const summarizeCreature = creature => {
       if (!creature) return null;
       const center = creature.getCenter ? creature.getCenter() : { x: 0, y: 0 };
@@ -1967,6 +2014,8 @@ this.world = null;
         score: Number(this.creatureScore(creature).toFixed(5)),
         bodyCount: Array.isArray(creature.bodies) ? creature.bodies.length : 0,
         muscleCount: Array.isArray(creature.muscles) ? creature.muscles.length : 0,
+        fixedNodeCount: Number(creature.fixedNodeCount) || 0,
+        angleLimiterCount: Array.isArray(creature.angleLimiters) ? creature.angleLimiters.length : 0,
         bodyPreview
       };
     };
@@ -2034,6 +2083,10 @@ this.world = null;
         turbo: this.lastTurboDiagnostics,
         turboSummary: this.lastTurboGenerationSummary,
         testing: this.getTurboTestSnapshot(),
+        locking: {
+          fixedNodeCount: designFixedNodeCount,
+          angleLimiterCount: leaderAngleLimiterCount
+        },
         noSlip: {
           appliedSteps: this.noSlipAppliedSteps,
           groundTangentialResidual: this.noSlipTangentialSamples > 0
@@ -2123,7 +2176,9 @@ this.world = null;
               xPx: full.creatureState.leader.xPx,
               score: full.creatureState.leader.score,
               bodyCount: full.creatureState.leader.bodyCount,
-              muscleCount: full.creatureState.leader.muscleCount
+              muscleCount: full.creatureState.leader.muscleCount,
+              fixedNodeCount: full.creatureState.leader.fixedNodeCount,
+              angleLimiterCount: full.creatureState.leader.angleLimiterCount
             }
           : null
       },
@@ -2206,10 +2261,7 @@ this.world = null;
         // Minimal post-step safety clamps only (no non-physical traction or angle teleporting).
         this.creatures.forEach(c => {
           if (c.dead) return;
-          const allBodies = c.polygonBodies && c.polygonBodies.length
-            ? c.bodies.concat(c.polygonBodies)
-            : c.bodies;
-          allBodies.forEach(b => {
+          c.bodies.forEach(b => {
             const vel = b.getLinearVelocity();
             let vx = vel.x;
             const vy = vel.y;
@@ -2362,13 +2414,6 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
           fixture = fixture.getNext();
         }
       });
-      c.polygonBodies.forEach(b => {
-        let fixture = b.getFixtureList();
-        while (fixture) {
-          fixture.setFriction(this.bodyFriction);
-          fixture = fixture.getNext();
-        }
-      });
     });
 
     if (this.ground) {
@@ -2449,7 +2494,6 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
       stats: this._clonePlain(creature.stats, {}),
       energy: this._clonePlain(creature.energy, {}),
       bodies: Array.isArray(creature.bodies) ? creature.bodies.map(bodyState).filter(Boolean) : [],
-      polygonBodies: Array.isArray(creature.polygonBodies) ? creature.polygonBodies.map(bodyState).filter(Boolean) : [],
       muscles: Array.isArray(creature.muscles) ? creature.muscles.map(captureMuscle) : []
     };
   }
@@ -2469,6 +2513,7 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
         turboStatus: this.turboStatus,
         turboTargetSpeed: this.turboTargetSpeed,
         turboPopulationLive: this.turboPopulationLive,
+        turboGenPoleCount: this.turboGenPoleCount,
         viewMode: this.viewMode,
         cameraX: this.cameraX,
         cameraY: this.cameraY,
@@ -2489,8 +2534,7 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
       },
       design: {
         nodes: this._clonePlain(this.nodes, []),
-        constraints: this._clonePlain(this.constraints, []),
-        polygons: this._clonePlain(this.polygons || [], [])
+        constraints: this._clonePlain(this.constraints, [])
       },
       terrain: {
         groundProfile: this._clonePlain(this.groundProfile || [], []),
@@ -2504,6 +2548,7 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
         currentGhostPath: this._clonePlain(this.currentGhostPath || [], []),
         brainHistory: this._clonePlain(this.brainHistory || [], []),
         replayHistory: this._clonePlain(this.replayHistory || [], []),
+        turboGenPoleHistory: this._clonePlain(this.turboGenPoleHistory || [], []),
         replayIndex: this.replayIndex,
         replayCursor: this.replayCursor,
         replayPlaying: this.replayPlaying,
@@ -2555,7 +2600,6 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
     };
 
     (state.bodies || []).forEach((bState, idx) => applyBodyState(creature.bodies[idx], bState));
-    (state.polygonBodies || []).forEach((bState, idx) => applyBodyState(creature.polygonBodies[idx], bState));
 
     if (Array.isArray(state.muscles)) {
       const keys = [
@@ -2611,7 +2655,6 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
 
     this.nodes = this._clonePlain(design.nodes, this.nodes || []);
     this.constraints = this._clonePlain(design.constraints, this.constraints || []);
-    this.polygons = this._clonePlain(design.polygons || [], this.polygons || []);
     this.groundProfile = this._clonePlain(terrain.groundProfile || [], []);
     this.obstacles = this._clonePlain(terrain.obstacles || [], []);
 
@@ -2624,6 +2667,9 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
       : (this.turboEnabled ? 'running' : 'idle');
     this.turboTargetSpeed = Number.isFinite(runtime.turboTargetSpeed) ? runtime.turboTargetSpeed : this.turboTargetSpeed;
     this.turboPopulationLive = Number.isFinite(runtime.turboPopulationLive) ? runtime.turboPopulationLive : this.turboPopulationLive;
+    this.turboGenPoleCount = Number.isFinite(runtime.turboGenPoleCount)
+      ? Math.max(1, Math.min(20, Math.round(runtime.turboGenPoleCount)))
+      : this.turboGenPoleCount;
     this.viewMode = runtime.viewMode === 'bestRun' ? 'bestRun' : 'training';
     this.cameraX = Number.isFinite(runtime.cameraX) ? runtime.cameraX : this.cameraX;
     this.cameraY = Number.isFinite(runtime.cameraY) ? runtime.cameraY : this.cameraY;
@@ -2643,6 +2689,10 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
     this.currentGhostPath = this._clonePlain(histories.currentGhostPath || [], []);
     this.brainHistory = this._clonePlain(histories.brainHistory || [], []);
     this.replayHistory = this._clonePlain(histories.replayHistory || [], []);
+    this.turboGenPoleHistory = this._clonePlain(histories.turboGenPoleHistory || [], []);
+    if (this.turboGenPoleHistory.length > this.turboGenPoleCount) {
+      this.turboGenPoleHistory = this.turboGenPoleHistory.slice(-this.turboGenPoleCount);
+    }
     this.replayIndex = Number.isFinite(histories.replayIndex) ? histories.replayIndex : -1;
     this.replayCursor = Number.isFinite(histories.replayCursor) ? histories.replayCursor : 0;
     this.replayPlaying = !!histories.replayPlaying;
@@ -2669,6 +2719,20 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
     const populationEntries = Array.isArray(snapshot.populationEntries)
       ? snapshot.populationEntries.map(item => this._normalizeDnaEntry(item))
       : null;
+    if (
+      this.trainingAlgorithm === 'neat'
+      && Array.isArray(populationEntries)
+      && populationEntries.length
+      && typeof Evolution.syncNeatPopulation === 'function'
+    ) {
+      const ioShape = this._resolveNeatIoShape(populationEntries);
+      Evolution.syncNeatPopulation(populationEntries, this.popSize, {
+        trainingAlgorithm: 'neat',
+        neatMode: true,
+        neatInputCount: ioShape.neatInputCount,
+        neatOutputCount: ioShape.neatOutputCount
+      });
+    }
     this.spawnGeneration(populationEntries);
 
     const creatureStates = Array.isArray(snapshot.creatureStates) ? snapshot.creatureStates : [];
@@ -2720,20 +2784,28 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
     if (dna.length !== payload.dna.length) {
       throw new Error('Sandbox brain contains invalid weights.');
     }
+    const entryHiddenLayers = Number.isFinite(payload.hiddenLayers)
+      ? Math.max(1, Math.min(3, Math.round(payload.hiddenLayers)))
+      : this.hiddenLayers;
+    const entryNeuronsPerLayer = Number.isFinite(payload.neuronsPerLayer)
+      ? Math.max(4, Math.min(32, Math.round(payload.neuronsPerLayer)))
+      : this.neuronsPerLayer;
+
+    if (Number.isFinite(payload.hiddenLayers)) {
+      this.hiddenLayers = entryHiddenLayers;
+    }
+    if (Number.isFinite(payload.neuronsPerLayer)) {
+      this.neuronsPerLayer = entryNeuronsPerLayer;
+    }
+
     this.sandboxBrainDNA = new Float32Array(dna);
     this.sandboxBrainEntry = this._normalizeDnaEntry({
       controllerType: 'dense',
       dna: this.sandboxBrainDNA,
-      architecture: { hiddenLayers: this.hiddenLayers, neuronsPerLayer: this.neuronsPerLayer }
+      architecture: { hiddenLayers: entryHiddenLayers, neuronsPerLayer: entryNeuronsPerLayer }
     });
     this.sandboxMode = true;
     this.sandboxPaused = false; // Reset pause state when entering sandbox
-    if (Number.isFinite(payload.hiddenLayers)) {
-      this.hiddenLayers = Math.max(1, Math.min(3, Math.round(payload.hiddenLayers)));
-    }
-    if (Number.isFinite(payload.neuronsPerLayer)) {
-      this.neuronsPerLayer = Math.max(4, Math.min(32, Math.round(payload.neuronsPerLayer)));
-    }
   }
 
   exitSandboxMode() {

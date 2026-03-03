@@ -34,7 +34,7 @@ export const MUSCLE_CONFIG = {
   jointFreedom: 1.0, // Joint freedom (1.0 = free, 0.0 = rigid)
 
   // Action Budget (frames between muscle state changes)
-  actionBudget: 2, // Slightly slower updates to reduce twitching
+  actionBudget: 3, // Default 3 frames per action update (~0.05s at 60Hz)
 
   // Phase-locked control
   phaseLockEnabled: false,     // Let NEAT learn timing directly instead of fixed carrier gating
@@ -43,6 +43,6 @@ export const MUSCLE_CONFIG = {
   maxCommandDeltaPerStep: 0.06,// Stronger slew limit for stable actuation
 
   // Muscle Length Limits (as ratio of base length)
-  minLength: 0.8,   // 80% - tighter contraction range for stability
-  maxLength: 1.2,   // 120% - tighter extension range for stability
+  minLength: 0.6,   // 60% minimum length
+  maxLength: 1.3,   // 130% maximum length
 };

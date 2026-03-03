@@ -75,8 +75,7 @@ function loadDesign(creaturePath) {
   return {
     resolved,
     nodes: Array.isArray(raw.nodes) ? raw.nodes : [],
-    constraints: Array.isArray(raw.constraints) ? raw.constraints : [],
-    polygons: Array.isArray(raw.polygons) ? raw.polygons : []
+    constraints: Array.isArray(raw.constraints) ? raw.constraints : []
   };
 }
 
@@ -191,10 +190,7 @@ function applyStepStabilization(creatures, simConfig, groundY) {
 
   creatures.forEach((c) => {
     if (!c || c.dead) return;
-    const allBodies = c.polygonBodies && c.polygonBodies.length
-      ? c.bodies.concat(c.polygonBodies)
-      : c.bodies;
-    allBodies.forEach((b) => {
+    c.bodies.forEach((b) => {
       const pos = b.getPosition();
       const vel = b.getLinearVelocity();
       let vx = vel.x;
@@ -290,7 +286,6 @@ function evaluateGeneration(population, design, generation, wallSettings) {
     startY,
     design.nodes,
     design.constraints,
-    design.polygons,
     entry,
     bounds.minX,
     bounds.minY,
