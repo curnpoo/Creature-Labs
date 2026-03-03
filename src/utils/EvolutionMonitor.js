@@ -34,7 +34,8 @@ export class EvolutionMonitor {
       allBest: stats.allBest,
       avgDist: stats.avgDist,
       avgSpeed: stats.avgSpeed,
-      avgStability: stats.avgStability,
+      avgSlip: stats.avgSlip,
+      avgActuation: stats.avgActuation,
       stagnantGens: stats.stagnantGens,
       mutationRate: stats.mutationRate,
       bestFitness: stats.bestFitness,
@@ -86,10 +87,9 @@ export class EvolutionMonitor {
       });
       suggestions.push({
         action: 'adjust_fitness',
-        description: 'Reduce stability penalty weights',
-        reason: 'Creature may be over-optimizing for stability vs distance',
+        description: 'Reduce anti-air / smoothness penalties',
+        reason: 'Creature may be over-penalized while exploring new gaits',
         autoParams: {
-          stabilityRewardWeight: 0.5,
           spinPenaltyWeight: 2,
           jitterPenaltyWeight: 0.3
         }

@@ -1,122 +1,204 @@
 # PolyEvolve Lab
-PolyEvolve Lab is a browser‑ and desktop‑based simulation platform for evolving virtual “creatures” through neuroevolutionary algorithms. The core of the system is a lightweight feed‑forward neural network that controls each creature’s behavior, while a physics engine provides realistic movement and interaction.
-## Table of Contents
-- [Overview](#overview)
-- [Technology Stack](#technology-stack)
-- [Key Features](#key-features)
-- [Neural Network Core](#neural-network-core)
-- [Evolution Engine](#evolution-engine)
-- [Simulation & Physics](#simulation--physics)
-- [User Interface](#user-interface)
-- [Installation](#installation)
-- [Running the Application](#running-the-application)
-- [Building for Distribution](#building-for-distribution)
-- [Project Structure](#project-structure)
-- [Contributing](#contributing)
-- [License](#license)
----
-## Overview
-PolyEvolve Lab demonstrates how populations of agents can learn complex locomotion and task performance solely through evolutionary pressure applied to their neural network parameters. Creatures are visualized in real time, allowing users to observe the emergence of coordinated behaviors.
-## Technology Stack
-| Layer | Technology | Purpose |
-|-------|------------|---------|
-| Runtime | **Node.js** (v18+) | Execution environment |
-| Bundler | **Vite** | Fast development server and build pipeline |
-| Desktop | **Electron** | Packages the web app as a native desktop executable for Windows and macOS |
-| UI | **Tailwind CSS** (v4) | Utility‑first styling |
-| Physics | **Matter.js** (v0.20) & **Planck‑js** (v1.3) | 2‑D rigid‑body dynamics and optional physics simulations |
-| Neural Network | Custom **Float32Array** implementation | Lightweight feed‑forward network with Xavier initialization |
-| Evolution | Custom neuroevolution algorithm | Tournament selection, weighted crossover, Gaussian mutation, and architecture variation |
-| Build | **electron‑builder** | Generates portable installers |
-## Key Features
-- Real‑time visual simulation of multiple agents interacting under physics constraints.
-- Neuroevolution with adjustable mutation rates, elite preservation, and adaptive mutation based on stagnation.
-- Architecture mutation: Hidden layer count and neuron per layer can evolve alongside weights.
-- Export/Import of population DNA for reproducibility.
-- Cross‑platform desktop builds (Windows portable, macOS DMG).
-- Configurable simulation parameters via JSON configuration files.
-- Modular codebase separating physics, UI, evolution, and neural network logic.
-## Neural Network Core
-The NN implementation lives in `src/nn/NeuralNetwork.js`:
-- **Layer definition**: Arbitrary sizes defined by an array (e.g., `[14, 10, 4]`).
-- **Weight storage**: Single `Float32Array` containing all weights and biases for cache‑friendly access.
-- **Xavier/Glorot initialization** for balanced variance across layers.
-- **tanh activation** for bounded output values.
-- **Forward propagation** caches activations per layer to enable visual inspection.
-- **Serialization** (`toArray`, `fromArray`) for easy DNA handling.
-- **Clone** method for deep copies when generating offspring.
-The network is deliberately minimal to keep per‑generation evaluation fast, enabling large population sizes and many generations on modest hardware.
-## Evolution Engine
-Implemented in `src/nn/Evolution.js`:
-- **Tournament selection** with configurable tournament size.
-- **Weighted crossover** where the fitter parent contributes 90 % of the child’s DNA.
-- **Gaussian mutation** with adaptive rate that increases with successive stagnant generations.
-- **Elitism** preserves top‑performing individuals unchanged.
-- **Immigration** introduces random individuals each generation to maintain genetic diversity.
-- **Architecture mutation** allows hidden‑layer count (0–6) and neuron count (4–32) to evolve, providing a coarse search over network topology.
-## Simulation & Physics
-- **Matter.js** provides rigid‑body collision handling, gravity, and constraints.
-- **Planck‑js** is available for alternative physics scenarios (e.g., fluid or contact‑rich environments).
-- Creature bodies are generated dynamically based on the network’s output signals, enabling emergent locomotion strategies.
-## User Interface
-- **Controls** (`src/ui/Controls.js`) allow users to start/stop simulations, adjust population size, and tweak evolution parameters.
-- **Visualizer** (`src/ui/Visualizer.js`, `EnhancedVisualizer.js`) renders agents with real‑time color mapping based on neural activation levels.
-- **HUD** (`src/ui/HUD.js`) displays generation count, best fitness, and elapsed time.
-- **ProgressChart** (`src/ui/ProgressChart.js`) plots fitness trends across generations.
-## Installation
+
+PolyEvolve Lab is an open-source creature locomotion evolution sandbox built with JavaScript, Planck.js physics, and a custom neuroevolution stack.
+
+It supports:
+- real-time normal simulation
+- high-throughput turbo training in Web Workers
+- dense and NEAT-style controller evolution
+- replay/diagnostics tooling for iterative tuning
+
+## What This Project Is
+
+This project is focused on **evolutionary locomotion under physics constraints**:
+- creatures are built from nodes, bones, muscles, and optional polygon body parts
+- neural controllers drive muscle actuation
+- generations are selected by distance-first fitness under configurable constraints
+
+The emphasis is experimental iteration and observability, not framework-heavy app architecture.
+
+## System Overview
+
+### 1) Physics System
+- Engine: `planck-js`
+- Units: `SCALE = 30` px/m
+- Fixed-step simulation in both normal and turbo modes
+- Creature structures:
+  - nodes (dynamic circle bodies)
+  - bones (distance joints)
+  - muscles (prismatic joints with actuator control)
+  - optional polygon bodies connected via joints
+
+Key files:
+- `src/sim/Physics.js`
+- `src/sim/Creature.js`
+- `src/sim/Simulation.js`
+
+### 2) Actuation + Contact Behavior
+- Muscles are controlled by neural outputs with smoothing/rate limiting
+- Ground interaction is contact-driven
+- Near no-slip grounded behavior is available to suppress drag-snap ratchet exploits
+
+Related config:
+- `src/utils/config/muscle.js`
+- `src/utils/config/physics.js`
+
+### 3) Evolution System
+Two controller families are supported:
+- Dense feed-forward (`legacy` mode)
+- NEAT-style topology evolution (`neat` mode)
+
+Evolution operations include selection, crossover, mutation, and architecture/genome tracking.
+
+Key files:
+- `src/nn/Evolution.js`
+- `src/nn/TopologyNeuralNetwork.js`
+- `src/nn/neat/*`
+- `src/nn/runtime/*`
+
+### 4) Scoring System
+Shared score logic is centralized so normal and turbo remain consistent.
+
+Core scoring file:
+- `src/sim/fitnessScore.js`
+
+Primary objective is distance progression with additional penalties/bonuses as configured.
+
+### 5) Runtime Modes
+#### Normal mode
+- Main-thread simulation and rendering
+- Full per-frame creature visualization
+
+#### Turbo mode
+- Off-thread generation evaluation via workers
+- Designed for fast generation throughput
+- Parity safeguards and diagnostics to track divergence risk
+
+Key files:
+- `src/sim/TurboCoordinator.js`
+- `src/sim/TurboWorker.js`
+- `src/sim/Simulation.js`
+
+### 6) UI + Diagnostics
+- Right-side controls panel for runtime tuning
+- HUD and charting for progress/training health
+- Diagnostics snapshots for debugging/parity checks
+
+Key files:
+- `src/ui/Controls.js`
+- `src/ui/HUD.js`
+- `src/ui/ProgressChart.js`
+- `src/ui/Visualizer.js`
+
+## Project Structure
+
+```text
+src/
+  index.html
+  main.js
+  nn/
+    Evolution.js
+    NeuralNetwork.js
+    TopologyNeuralNetwork.js
+    neat/
+    runtime/
+  sim/
+    Creature.js
+    Physics.js
+    Simulation.js
+    TurboCoordinator.js
+    TurboWorker.js
+    fitnessScore.js
+  ui/
+    Controls.js
+    HUD.js
+    ProgressChart.js
+    Visualizer.js
+  utils/
+    config/
+      physics.js
+      muscle.js
+      energy.js
+      fitness.js
+      evolution.js
+      visual.js
+    EvolutionMonitor.js
+
+tests/
+  test-topology.js
+  test-neat-runtime.js
+  test-turbo-parity.js
+  benchmark-evolution.js
+```
+
+## Tech Stack
+
+- JavaScript (ES modules)
+- Vite
+- Electron
+- Planck.js
+- Tailwind CSS
+
+## Setup
+
 ```bash
-git clone https://github.com/yourusername/polyevolve-lab.git
-cd polyevolve-lab
 npm install
 ```
-> The project is marked `"private": true` in `package.json`; it is intended for personal or organizational use rather than publishing to npm.
-## Running the Application
-- **Development (web)**
+
+## Run
+
 ```bash
 npm run dev
 ```
-Opens the Vite dev server at `http://localhost:5173`.
-- **Desktop (Electron)**
+
+Open `http://localhost:5173`.
+
+Desktop mode:
+
 ```bash
 npm run app
 ```
-Launches the Electron wrapper.
-## Building for Distribution
-- **Windows (portable)**
+
+## Build
+
 ```bash
+npm run build
 npm run build:win
-```
-- **macOS (DMG)**
-```bash
 npm run build:mac
 ```
-The generated installers are placed in `release/` per the `electron-builder` configuration.
-## Project Structure
+
+## Tests / Validation Scripts
+
+```bash
+node tests/test-topology.js
+node tests/test-neat-runtime.js
+node tests/test-turbo-parity.js
+node tests/benchmark-evolution.js
 ```
-src/
-├─ nn/                # Neural network and evolution engine
-│   ├─ NeuralNetwork.js
-│   └─ Evolution.js
-├─ sim/               # Core simulation loop and physics integration
-│   ├─ Creature.js
-│   ├─ Simulation.js
-│   └─ Physics.js
-├─ ui/                # React components for controls, visualizer, HUD
-│   ├─ Controls.js
-│   ├─ Visualizer.js
-│   └─ ...
-├─ utils/             # Configuration, presets, monitoring utilities
-│   └─ config/
-│       ├─ evolution.js
-│       ├─ physics.js
-│       └─ ...
-└─ index.html         # Entry point for Vite
+
+Recommended quick validation after sim/runtime changes:
+
+```bash
+npm run build
+node tests/test-turbo-parity.js
 ```
-## Contributing
-1. Fork the repository.
-2. Create a feature branch (`git checkout -b feature/xyz`).
-3. Ensure changes pass existing tests (`npm test` if test suite is added).
-4. Submit a Pull Request with a concise description of the change.
+
+## Configuration
+
+Centralized in `src/utils/config/` and flattened through `src/utils/config/index.js`.
+
+When adding runtime parameters:
+1. Add to module config
+2. Export via flattened defaults in config index
+3. Thread through simulation runtime and turbo payload if applicable
+
+## Contribution Notes
+
+- Keep normal and turbo behavior aligned for any physics/scoring/runtime logic changes.
+- Prefer small, verifiable edits.
+- Avoid hidden correction hacks unless explicitly requested.
+- This repo does not currently use ESLint/Prettier/Jest.
+
 ## License
-PolyEvolve Lab is released under the **MIT License**. See `LICENSE` for details.
----
+
+MIT (see project license file if present).

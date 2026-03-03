@@ -56,8 +56,8 @@ export function createNode(world, x, y, radius, options = {}) {
   const body = world.createBody({
     type: 'dynamic',
     position: Vec2(x / SCALE, y / SCALE),
-    angularDamping: options.angularDamping ?? 0.5, // Moderate damping
-    linearDamping: options.linearDamping ?? 0.2
+    angularDamping: options.angularDamping ?? 0.05,
+    linearDamping: options.linearDamping ?? 0.0
   });
   
   body.createFixture({
@@ -99,8 +99,8 @@ export function createPolygonBody(world, vertices, options = {}) {
   const body = world.createBody({
     type: 'dynamic',
     position: Vec2(cx, cy),
-    linearDamping: 0.1,
-    angularDamping: 0.5
+    linearDamping: options.linearDamping ?? 0.0,
+    angularDamping: options.angularDamping ?? 0.05
   });
   
   // Create fixtures for each triangle
@@ -178,7 +178,9 @@ export function createMuscle(world, bodyA, bodyAOffset, bodyB, bodyBOffset, axis
     enableLimit: true,
     lowerTranslation: minLen - restLengthMeters, // Relative to rest position
     upperTranslation: maxLen - restLengthMeters, // Relative to rest position
-    enableMotor: false // Motor disabled - we use force-based actuation
+    enableMotor: true,
+    motorSpeed: 0,
+    maxMotorForce: options.maxForce ?? 35
   }));
   
   return joint;

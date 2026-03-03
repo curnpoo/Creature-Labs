@@ -1,223 +1,191 @@
 # AGENTS.md - PolyEvolve Lab
 
 ## Overview
+PolyEvolve Lab is a browser + Electron creature-evolution simulator.
 
-PolyEvolve Lab is a browser-based creature evolution simulator using neuroevolution with Matter.js/Planck.js physics engines. The project uses Vite for bundling and Electron for desktop distribution.
+Current runtime is based on **Planck.js** physics plus a custom neuroevolution stack:
+- Dense feed-forward controller (legacy mode)
+- NEAT-style evolving topology controller (default mode)
+- Normal mode simulation in main thread
+- Turbo mode simulation in Web Workers with parity safeguards
 
-## Build Commands
+The project favors iteration speed over framework-heavy tooling.
+
+---
+
+## Build / Run Commands
 
 ### Development
 ```bash
-npm run dev          # Start Vite dev server at http://localhost:5173
-npm run app          # Run as Electron desktop app
+npm run dev          # Vite dev server (http://localhost:5173)
+npm run app          # Electron desktop app
 ```
 
-### Build
+### Production build
 ```bash
-npm run build        # Production build (outputs to dist/)
-npm run build:win    # Build Windows portable executable
-npm run build:mac    # Build macOS DMG installer
+npm run build        # Web build to dist/
+npm run build:win    # Windows portable build
+npm run build:mac    # macOS DMG build
 ```
 
-### Testing
+### Tests (standalone scripts)
 ```bash
-node tests/test-topology.js    # Run topology neural network tests
+node tests/test-topology.js
+node tests/test-neat-runtime.js
+node tests/test-turbo-parity.js
+node tests/benchmark-evolution.js
 ```
 
-There is no test runner framework configured. Tests are standalone scripts that can be executed directly with Node.js.
+No Jest/Vitest runner is configured; tests are script-based.
 
 ---
 
-## Code Style Guidelines
+## Current Architecture (Important)
 
-### General Conventions
-- **Language**: Plain JavaScript (ES Modules)
-- **Module System**: ES Modules with `import`/`export`
-- **File Extension**: `.js` for all JavaScript files
+### Simulation core
+- `src/sim/Simulation.js`
+  - Main app orchestration and generation lifecycle
+  - Normal mode fixed-step loop
+  - Turbo mode coordinator lifecycle
+  - Runtime config propagation (`getSimConfig`, `syncCreatureRuntimeSettings`)
 
-### Naming Conventions
-| Type | Convention | Example |
-|------|------------|---------|
-| Classes | PascalCase | `NeuralNetwork`, `Simulation`, `Creature` |
-| Functions/Variables | camelCase | `forward()`, `creatures`, `simSpeed` |
-| Constants | SCREAMING_SNAKE_CASE | `STORAGE_KEYS`, `CONFIG` |
-| Files (classes) | PascalCase.js | `NeuralNetwork.js`, `Physics.js` |
-| Files (utilities) | camelCase.js | `config.js`, `presets.js` |
+- `src/sim/Creature.js`
+  - Creature body construction from node/constraint schema
+  - Muscle actuation control loop
+  - Fitness telemetry sampling
+  - Ground-contact helpers (`isBodyGrounded`, strict contact checks)
 
-### Import Style
-```javascript
-// Named imports from local modules
-import { NeuralNetwork } from './nn/NeuralNetwork.js';
-import { PHYSICS_CONFIG, ENERGY_CONFIG } from './utils/config/index.js';
+- `src/sim/Physics.js`
+  - Planck world/bodies/joints factory helpers
+  - Scale constants and wrappers
 
-// Namespace import from physics
-import { planck } from '../sim/Physics.js';
-```
+- `src/sim/TurboCoordinator.js`
+  - Worker orchestration for turbo generations
+  - Result aggregation + diagnostics
 
-- Use relative imports with `./` or `../`
-- Include `.js` extension in imports
-- Order: external → internal → local (grouped)
+- `src/sim/TurboWorker.js`
+  - Off-thread generation evaluation
+  - Shared-world batch stepping for parity behavior
 
-### Documentation
-Use JSDoc comments for classes and public methods:
+### Evolution + NN
+- `src/nn/Evolution.js` - population evolution for dense mode
+- `src/nn/neat/*` - NEAT genome/speciation/mutation/crossover
+- `src/nn/runtime/*` - runtime evaluators
+- `src/nn/TopologyNeuralNetwork.js` - topology-aware dense model
 
-```javascript
-/**
- * Feedforward Neural Network with Float32Array weights.
- * Supports arbitrary layer sizes with tanh activation.
- */
-export class NeuralNetwork {
-  /**
-   * @param {number[]} layerSizes - e.g. [14, 10, 4]
-   */
-  constructor(layerSizes) {
-    // ...
-  }
+### Scoring
+- `src/sim/fitnessScore.js`
+  - Distance-first score composition
+  - Slip gating helpers
+  - Shared scoring logic across normal/turbo
 
-  /**
-   * Forward propagation with tanh activation.
-   * @param {number[]|Float32Array} inputs
-   * @returns {Float32Array} output activations
-   */
-  forward(inputs) {
-    // ...
-  }
-}
-```
-
-### Type Annotations
-No TypeScript is used. Use JSDoc `@param` and `@returns` for type hints:
-
-```javascript
-/**
- * @param {Float32Array} dna
- * @param {number} fitness
- * @param {object} [architecture]
- * @returns {object}
- */
-```
-
-### Error Handling
-- Use try/catch for operations that may fail (DNA parsing, network reconstruction)
-- Return `null` for optional operations that fail (e.g., `mutateAddLayer()` may return null if at max size)
-- Log errors to console with descriptive messages
-
-```javascript
-try {
-  const net = new TopologyNeuralNetwork(dna);
-  architectures.push(net.layerSizes.join('-'));
-} catch (e) {
-  console.error(`DNA ${i} failed:`, e.message);
-  architectures.push('ERROR');
-}
-```
-
-### Code Formatting
-No Prettier/ESLint configured. Follow these practices:
-- 2-space indentation
-- One space after commas and around operators
-- Opening brace on same line
-- Semicolons at end of statements
-
-### Physics Constants
-- **Important**: Matter.js friction values are in range 0-1 (not 0-100)
-- Use `planck.js` for new physics code (more actively maintained)
-- Scale factor: `SCALE = 30` pixels per meter
+### UI layer
+- `src/ui/Controls.js` - right panel controls and labels
+- `src/ui/HUD.js` - top HUD stats
+- `src/ui/ProgressChart.js` - training/testing charts
+- `src/ui/Visualizer.js` - render/camera/overlays
 
 ---
 
-## Project Structure
+## Physics + Behavior Notes
 
-```
-src/
-├── nn/                      # Neural network & evolution
-│   ├── NeuralNetwork.js     # Basic feedforward NN
-│   ├── TopologyNeuralNetwork.js  # NN with evolving topology
-│   └── Evolution.js         # Neuroevolution algorithm
-├── sim/                     # Simulation & physics
-│   ├── Simulation.js        # Main simulation loop
-│   ├── Creature.js          # Creature definition & muscle control
-│   └── Physics.js           # Matter.js/Planck.js wrapper
-├── ui/                      # User interface
-│   ├── Controls.js          # Right panel controls
-│   ├── Visualizer.js        # Canvas rendering
-│   └── HUD.js               # Heads-up display
-├── utils/
-│   ├── config/              # Modular configuration
-│   │   ├── physics.js
-│   │   ├── energy.js
-│   │   ├── muscle.js
-│   │   ├── fitness.js
-│   │   ├── evolution.js
-│   │   └── visual.js
-│   └── presets.js          # Configuration presets
-├── index.html               # Entry point
-└── main.js                  # Main application logic
+### Engine and units
+- Physics engine: **Planck.js** (`planck-js`)
+- Coordinate scale: `SCALE = 30` px per meter
+- Fixed timestep: `CONFIG.fixedStepHz`
 
-tests/
-└── test-topology.js         # Standalone test script
+### Contact and anti-exploit behavior
+- Creature self-collision suppression is done via connected-body checks
+- Near no-slip grounded enforcement exists in runtime:
+  - grounded tangential velocity damping to suppress drag-snap ratchet locomotion
+  - configured in `src/utils/config/physics.js`
 
-vite.config.js               # Vite configuration
-postcss.config.cjs          # PostCSS + Tailwind
-tailwind.config.cjs          # Tailwind CSS config
-```
+### Muscle model
+- Muscles are prismatic-joint-driven actuators
+- Command smoothing/rate limiting is used to avoid twitch instability
+- Actuation behavior must stay consistent between normal and turbo paths
 
 ---
 
 ## Configuration System
+All tunables live under `src/utils/config/` and are flattened via `src/utils/config/index.js`.
 
-Configuration is organized in `src/utils/config/` with six modules:
-- `physics.js` - Matter.js engine, friction, constraints
-- `energy.js` - Energy system costs and regeneration
-- `muscle.js` - Muscle strength, speed, range
-- `fitness.js` - Rewards and penalties
-- `evolution.js` - Population, mutation, neural network
-- `visual.js` - Camera, rendering, UI settings
+Key modules:
+- `physics.js`
+- `muscle.js`
+- `energy.js`
+- `fitness.js`
+- `evolution.js`
+- `visual.js`
 
-Access via `src/utils/config/index.js` which exports a unified `CONFIG` object.
+When adding a new runtime tunable:
+1. Add it to the appropriate config module
+2. Export in `config/index.js` flattened defaults if Simulation uses flat defaults
+3. Thread it through `Simulation` (`constructor`, `getSimConfig`, `syncCreatureRuntimeSettings`)
+4. Mirror it in turbo payload/worker when relevant
 
 ---
 
-## Common Patterns
+## Code Style and Conventions
+- Language: plain JavaScript (ES modules)
+- Indentation: 2 spaces
+- Semicolons: yes
+- Imports: include `.js` extensions
+- Naming:
+  - `PascalCase` classes
+  - `camelCase` functions/vars
+  - `SCREAMING_SNAKE_CASE` constants
 
-### Creature DNA
-- DNA is a `Float32Array` containing all neural network weights
-- Topology DNA: `[numLayers, layerSizes..., weights...]`
-- Serialization via `toDNA()` / constructor from DNA
+Prefer small focused edits; avoid broad refactors unless requested.
 
-### Simulation Loop
-```javascript
-// Run with: node tests/test-topology.js
-import { TopologyNeuralNetwork } from '../src/nn/TopologyNeuralNetwork.js';
-import { Evolution } from '../src/nn/Evolution.js';
+---
 
-const net = new TopologyNeuralNetwork([4, 6, 3]);
-const outputs = net.forward(inputs);
+## Agent Guidelines (Project-Specific)
+
+### 1) Preserve normal/turbo parity
+Any simulation, scoring, or runtime-control change should be mirrored between:
+- `Simulation` normal loop
+- `TurboWorker` evaluation path
+
+Run:
+```bash
+node tests/test-turbo-parity.js
+```
+after parity-sensitive changes.
+
+### 2) Avoid hidden physics hacks
+Do not introduce non-physical teleports or correction forces unless explicitly requested.
+Keep behavior explainable and contact-driven.
+
+### 3) Keep scoring and physics concerns separate
+If the user requests physics realism, prefer physics-layer fixes over score shaping.
+
+### 4) Validate with build + targeted scripts
+For most changes:
+```bash
+npm run build
+node tests/test-turbo-parity.js
 ```
 
-### Adding New Configuration
-1. Add to appropriate module in `src/utils/config/`
-2. Export from `src/utils/config/index.js`
-3. Add to backward-compatible `CONFIG` object if needed
+### 5) Respect existing worktree state
+The repo may be intentionally dirty. Do not revert unrelated user changes.
 
 ---
 
-## Dependencies
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| vite | ^7.3.1 | Build tool |
-| electron | ^31.7.7 | Desktop runtime |
-| matter-js | ^0.20.0 | Physics engine |
-| planck-js | ^1.3.0 | Alternative physics |
-| tailwindcss | ^4.1.18 | Styling |
+## Common Pitfalls
+- Updating only normal mode and forgetting turbo worker logic
+- Adding config fields without flattening/exporting defaults
+- Assuming old README architecture (it may be stale)
+- Treating Matter.js semantics as active runtime behavior (Planck is active runtime)
 
 ---
 
-## Notes for Agents
+## Quick File Map
+- App entry: `src/main.js`
+- HTML shell: `src/index.html`
+- Sim orchestration: `src/sim/Simulation.js`
+- Creature runtime: `src/sim/Creature.js`
+- Turbo worker: `src/sim/TurboWorker.js`
+- Scoring: `src/sim/fitnessScore.js`
+- Config index: `src/utils/config/index.js`
 
-- This is a legacy codebase - not all code follows modern patterns
-- No lint/typecheck commands configured
-- Tests are manual scripts, not automated
-- The codebase is a simulation/research project, not a production application
-- Configuration presets available: `SPEED`, `STABLE`, `WALKING`, `EXPLORATORY`, `EFFICIENT`

@@ -1,6 +1,8 @@
+import { SCALE } from '../sim/Physics.js';
+
 /**
  * Individual Metric Graph System
- * Creates separate sparkline-style graphs for each evolution metric
+ * Creates separate sparkline-style graphs for training or testing mode.
  */
 export class ProgressChart {
   constructor(rightCanvas, leftCanvas, leftMeta) {
@@ -10,203 +12,181 @@ export class ProgressChart {
     this.rightCtx = rightCanvas ? rightCanvas.getContext('2d') : null;
     this.leftCtx = leftCanvas ? leftCanvas.getContext('2d') : null;
 
-    // Containers for individual graphs
     this.leftContainer = document.getElementById('left-metrics-container');
     this.topContainer = document.getElementById('top-metrics-container');
     this.bottomContainer = document.getElementById('bottom-metrics-container');
 
-    // Individual metric graph configs - diverse data!
-    this.metrics = [
-      // Core Performance
-      { id: 'fitness', label: 'Best Fitness', color: '#a855f7', getValue: p => p.bestFitness || 0, format: v => v.toFixed(1) },
-      { id: 'allbest', label: 'All-Time Best', color: '#00f2ff', getValue: p => p.allBest, format: v => `${v.toFixed(1)}m` },
-      { id: 'genbest', label: 'Gen Best', color: '#ff0055', getValue: p => p.genBest, format: v => `${v.toFixed(1)}m` },
-      { id: 'avgdist', label: 'Avg Distance', color: '#6ee7b7', getValue: p => p.avgDist, format: v => `${v.toFixed(1)}m` },
-
-      // Movement Quality
-      { id: 'avgspeed', label: 'Avg Speed', color: '#fbbf24', getValue: p => p.avgSpeed || 0, format: v => v.toFixed(2) },
-      { id: 'avgstab', label: 'Avg Stability', color: '#34d399', getValue: p => p.avgStability || 0, format: v => `${v.toFixed(0)}%` },
-      { id: 'avgact', label: 'Avg Actuation', color: '#818cf8', getValue: p => (p.avgActuation || 0) * 100, format: v => `${v.toFixed(0)}%` },
-
-      // Gait Quality
-      { id: 'avgupright', label: 'Avg Upright', color: '#34d399', getValue: p => (p.avgUpright || 0) * 100, format: v => `${v.toFixed(0)}%` },
-      { id: 'avgslip', label: 'Avg Ground Slip', color: '#fbbf24', getValue: p => p.avgSlip || 0, format: v => v.toFixed(2) },
-
-      // Evolution Metrics
-      { id: 'evoscore', label: 'Evo Score', color: '#fb923c', getValue: p => p.evoScore, format: v => v.toFixed(1) },
-      { id: 'champfit', label: 'Champion Fitness', color: '#f87171', getValue: p => p.championFitness || 0, format: v => v.toFixed(1) },
-      { id: 'mutrate', label: 'Mutation Rate', color: '#ec4899', getValue: p => (p.mutationRate || 0) * 100, format: v => `${v.toFixed(0)}%` },
-
-      // Progress Tracking
-      { id: 'stagnant', label: 'Stagnant Gens', color: '#f59e0b', getValue: p => p.stagnantGens || 0, format: v => `${v}g` },
-      { id: 'awards', label: 'Champion Awards', color: '#22d3ee', getValue: p => p.championAwards || 0, format: v => `${v}` },
-      { id: 'popsize', label: 'Population Size', color: '#10b981', getValue: p => p.populationSize || 0, format: v => `${v}` },
-    ];
-
-    // Create graph elements
+    this.mode = 'training';
     this.graphElements = new Map();
+
+    this.catalog = {
+      training: {
+        metrics: [
+          { id: 'fitness', label: 'Best Fitness', color: '#a855f7', getValue: p => p.bestFitness || 0, format: v => v.toFixed(2) },
+          { id: 'allbest', label: 'All-Time Best', color: '#00f2ff', getValue: p => p.allBest, format: v => `${v.toFixed(2)}m` },
+          { id: 'genbest', label: 'Best Distance (Gen)', color: '#ff0055', getValue: p => p.genBest, format: v => `${v.toFixed(2)}m` },
+          { id: 'genelapsed', label: 'Gen Elapsed', color: '#f59e0b', getValue: p => p.genElapsedSec || 0, format: v => `${v.toFixed(2)}s` },
+          { id: 'avgdist', label: 'Avg Distance', color: '#6ee7b7', getValue: p => p.avgDist, format: v => `${v.toFixed(2)}m` },
+          {
+            id: 'avgspeed',
+            label: 'Avg Speed (Pop)',
+            color: '#fbbf24',
+            getValue: p => {
+              if (Number.isFinite(p.avgSpeedMps)) return p.avgSpeedMps;
+              return Number.isFinite(p.avgSpeed) ? (p.avgSpeed / SCALE) : 0;
+            },
+            format: v => `${v.toFixed(2)} m/s`
+          },
+          { id: 'avgslip', label: 'Avg Ground Slip', color: '#34d399', getValue: p => p.avgSlip || 0, format: v => v.toFixed(2) },
+          { id: 'avgact', label: 'Avg Actuation', color: '#818cf8', getValue: p => (p.avgActuation || 0) * 100, format: v => `${v.toFixed(0)}%` },
+          { id: 'evoscore', label: 'Evo Score', color: '#fb923c', getValue: p => p.evoScore, format: v => v.toFixed(2) },
+          { id: 'champfit', label: 'Champion Fitness', color: '#f87171', getValue: p => p.championFitness || 0, format: v => v.toFixed(2) },
+          { id: 'mutrate', label: 'Mutation Rate', color: '#ec4899', getValue: p => (p.mutationRate || 0) * 100, format: v => `${v.toFixed(0)}%` },
+          { id: 'stagnant', label: 'Stagnant Gens', color: '#f59e0b', getValue: p => p.stagnantGens || 0, format: v => `${v}g` },
+          { id: 'awards', label: 'Champion Awards', color: '#22d3ee', getValue: p => p.championAwards || 0, format: v => `${v}` },
+          { id: 'popsize', label: 'Population Size', color: '#10b981', getValue: p => p.populationSize || 0, format: v => `${v}` }
+        ],
+        layout: {
+          left: ['allbest', 'evoscore', 'mutrate', 'stagnant', 'awards', 'popsize'],
+          top: ['fitness', 'allbest', 'avgspeed', 'avgslip', 'mutrate', 'awards'],
+          bottom: ['fitness', 'genbest', 'genelapsed', 'avgspeed', 'avgslip', 'avgact']
+        }
+      },
+      testing: {
+        metrics: [
+          { id: 'stepcov', label: 'Step Coverage', color: '#34d399', getValue: p => (p.stepCoverageRatio || 0) * 100, format: v => `${v.toFixed(2)}%` },
+          { id: 'fdt', label: 'FixedDt Drift', color: '#fbbf24', getValue: p => Math.abs((p.fixedDtObserved || 0) - (p.fixedDtExpected || 0)) * 1000, format: v => `${v.toFixed(2)}ms` },
+          { id: 'rankrho', label: 'Rank Spearman', color: '#22d3ee', getValue: p => p.rankSpearman || 0, format: v => v.toFixed(2) },
+          { id: 'topkmis', label: 'Top-K Mismatch', color: '#f87171', getValue: p => p.rankTopKMismatch || 0, format: v => `${Math.round(v)}` },
+          { id: 'wdelta', label: 'Winner Delta', color: '#fb923c', getValue: p => p.winnerDistanceDeltaPct || 0, format: v => `${v.toFixed(2)}%` },
+          { id: 'sdelta', label: 'Median Delta', color: '#a78bfa', getValue: p => p.scoreMedianDeltaPct || 0, format: v => `${v.toFixed(2)}%` },
+          { id: 'turbox', label: 'Turbo Throughput', color: '#fde047', getValue: p => p.throughputX || 0, format: v => `${v.toFixed(2)}x` },
+          {
+            id: 'trend',
+            label: 'Trend Ratio',
+            color: '#10b981',
+            getValue: p => {
+              const baseline = Math.abs(p.improvementSlopeBaseline || 0);
+              if (baseline < 1e-6) return p.improvementSlopeTurbo >= 0 ? 100 : 0;
+              return (p.improvementSlopeTurbo / p.improvementSlopeBaseline) * 100;
+            },
+            format: v => `${v.toFixed(0)}%`
+          },
+          {
+            id: 'passrate',
+            label: 'Pass Rate',
+            color: '#eab308',
+            getValue: (p, history, idx) => {
+              const start = Math.max(0, idx - 19);
+              const window = history.slice(start, idx + 1);
+              if (!window.length) return 0;
+              const pass = window.filter(item => item.status === 'pass').length;
+              return (pass / window.length) * 100;
+            },
+            format: v => `${v.toFixed(0)}%`
+          }
+        ],
+        layout: {
+          left: ['stepcov', 'fdt', 'rankrho', 'passrate', 'turbox', 'trend'],
+          top: ['stepcov', 'rankrho', 'passrate', 'wdelta', 'sdelta', 'turbox'],
+          bottom: ['stepcov', 'rankrho', 'trend', 'passrate', 'wdelta', 'turbox']
+        }
+      }
+    };
+
+    this.createGraphElements();
+  }
+
+  setMode(mode) {
+    const next = mode === 'testing' ? 'testing' : 'training';
+    if (this.mode === next) return;
+    this.mode = next;
     this.createGraphElements();
   }
 
   clear() {
     this.graphElements.forEach(graphEl => {
       const { ctx, canvas, valueEl } = graphEl;
-      const w = canvas.width;
-      const h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = 'rgba(0,0,0,0.12)';
-      ctx.fillRect(0, 0, w, h);
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       valueEl.textContent = '--';
     });
     if (this.rightCtx && this.rightCanvas) {
-      const w = this.rightCanvas.width;
-      const h = this.rightCanvas.height;
-      this.rightCtx.clearRect(0, 0, w, h);
+      this.rightCtx.clearRect(0, 0, this.rightCanvas.width, this.rightCanvas.height);
       this.rightCtx.fillStyle = 'rgba(0,0,0,0.12)';
-      this.rightCtx.fillRect(0, 0, w, h);
+      this.rightCtx.fillRect(0, 0, this.rightCanvas.width, this.rightCanvas.height);
     }
   }
 
   createGraphElements() {
-    // Left panel: evolution health/progress metrics
-    if (this.leftContainer) {
-      const leftMetrics = ['allbest', 'evoscore', 'mutrate', 'stagnant', 'awards', 'popsize'];
-      leftMetrics.forEach(metricId => {
-        const metric = this.metrics.find(m => m.id === metricId);
-        if (metric) {
-          const graphEl = this.createMetricGraph(metric, 'left');
-          this.leftContainer.appendChild(graphEl.container);
-          this.graphElements.set(`left-${metric.id}`, graphEl);
-        }
-      });
-    }
+    this.graphElements.clear();
+    if (this.leftContainer) this.leftContainer.innerHTML = '';
+    if (this.topContainer) this.topContainer.innerHTML = '';
+    if (this.bottomContainer) this.bottomContainer.innerHTML = '';
 
-    // Top bar graphs (key live performance metrics)
-    if (this.topContainer) {
-      const topMetrics = ['fitness', 'allbest', 'avgspeed', 'avgstab', 'mutrate', 'awards'];
-      topMetrics.forEach(metricId => {
-        const metric = this.metrics.find(m => m.id === metricId);
-        if (metric) {
-          const graphEl = this.createMetricGraph(metric, 'top');
-          this.topContainer.appendChild(graphEl.container);
-          this.graphElements.set(`top-${metric.id}`, graphEl);
-        }
-      });
-    }
+    const modeConfig = this.catalog[this.mode];
+    const findMetric = id => modeConfig.metrics.find(m => m.id === id);
 
-    // Bottom panel: current run performance metrics
-    if (this.bottomContainer) {
-      const bottomMetrics = ['fitness', 'genbest', 'avgspeed', 'avgstab', 'avgupright', 'avgslip'];
-      bottomMetrics.forEach(metricId => {
-        const metric = this.metrics.find(m => m.id === metricId);
-        if (metric) {
-          const graphEl = this.createMetricGraph(metric, 'bottom');
-          this.bottomContainer.appendChild(graphEl.container);
-          this.graphElements.set(`bottom-${metric.id}`, graphEl);
-        }
+    const mount = (location, ids) => {
+      const container = location === 'left' ? this.leftContainer : (location === 'top' ? this.topContainer : this.bottomContainer);
+      if (!container) return;
+      ids.forEach(metricId => {
+        const metric = findMetric(metricId);
+        if (!metric) return;
+        const graphEl = this.createMetricGraph(metric, location);
+        container.appendChild(graphEl.container);
+        this.graphElements.set(`${location}-${metric.id}`, graphEl);
       });
-    }
+    };
+
+    mount('left', modeConfig.layout.left);
+    mount('top', modeConfig.layout.top);
+    mount('bottom', modeConfig.layout.bottom);
   }
 
   createMetricGraph(metric, location) {
     const container = document.createElement('div');
 
     if (location === 'left') {
-      // Vertical layout for left panel
-      container.style.cssText = `
-        display: flex;
-        flex-direction: column;
-        background: rgba(5, 8, 16, 0.4);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 6px;
-        padding: 6px 8px;
-        min-height: 70px;
-      `;
+      container.style.cssText = 'display:flex;flex-direction:column;background:rgba(5,8,16,0.4);border:1px solid rgba(255,255,255,0.05);border-radius:6px;padding:6px 8px;min-height:70px;';
     } else if (location === 'top') {
-      // Horizontal mini cards for top
-      container.style.cssText = `
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        background: rgba(5, 8, 16, 0.3);
-        border-radius: 4px;
-        padding: 4px 6px;
-        min-width: 0;
-      `;
+      container.style.cssText = 'flex:1;display:flex;flex-direction:column;background:rgba(5,8,16,0.3);border-radius:4px;padding:4px 6px;min-width:0;';
     } else {
-      // Bottom panel cards
-      container.style.cssText = `
-        display: flex;
-        flex-direction: column;
-        background: rgba(5, 8, 16, 0.4);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 6px;
-        padding: 6px 8px;
-        min-height: 90px;
-      `;
+      container.style.cssText = 'display:flex;flex-direction:column;background:rgba(5,8,16,0.4);border:1px solid rgba(255,255,255,0.05);border-radius:6px;padding:6px 8px;min-height:90px;';
     }
 
-    // Header with label and value
     const header = document.createElement('div');
-    header.style.cssText = `
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-bottom: 4px;
-      gap: 4px;
-    `;
+    header.style.cssText = 'display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;gap:4px;';
 
     const label = document.createElement('div');
     label.textContent = metric.label;
-    label.style.cssText = `
-      font-size: ${location === 'top' ? '9px' : '10px'};
-      color: rgba(255, 255, 255, 0.4);
-      font-family: 'JetBrains Mono', monospace;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    `;
+    label.style.cssText = `font-size:${location === 'top' ? '9px' : '10px'};color:rgba(255,255,255,0.44);font-family:"Inter",sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.45px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
 
     const value = document.createElement('div');
-    value.style.cssText = `
-      font-size: ${location === 'top' ? '11px' : '13px'};
-      color: ${metric.color};
-      font-weight: 600;
-      font-family: 'JetBrains Mono', monospace;
-      white-space: nowrap;
-    `;
+    value.style.cssText = `font-size:${location === 'top' ? '11px' : '13px'};color:${metric.color};font-weight:700;font-family:"Inter",sans-serif;letter-spacing:0.2px;white-space:nowrap;`;
     value.textContent = metric.format(0);
 
     header.appendChild(label);
     header.appendChild(value);
 
-    // Canvas for sparkline
     const canvas = document.createElement('canvas');
     const canvasHeight = location === 'top' ? 32 : (location === 'left' ? 42 : 50);
     canvas.width = 300;
     canvas.height = canvasHeight;
-    canvas.style.cssText = `
-      width: 100%;
-      height: ${canvasHeight}px;
-      display: block;
-    `;
+    canvas.style.cssText = `width:100%;height:${canvasHeight}px;display:block;`;
 
     container.appendChild(header);
     container.appendChild(canvas);
 
-    return {
-      container,
-      canvas,
-      ctx: canvas.getContext('2d'),
-      valueEl: value,
-      metric
-    };
+    return { container, canvas, ctx: canvas.getContext('2d'), valueEl: value, metric };
+  }
+
+  _historyForMode(sim) {
+    return this.mode === 'testing' ? (sim.testingHistory || []) : (sim.progressHistory || []);
   }
 
   renderRight(sim) {
-    // Keep the simple right mini chart for backwards compatibility
     if (!this.rightCtx || !this.rightCanvas) return;
     const ctx = this.rightCtx;
     const w = this.rightCanvas.width;
@@ -216,80 +196,80 @@ export class ProgressChart {
     ctx.fillStyle = 'rgba(0,0,0,0.12)';
     ctx.fillRect(0, 0, w, h);
 
-    if (sim.progressHistory.length < 2) {
+    const history = this._historyForMode(sim);
+    if (history.length < 2) {
       ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      ctx.font = '11px "JetBrains Mono", monospace';
+      ctx.font = '11px "Inter", sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('Waiting for data...', w / 2, h / 2 + 4);
       ctx.textAlign = 'left';
       return;
     }
 
-    const data = sim.progressHistory;
-    const maxDist = Math.max(1, ...data.map(p => Math.max(p.allBest, p.evoScore, p.bestFitness || 0)));
-    const minDist = Math.min(...data.map(p => Math.min(p.genBest, p.avgDist, p.bestFitness || 0)));
-    const span = Math.max(1, maxDist - minDist);
+    const keyA = this.mode === 'testing'
+      ? (p => (p.stepCoverageRatio || 0) * 100)
+      : (p => p.allBest || 0);
+    const keyB = this.mode === 'testing'
+      ? (p => (p.rankSpearman || 0) * 100)
+      : (p => p.genBest || 0);
+    const keyC = this.mode === 'testing'
+      ? (p => p.winnerDistanceDeltaPct || 0)
+      : (p => p.avgDist || 0);
 
+    const values = history.flatMap(p => [keyA(p), keyB(p), keyC(p)]);
+    const { min: minVal, max: maxVal } = this._computeAdaptiveRange(values, { minSpan: 1, includeZero: false });
+    const span = Math.max(1e-6, maxVal - minVal);
     const pad = 6;
-    const toX = i => (i / (data.length - 1)) * (w - pad * 2) + pad;
-    const toY = v => h - pad - ((v - minDist) / span) * (h - pad * 2 - 4);
+    const toX = i => (i / (history.length - 1)) * (w - pad * 2) + pad;
+    const toY = v => h - pad - ((v - minVal) / span) * (h - pad * 2 - 4);
 
-    // Area fills
-    this._drawArea(ctx, data, toX, toY, h, 'rgba(0,242,255,0.04)', p => p.allBest);
-    this._drawArea(ctx, data, toX, toY, h, 'rgba(168,85,247,0.04)', p => p.bestFitness || 0);
+    this._drawLine(ctx, history, toX, toY, 'rgba(0,242,255,0.9)', keyA, 1.8);
+    this._drawLine(ctx, history, toX, toY, 'rgba(255,0,85,0.75)', keyB, 1.2);
+    this._drawLine(ctx, history, toX, toY, 'rgba(120,250,155,0.8)', keyC, 1.0);
 
-    // Lines
-    this._drawLine(ctx, data, toX, toY, 'rgba(0,242,255,0.9)', p => p.allBest, 1.8);
-    this._drawLine(ctx, data, toX, toY, 'rgba(255,0,85,0.75)', p => p.genBest, 1.2);
-    this._drawLine(ctx, data, toX, toY, 'rgba(120,250,155,0.8)', p => p.avgDist, 1.0);
-    this._drawLine(ctx, data, toX, toY, 'rgba(255,210,70,0.8)', p => p.evoScore, 1.0);
-    this._drawLine(ctx, data, toX, toY, 'rgba(186,130,255,0.9)', p => p.bestFitness || 0, 1.4);
-
-    // Labels
+    const latest = history[history.length - 1] || {};
+    const safe = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
     ctx.fillStyle = 'rgba(255,255,255,0.65)';
-    ctx.font = '9px "JetBrains Mono", monospace';
-    const latest = data[data.length - 1];
-    ctx.fillText(`best ${sim.allTimeBest}m`, 6, 11);
-    ctx.fillText(`avg ${latest.avgDist.toFixed(1)}m`, 6, 21);
-    ctx.fillText(`fit ${(latest.bestFitness || 0).toFixed(1)}`, 6, 31);
-    ctx.textAlign = 'right';
-    ctx.fillText(`evo ${latest.evoScore.toFixed(1)}`, w - 6, 11);
-    ctx.fillText(`awards ${sim.championAwards}`, w - 6, 21);
-    ctx.fillText(`mut ${(sim.effectiveMutationRate() * 100).toFixed(0)}% ×${sim.mutationSize.toFixed(2)}`, w - 6, 31);
-    ctx.textAlign = 'left';
+    ctx.font = '9px "Inter", sans-serif';
+    if (this.mode === 'testing') {
+      ctx.fillText(`step ${(safe(latest.stepCoverageRatio) * 100).toFixed(2)}%`, 6, 11);
+      ctx.fillText(`rho ${safe(latest.rankSpearman).toFixed(2)}`, 6, 21);
+      ctx.textAlign = 'right';
+      ctx.fillText(`status ${(latest.status || 'idle').toUpperCase()}`, w - 6, 11);
+      ctx.textAlign = 'left';
+    } else {
+      ctx.fillText(`best ${safe(sim.allTimeBest).toFixed(2)}m`, 6, 11);
+      ctx.fillText(`avg ${safe(latest.avgDist).toFixed(2)}m`, 6, 21);
+    }
   }
 
   renderLeft(sim) {
-    // Update meta info
-    if (this.leftMeta && sim.progressHistory.length > 0) {
-      const latest = sim.progressHistory[sim.progressHistory.length - 1];
-      this.leftMeta.textContent = `G${latest.generation} · ${sim.championAwards} awards`;
+    const history = this._historyForMode(sim);
+
+    if (this.leftMeta) {
+      if (this.mode === 'testing') {
+        const latest = history.length ? history[history.length - 1] : null;
+        const passCount = history.slice(-20).filter(item => item.status === 'pass').length;
+        const passRate = history.length ? Math.round((passCount / Math.min(20, history.length)) * 100) : 0;
+        const cycle = history.length;
+        this.leftMeta.textContent = latest
+          ? `G${latest.generation} · cycle ${cycle} · ${passRate}%`
+          : 'Waiting for test cycle...';
+      } else if (sim.progressHistory.length > 0) {
+        const latest = sim.progressHistory[sim.progressHistory.length - 1];
+        this.leftMeta.textContent = `G${latest.generation} · ${sim.championAwards} awards`;
+      }
     }
 
-    // Render all individual metric graphs
     this.graphElements.forEach((graphEl, key) => {
-      if (key.startsWith('left-')) {
-        this.renderMetricGraph(graphEl, sim.progressHistory, sim);
-      }
-    });
-
-    // Render top bar metric graphs
-    this.graphElements.forEach((graphEl, key) => {
-      if (key.startsWith('top-')) {
-        this.renderMetricGraph(graphEl, sim.progressHistory, sim);
-      }
-    });
-
-    // Render bottom metric graphs
-    this.graphElements.forEach((graphEl, key) => {
-      if (key.startsWith('bottom-')) {
-        this.renderMetricGraph(graphEl, sim.progressHistory, sim);
+      if (key.startsWith('left-') || key.startsWith('top-') || key.startsWith('bottom-')) {
+        this.renderMetricGraph(graphEl, history, sim);
       }
     });
   }
 
-  renderMetricGraph(graphEl, history, sim) {
-    if (history.length < 2) return;
+  renderMetricGraph(graphEl, history) {
+    if (!history.length) return;
 
     const { ctx, canvas, valueEl, metric } = graphEl;
     const w = canvas.width;
@@ -297,22 +277,22 @@ export class ProgressChart {
 
     ctx.clearRect(0, 0, w, h);
 
-    // Get data values
-    const values = history.map(p => metric.getValue(p));
-    const minVal = Math.min(...values);
-    const maxVal = Math.max(...values);
-    const span = Math.max(0.1, maxVal - minVal);
+    const values = history.map((p, idx) => {
+      const value = metric.getValue(p, history, idx);
+      return Number.isFinite(value) ? value : 0;
+    });
+    const { min: minVal, max: maxVal } = this._computeAdaptiveRange(values, {
+      minSpan: 0.1,
+      includeZero: metric.id === 'mutrate' || metric.id === 'passrate' || metric.id === 'stepcov'
+    });
+    const span = Math.max(1e-6, maxVal - minVal);
 
-    // Update current value display
-    const latestValue = values[values.length - 1];
-    valueEl.textContent = metric.format(latestValue);
+    valueEl.textContent = metric.format(values[values.length - 1]);
 
-    // Drawing functions
     const pad = 2;
-    const toX = i => (i / (history.length - 1)) * (w - pad * 2) + pad;
+    const toX = i => (values.length <= 1 ? pad : (i / (values.length - 1)) * (w - pad * 2) + pad);
     const toY = v => h - pad - ((v - minVal) / span) * (h - pad * 2);
 
-    // Draw subtle grid line at middle
     ctx.strokeStyle = 'rgba(255,255,255,0.03)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -321,35 +301,31 @@ export class ProgressChart {
     ctx.lineTo(w - pad, midY);
     ctx.stroke();
 
-    // Draw area fill
-    ctx.beginPath();
-    ctx.moveTo(toX(0), h - pad);
-    values.forEach((val, i) => {
-      ctx.lineTo(toX(i), toY(val));
-    });
-    ctx.lineTo(toX(values.length - 1), h - pad);
-    ctx.closePath();
+    if (values.length > 1) {
+      ctx.beginPath();
+      ctx.moveTo(toX(0), h - pad);
+      values.forEach((val, i) => ctx.lineTo(toX(i), toY(val)));
+      ctx.lineTo(toX(values.length - 1), h - pad);
+      ctx.closePath();
 
-    // Semi-transparent fill based on metric color
-    const rgb = this.hexToRgb(metric.color);
-    ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`;
-    ctx.fill();
+      const rgb = this.hexToRgb(metric.color);
+      ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`;
+      ctx.fill();
 
-    // Draw line
-    ctx.beginPath();
-    values.forEach((val, i) => {
-      const x = toX(i);
-      const y = toY(val);
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.strokeStyle = metric.color;
-    ctx.lineWidth = 1.8;
-    ctx.stroke();
+      ctx.beginPath();
+      values.forEach((val, i) => {
+        const x = toX(i);
+        const y = toY(val);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = metric.color;
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+    }
 
-    // Draw dot at latest value
     const lastX = toX(values.length - 1);
-    const lastY = toY(latestValue);
+    const lastY = toY(values[values.length - 1]);
     ctx.beginPath();
     ctx.arc(lastX, lastY, 2.5, 0, Math.PI * 2);
     ctx.fillStyle = metric.color;
@@ -358,38 +334,44 @@ export class ProgressChart {
 
   hexToRgb(hex) {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1], 16),
-      g: parseInt(result[2], 16),
-      b: parseInt(result[3], 16)
-    } : { r: 255, g: 255, b: 255 };
+    return result
+      ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) }
+      : { r: 255, g: 255, b: 255 };
   }
 
-  // Helper drawing methods
-  _drawLine(ctx, data, toX, toY, color, getVal, width = 1.6, dashed = false) {
+  _computeAdaptiveRange(values, options = {}) {
+    const finite = values.filter(v => Number.isFinite(v));
+    const includeZero = options.includeZero === true;
+    const minSpan = Number.isFinite(options.minSpan) ? Math.max(1e-4, options.minSpan) : 1;
+    if (!finite.length) {
+      return { min: includeZero ? 0 : -minSpan * 0.5, max: minSpan };
+    }
+
+    let min = Math.min(...finite);
+    let max = Math.max(...finite);
+    if (includeZero) min = Math.min(0, min);
+
+    const rawSpan = Math.max(1e-6, max - min);
+    const span = Math.max(minSpan, rawSpan);
+    const pad = span * 0.12;
+    min -= pad;
+    max += pad;
+
+    if (includeZero && min > 0) min = 0;
+    if (max <= min) max = min + minSpan;
+    return { min, max };
+  }
+
+  _drawLine(ctx, data, toX, toY, color, getVal, width = 1.6) {
     ctx.beginPath();
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
-    if (dashed) ctx.setLineDash([4, 3]);
-    else ctx.setLineDash([]);
     data.forEach((p, i) => {
-      const x = toX(i), y = toY(getVal(p));
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      const x = toX(i);
+      const y = toY(getVal(p));
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
     });
     ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  _drawArea(ctx, data, toX, toY, baseline, color, getVal) {
-    if (data.length < 2) return;
-    ctx.beginPath();
-    ctx.moveTo(toX(0), baseline);
-    data.forEach((p, i) => {
-      ctx.lineTo(toX(i), toY(getVal(p)));
-    });
-    ctx.lineTo(toX(data.length - 1), baseline);
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
   }
 }

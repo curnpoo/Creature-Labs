@@ -3,6 +3,8 @@
  */
 export class HUD {
   constructor() {
+    this.lastGeneration = null;
+    this.lastAllTimeBest = null;
     this.els = {
       gen: document.getElementById('hud-gen'),
       genBest: document.getElementById('hud-genbest'),
@@ -30,23 +32,42 @@ export class HUD {
   }
 
   update(sim) {
-    if (this.els.gen) this.els.gen.textContent = String(sim.generation);
-    if (this.els.genBest) this.els.genBest.textContent = `${sim.genBestDist.toFixed(1)}m`;
-    if (this.els.allBest) this.els.allBest.textContent = `${sim.allTimeBest.toFixed(1)}m`;
+    const safe = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
+    const generationChanged = this.lastGeneration !== null && sim.generation > this.lastGeneration;
+    const allTimeBestImproved = this.lastAllTimeBest !== null && sim.allTimeBest > this.lastAllTimeBest + 1e-6;
 
-    const delta = sim.allTimeBest - sim.prevAllTimeBest;
+    if (this.els.gen) this.els.gen.textContent = String(sim.generation);
+    if (this.els.genBest) this.els.genBest.textContent = `${safe(sim.genBestDist).toFixed(2)}m`;
+    if (this.els.allBest) this.els.allBest.textContent = `${safe(sim.allTimeBest).toFixed(2)}m`;
+
+    if (generationChanged && sim.trainingMode === 'normal' && !sim.sandboxMode && this.els.gen) {
+      this.els.gen.classList.remove('stat-gold-flash');
+      void this.els.gen.offsetWidth;
+      this.els.gen.classList.add('stat-gold-flash');
+    }
+    if (allTimeBestImproved && this.els.allBest) {
+      this.els.allBest.classList.remove('stat-gold-flash');
+      void this.els.allBest.offsetWidth;
+      this.els.allBest.classList.add('stat-gold-flash');
+    }
+
+    const delta = safe(sim.allTimeBest) - safe(sim.prevAllTimeBest);
     if (this.els.improve) {
-      this.els.improve.textContent = `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}m`;
+      this.els.improve.textContent = `${delta >= 0 ? '+' : ''}${delta.toFixed(2)}m`;
       this.els.improve.style.color = delta > 0 ? '#6ee7b7' : '#fca5a5';
     }
     if (this.els.stagnant) this.els.stagnant.textContent = `${sim.stagnantGens}g`;
-    if (this.els.time) this.els.time.textContent = `${Math.max(0, sim.timer).toFixed(1)}s`;
-    if (this.els.elapsed) this.els.elapsed.textContent = this._formatElapsed(sim.simTimeElapsed);
-    if (this.els.fps) this.els.fps.textContent = String(Math.round(sim.fpsSmoothed));
+    if (this.els.time) this.els.time.textContent = `${Math.max(0, safe(sim.timer)).toFixed(2)}s`;
+    if (this.els.elapsed) this.els.elapsed.textContent = this._formatElapsed(safe(sim.simTimeElapsed));
+    if (this.els.fps) this.els.fps.textContent = String(Math.round(safe(sim.fpsSmoothed, 0)));
 
     // Active creatures count
     if (this.els.poplive) {
-      const alive = sim.creatures.length;
+      const alive = sim.trainingMode === 'turbo'
+        ? (sim.turboPopulationLive || sim.popSize)
+        : (typeof sim.getAliveCreatureCount === 'function'
+          ? sim.getAliveCreatureCount()
+          : sim.creatures.reduce((count, c) => count + (c?.dead ? 0 : 1), 0));
       const total = sim.sandboxMode ? 1 : sim.popSize;
       this.els.poplive.textContent = `${alive}/${total}`;
     }
@@ -62,10 +83,17 @@ export class HUD {
       if (sim.sandboxMode) {
         this.els.mode.textContent = 'SANDBOX';
         this.els.mode.style.color = '#34d399';
+      } else if (sim.trainingMode === 'turbo') {
+        this.els.mode.textContent = `TURBO MODE (${(sim.turboStatus || 'idle').toUpperCase()})`;
+        this.els.mode.style.color = '#f59e0b';
       } else {
-        this.els.mode.textContent = 'TRAIN';
+        const algorithmTag = String(sim.trainingAlgorithm || '').toLowerCase() === 'neat' ? ' • NEAT' : '';
+        this.els.mode.textContent = `TRAIN${algorithmTag}`;
         this.els.mode.style.color = '#22d3ee';
       }
     }
+
+    this.lastGeneration = sim.generation;
+    this.lastAllTimeBest = sim.allTimeBest;
   }
 }

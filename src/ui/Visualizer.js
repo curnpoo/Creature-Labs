@@ -73,6 +73,11 @@ export class Visualizer {
       return;
     }
 
+    if (leader.controllerType === 'neat') {
+      this._renderNeatNetwork(ctx, w, h, leader);
+      return;
+    }
+
     const nn = leader.brain;
     const layers = nn.layerSizes;
     const activations = nn.activations;
@@ -289,5 +294,136 @@ export class Visualizer {
       ctx.fillText(label, padX + l * layerSpacing, h - 6);
     }
     ctx.textAlign = 'left';
+  }
+
+  _renderNeatNetwork(ctx, w, h, leader) {
+    const genome = leader?.genome;
+    const nodesRaw = genome?.nodes instanceof Map
+      ? Array.from(genome.nodes.values())
+      : (Array.isArray(genome?.nodes) ? genome.nodes : []);
+    const connectionsRaw = genome?.connections instanceof Map
+      ? Array.from(genome.connections.values())
+      : (Array.isArray(genome?.connections) ? genome.connections : []);
+    const enabledConnections = connectionsRaw.filter(conn => conn?.enabled !== false);
+
+    const genomeId = Number(genome?.id) || Number(leader?.architecture?.neatGenomeId) || 0;
+    const nodeCount = nodesRaw.length || Number(leader?.architecture?.neatNodeCount) || 0;
+    const totalConnCount = connectionsRaw.length || Number(leader?.architecture?.neatConnCount) || 0;
+    const enabledConnCount = enabledConnections.length;
+
+    ctx.font = 'bold 11px "JetBrains Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(103, 232, 249, 0.95)';
+    ctx.fillText(`NEAT G${genomeId || '--'} • N${nodeCount} • C${enabledConnCount}/${totalConnCount}`, 12, 16);
+
+    if (!nodesRaw.length) {
+      ctx.fillStyle = 'rgba(203, 213, 225, 0.75)';
+      ctx.font = '12px "JetBrains Mono", monospace';
+      ctx.fillText('Waiting for genome graph...', 12, 38);
+      return;
+    }
+
+    const valuesMap = genome?._lastValues instanceof Map ? genome._lastValues : null;
+    const NODE_LAYER_MAX = 22;
+    const padX = 16;
+    const padTop = 28;
+    const padBottom = 18;
+    const usableW = Math.max(80, w - padX * 2);
+    const usableH = Math.max(80, h - padTop - padBottom);
+
+    const quantize = (v) => Math.round((Number(v) || 0) * 1000) / 1000;
+    const fallbackLayer = (node) => {
+      if (node?.type === 'input') return 0;
+      if (node?.type === 'output') return 1;
+      return 0.5;
+    };
+
+    const layers = new Map();
+    nodesRaw.forEach((node) => {
+      const key = quantize(Number.isFinite(node?.layer) ? node.layer : fallbackLayer(node));
+      if (!layers.has(key)) layers.set(key, []);
+      layers.get(key).push(node);
+    });
+    const layerKeys = Array.from(layers.keys()).sort((a, b) => a - b);
+    const layerSpacing = usableW / Math.max(1, layerKeys.length - 1);
+    const nodeRadius = Math.max(3.5, Math.min(7, usableH / 34));
+
+    const nodePos = new Map();
+    layerKeys.forEach((layerKey, layerIndex) => {
+      const col = (layers.get(layerKey) || []).slice().sort((a, b) => a.id - b.id);
+      const shown = col.slice(0, NODE_LAYER_MAX);
+      const gap = usableH / Math.max(1, shown.length + 1);
+      shown.forEach((node, idx) => {
+        nodePos.set(node.id, {
+          x: padX + layerIndex * layerSpacing,
+          y: padTop + gap * (idx + 1),
+          node
+        });
+      });
+      if (col.length > NODE_LAYER_MAX) {
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.75)';
+        ctx.font = '10px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(
+          `+${col.length - NODE_LAYER_MAX}`,
+          padX + layerIndex * layerSpacing,
+          h - 4
+        );
+      }
+    });
+
+    const MAX_DRAWN_CONNECTIONS = 900;
+    let drawnConnections = 0;
+    for (let i = 0; i < enabledConnections.length; i++) {
+      if (drawnConnections >= MAX_DRAWN_CONNECTIONS) break;
+      const conn = enabledConnections[i];
+      const p1 = nodePos.get(conn.inNode);
+      const p2 = nodePos.get(conn.outNode);
+      if (!p1 || !p2) continue;
+      const weight = Number(conn.weight) || 0;
+      const absW = Math.abs(weight);
+      if (absW < 0.01) continue;
+      const alpha = Math.min(0.55, 0.07 + absW * 0.18);
+      const width = Math.min(2.2, 0.4 + absW * 0.4);
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.strokeStyle = weight >= 0
+        ? `rgba(96, 165, 250, ${alpha})`
+        : `rgba(251, 146, 60, ${alpha})`;
+      ctx.lineWidth = width;
+      ctx.stroke();
+      drawnConnections += 1;
+    }
+
+    nodePos.forEach((entry) => {
+      const val = valuesMap ? Number(valuesMap.get(entry.node.id)) || 0 : 0;
+      const t = Math.max(-1, Math.min(1, val));
+      let fill = 'rgba(45, 60, 84, 0.95)';
+      if (t > 0.06) {
+        const a = Math.min(1, t);
+        fill = `rgba(${Math.round(70 + 185 * a)}, ${Math.round(105 + 90 * a)}, ${Math.round(120 - 90 * a)}, 0.95)`;
+      } else if (t < -0.06) {
+        const a = Math.min(1, -t);
+        fill = `rgba(${Math.round(52 + 30 * a)}, ${Math.round(110 + 95 * a)}, ${Math.round(160 + 80 * a)}, 0.95)`;
+      }
+
+      const stroke = entry.node.type === 'input'
+        ? 'rgba(125, 211, 252, 0.9)'
+        : (entry.node.type === 'output' ? 'rgba(250, 204, 21, 0.9)' : 'rgba(148, 163, 184, 0.85)');
+
+      ctx.beginPath();
+      ctx.arc(entry.x, entry.y, nodeRadius, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = stroke;
+      ctx.stroke();
+    });
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.78)';
+    ctx.font = '10px "JetBrains Mono", monospace';
+    ctx.fillText(`live graph • ${drawnConnections}/${enabledConnCount}/${totalConnCount} edges`, 12, h - 6);
   }
 }

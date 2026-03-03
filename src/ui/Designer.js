@@ -175,25 +175,93 @@ export class Designer {
     this._checkValid();
   }
 
-  saveToFile() {
-    const payload = {
+  serializeDesign() {
+    return {
       version: 2,
       createdAt: new Date().toISOString(),
-      nodes: this.nodes,
-      constraints: this.constraints,
-      polygons: this.polygons,
+      nodes: this.nodes.map(n => ({ ...n })),
+      constraints: this.constraints.map(c => ({ ...c })),
+      polygons: this.polygons.map(p => ({ ...p, vertices: p.vertices.map(v => ({ ...v })) })),
       nextId: this.nextId,
       nextPolygonId: this.nextPolygonId
     };
+  }
+
+  downloadDesign(payload = this.serializeDesign(), filename = null) {
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `polycreature-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    a.download = filename || `polycreature-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  captureThumbnail(width = 220, height = 140) {
+    if (!this.canvas) return '';
+    if (!this.nodes.length && !this.polygons.length) return '';
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    this.nodes.forEach(n => {
+      minX = Math.min(minX, n.x);
+      minY = Math.min(minY, n.y);
+      maxX = Math.max(maxX, n.x);
+      maxY = Math.max(maxY, n.y);
+    });
+    this.polygons.forEach(p => {
+      p.vertices.forEach(v => {
+        minX = Math.min(minX, v.x);
+        minY = Math.min(minY, v.y);
+        maxX = Math.max(maxX, v.x);
+        maxY = Math.max(maxY, v.y);
+      });
+    });
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+      return '';
+    }
+
+    const worldPad = 28;
+    minX -= worldPad;
+    minY -= worldPad;
+    maxX += worldPad;
+    maxY += worldPad;
+
+    const zoom = this.zoom || 1;
+    const srcCenterX = ((minX + maxX) * 0.5) * zoom + this.panX;
+    const srcCenterY = ((minY + maxY) * 0.5) * zoom + this.panY;
+    let srcW = Math.max(24, (maxX - minX) * zoom);
+    let srcH = Math.max(24, (maxY - minY) * zoom);
+    const targetAspect = width / height;
+    const srcAspect = srcW / srcH;
+
+    if (srcAspect > targetAspect) {
+      srcH = srcW / targetAspect;
+    } else {
+      srcW = srcH * targetAspect;
+    }
+    srcW *= 1.12;
+    srcH *= 1.12;
+
+    let srcX = srcCenterX - srcW * 0.5;
+    let srcY = srcCenterY - srcH * 0.5;
+    srcX = Math.max(0, Math.min(this.canvas.width - srcW, srcX));
+    srcY = Math.max(0, Math.min(this.canvas.height - srcH, srcY));
+
+    const out = document.createElement('canvas');
+    out.width = width;
+    out.height = height;
+    const octx = out.getContext('2d');
+    if (!octx) return '';
+    octx.fillStyle = '#0c101a';
+    octx.fillRect(0, 0, width, height);
+    octx.drawImage(this.canvas, srcX, srcY, srcW, srcH, 0, 0, width, height);
+    return out.toDataURL('image/jpeg', 0.75);
   }
 
   // Private methods

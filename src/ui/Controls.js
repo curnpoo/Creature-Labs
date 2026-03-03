@@ -1,5 +1,5 @@
 import { STORAGE_KEYS, CONFIG } from '../utils/config.js';
-import { planck } from '../sim/Physics.js';
+import { planck, SCALE } from '../sim/Physics.js';
 
 /**
  * Right panel controls + bindings.
@@ -8,6 +8,11 @@ export class Controls {
   constructor(sim) {
     this.sim = sim;
     this.els = {};
+    this._diagSeries = [];
+    this._diagSeriesLimit = 96;
+    this._selectedMuscleIndex = 0;
+    this._lastSparklineSampleAt = 0;
+    this._liveUiIntervalId = null;
     this._cacheElements();
   }
 
@@ -25,7 +30,11 @@ export class Controls {
       'fitness-tag', 'fitness-speed', 'fitness-stability',
       'fitness-energy', 'fitness-energy-bar', 'fitness-upright',
       'val-spinpen', 'val-maxenergy', 'val-regen', 'val-energycost', 'val-basedrain',
-      'val-maxtilt'
+      'val-maxtilt', 'val-wall-speed', 'val-wall-start', 'val-viewmode', 'val-engine', 'turbo-status', 'val-best-trigger', 'val-turbo-wall-policy',
+      'testing-last-run', 'testing-health', 'testing-scope', 'testing-copy-compact', 'testing-copy-full',
+      'neat-mode-badge', 'neat-species-count', 'neat-innovation-count', 'neat-champion-complexity', 'nn-control-hint',
+      'dbg-intent-hz', 'dbg-osc-hz', 'dbg-delta-sec', 'dbg-micro-index', 'dbg-grounded-slip',
+      'dbg-muscle-select', 'dbg-muscle-placeholder'
     ];
     ids.forEach(id => {
       this.els[id] = document.getElementById(id);
@@ -34,6 +43,9 @@ export class Controls {
 
   bind(callbacks) {
     const { onPause, onReset, onEdit, onStartDraw, onBack, onRun, onStartSim, onResetSettings } = callbacks;
+    const notifyCameraChanged = () => {
+      if (callbacks.onCameraChanged) callbacks.onCameraChanged();
+    };
 
     // Screen nav
     const btnStartDraw = document.getElementById('btn-start-draw');
@@ -59,28 +71,6 @@ export class Controls {
         if (onResetSettings) onResetSettings();
       };
     }
-
-    const selfcolOn = document.getElementById('selfcol-on');
-    const selfcolOff = document.getElementById('selfcol-off');
-    const updateSelfCollisionUI = () => {
-      if (selfcolOn) selfcolOn.classList.toggle('active', this.sim.selfCollision);
-      if (selfcolOff) selfcolOff.classList.toggle('active', !this.sim.selfCollision);
-    };
-    if (selfcolOn) {
-      selfcolOn.onclick = () => {
-        this.sim.selfCollision = true;
-        this.sim.syncCreatureRuntimeSettings();
-        updateSelfCollisionUI();
-      };
-    }
-    if (selfcolOff) {
-      selfcolOff.onclick = () => {
-        this.sim.selfCollision = false;
-        this.sim.syncCreatureRuntimeSettings();
-        updateSelfCollisionUI();
-      };
-    }
-    updateSelfCollisionUI();
 
     const tiltLimitOn = document.getElementById('tiltlimit-on');
     const tiltLimitOff = document.getElementById('tiltlimit-off');
@@ -128,6 +118,11 @@ export class Controls {
 
     // Sliders
     this._bindSlider('inp-speed', v => { this.sim.simSpeed = v; });
+    this._bindSlider('inp-wall-speed', v => { this.sim.deathWallSpeedMps = v / 100; });
+    this._bindSlider('inp-wall-start', v => {
+      this.sim.deathWallStartBehindMeters = Math.max(0, v);
+      if (this.sim.resetDeathWall) this.sim.resetDeathWall();
+    }, true);
     this._bindSlider('inp-zoom', v => { this.sim.zoom = v / 100; });
     this._bindSlider('inp-duration', v => {
       this.sim.simDuration = v;
@@ -135,7 +130,8 @@ export class Controls {
     });
     this._bindSlider('inp-pop', v => { this.sim.popSize = v; });
     this._bindSlider('inp-strength', v => {
-      this.sim.muscleStrength = v / 100;
+      const base = CONFIG.defaultMuscleStrength || 1;
+      this.sim.muscleStrength = (v / 100) * base;
       this.sim.creatures.forEach(c => { c.simConfig.muscleStrength = this.sim.muscleStrength; });
     });
     this._bindSlider('inp-gravity', v => {
@@ -263,12 +259,19 @@ export class Controls {
     const camLock = document.getElementById('cam-lock');
     const camFree = document.getElementById('cam-free');
     const camReset = document.getElementById('cam-reset');
-    if (camLock) camLock.onclick = () => this.setCameraMode('lock');
-    if (camFree) camFree.onclick = () => this.setCameraMode('free');
+    if (camLock) camLock.onclick = () => {
+      this.setCameraMode('lock');
+      notifyCameraChanged();
+    };
+    if (camFree) camFree.onclick = () => {
+      this.setCameraMode('free');
+      notifyCameraChanged();
+    };
     if (camReset) camReset.onclick = () => {
       this.sim.cameraX = 0;
       this.sim.cameraY = 0;
       this.setCameraMode('lock');
+      notifyCameraChanged();
     };
 
     // Replay buttons
@@ -278,6 +281,71 @@ export class Controls {
     if (replayPrev) replayPrev.onclick = () => this.setReplayIndex(this.sim.replayIndex - 1);
     if (replayNext) replayNext.onclick = () => this.setReplayIndex(this.sim.replayIndex + 1);
     if (replayPlay) replayPlay.onclick = () => this.toggleReplayPlay();
+
+    const viewTrainingBtn = document.getElementById('view-training');
+    const viewBestRunBtn = document.getElementById('view-best-run');
+    if (viewTrainingBtn) viewTrainingBtn.onclick = () => this.setViewMode('training');
+    if (viewBestRunBtn) viewBestRunBtn.onclick = () => this.setViewMode('bestRun');
+
+    const engineNormalBtn = document.getElementById('engine-normal');
+    const engineTurboBtn = document.getElementById('engine-turbo');
+    if (engineNormalBtn) engineNormalBtn.onclick = () => this.setTrainingMode('normal');
+    if (engineTurboBtn) engineTurboBtn.onclick = () => this.setTrainingMode('turbo');
+    const turboWallOffBtn = document.getElementById('turbo-wall-off');
+    const turboWallSoftBtn = document.getElementById('turbo-wall-soft');
+    const turboWallFullBtn = document.getElementById('turbo-wall-full');
+    if (turboWallOffBtn) turboWallOffBtn.onclick = () => this.setTurboWallPolicy('off');
+    if (turboWallSoftBtn) turboWallSoftBtn.onclick = () => this.setTurboWallPolicy('soft');
+    if (turboWallFullBtn) turboWallFullBtn.onclick = () => this.setTurboWallPolicy('full');
+    const triggerAllBestBtn = document.getElementById('trigger-allbest');
+    const triggerEveryGenBtn = document.getElementById('trigger-everygen');
+    if (triggerAllBestBtn) triggerAllBestBtn.onclick = () => this.setBestRunTrigger('allTimeBest');
+    if (triggerEveryGenBtn) triggerEveryGenBtn.onclick = () => this.setBestRunTrigger('everyGen');
+    const testingOffBtn = document.getElementById('testing-off');
+    const testingOnBtn = document.getElementById('testing-on');
+    if (testingOffBtn) testingOffBtn.onclick = () => this.setTestingMode(false);
+    if (testingOnBtn) testingOnBtn.onclick = () => this.setTestingMode(true);
+    const copyCompactBtn = document.getElementById('testing-copy-compact');
+    const copyFullBtn = document.getElementById('testing-copy-full');
+    const bindCopyButton = (btn, mode) => {
+      if (!btn) return;
+      btn.onclick = async () => {
+        const payload = mode === 'compact'
+          ? (this.sim.getDiagnosticsClipboardTextCompact ? this.sim.getDiagnosticsClipboardTextCompact() : '')
+          : (this.sim.getDiagnosticsClipboardTextFull ? this.sim.getDiagnosticsClipboardTextFull() : '');
+        if (!payload) return;
+        const original = btn.innerHTML;
+        try {
+          await navigator.clipboard.writeText(payload);
+          btn.innerHTML = '<i class="fas fa-check mr-1"></i>Copied';
+        } catch {
+          btn.innerHTML = '<i class="fas fa-triangle-exclamation mr-1"></i>Copy Failed';
+        }
+        setTimeout(() => { btn.innerHTML = original; }, 1800);
+      };
+    };
+    bindCopyButton(copyCompactBtn, 'compact');
+    bindCopyButton(copyFullBtn, 'full');
+
+    const neatModeBadge = this.els['neat-mode-badge'];
+    if (neatModeBadge) {
+      neatModeBadge.style.cursor = 'pointer';
+      neatModeBadge.title = 'Click to toggle NEAT / Dense fallback runtime';
+      neatModeBadge.onclick = () => {
+        const next = this._isNeatMode() ? 'legacy' : 'neat';
+        if (this.sim.setTrainingAlgorithm) this.sim.setTrainingAlgorithm(next);
+        this.updateLabels();
+      };
+    }
+
+    const dbgMuscleSelect = this.els['dbg-muscle-select'];
+    if (dbgMuscleSelect) {
+      dbgMuscleSelect.onchange = (e) => {
+        const nextIndex = parseInt(e?.target?.value ?? '0', 10);
+        this._selectedMuscleIndex = Number.isFinite(nextIndex) ? Math.max(0, nextIndex) : 0;
+        this._diagSeries = [];
+      };
+    }
 
     // Panning
     const world = document.getElementById('world');
@@ -295,27 +363,30 @@ export class Controls {
 
         // In free mode, hold Shift for horizontal pan and Alt for vertical pan.
         if (this.sim.cameraMode === 'free' && e.shiftKey) {
-          this.sim.cameraX = Math.max(0, this.sim.cameraX + e.deltaY * 0.4 / this.sim.zoom);
+          this.sim.cameraX += e.deltaY * 0.28 / this.sim.zoom;
+          notifyCameraChanged();
           e.preventDefault();
           return;
         }
         if (this.sim.cameraMode === 'free' && e.altKey) {
-          this.sim.cameraY += e.deltaY * 0.4 / this.sim.zoom;
+          this.sim.cameraY += e.deltaY * 0.28 / this.sim.zoom;
+          notifyCameraChanged();
           e.preventDefault();
           return;
         }
 
-        // Zoom around cursor so the point under mouse stays fixed.
+        // Smooth zoom around cursor so touchpad scrolling is less jumpy.
         const worldX = sx / this.sim.zoom + this.sim.cameraX;
         const worldY = sy / this.sim.zoom + this.sim.cameraY;
-        const dir = e.deltaY > 0 ? -0.08 : 0.08;
-        const nextZoom = Math.max(0.35, Math.min(2.5, this.sim.zoom + dir));
-        this.sim.cameraX = Math.max(0, worldX - sx / nextZoom);
+        const delta = Math.max(-120, Math.min(120, e.deltaY));
+        const nextZoom = Math.max(0.35, Math.min(2.5, this.sim.zoom * Math.exp(-delta * 0.0015)));
+        this.sim.cameraX = worldX - sx / nextZoom;
         this.sim.cameraY = worldY - sy / nextZoom;
         this.sim.zoom = nextZoom;
         const zoomSlider = document.getElementById('inp-zoom');
         if (zoomSlider) zoomSlider.value = String(Math.round(this.sim.zoom * 100));
         this.updateLabels();
+        notifyCameraChanged();
         e.preventDefault();
       }, { passive: false });
     }
@@ -326,8 +397,9 @@ export class Controls {
       const dy = e.clientY - this.sim.panY;
       this.sim.panX = e.clientX;
       this.sim.panY = e.clientY;
-      this.sim.cameraX = Math.max(0, this.sim.cameraX - dx / this.sim.zoom);
+      this.sim.cameraX -= dx / this.sim.zoom;
       this.sim.cameraY -= dy / this.sim.zoom;
+      notifyCameraChanged();
     });
     window.addEventListener('mouseup', () => { this.sim.panning = false; });
 
@@ -339,11 +411,12 @@ export class Controls {
         const wx = cx / this.sim.zoom + this.sim.cameraX;
         const wy = cy / this.sim.zoom + this.sim.cameraY;
         this.sim.zoom = Math.min(2.5, this.sim.zoom + 0.08);
-        this.sim.cameraX = Math.max(0, wx - cx / this.sim.zoom);
+        this.sim.cameraX = wx - cx / this.sim.zoom;
         this.sim.cameraY = wy - cy / this.sim.zoom;
         const zoomSlider = document.getElementById('inp-zoom');
         if (zoomSlider) zoomSlider.value = String(Math.round(this.sim.zoom * 100));
         this.updateLabels();
+        notifyCameraChanged();
       }
       if (e.key === '-' || e.key === '_') {
         const cx = window.innerWidth * 0.5;
@@ -351,16 +424,29 @@ export class Controls {
         const wx = cx / this.sim.zoom + this.sim.cameraX;
         const wy = cy / this.sim.zoom + this.sim.cameraY;
         this.sim.zoom = Math.max(0.35, this.sim.zoom - 0.08);
-        this.sim.cameraX = Math.max(0, wx - cx / this.sim.zoom);
+        this.sim.cameraX = wx - cx / this.sim.zoom;
         this.sim.cameraY = wy - cy / this.sim.zoom;
         const zoomSlider = document.getElementById('inp-zoom');
         if (zoomSlider) zoomSlider.value = String(Math.round(this.sim.zoom * 100));
         this.updateLabels();
+        notifyCameraChanged();
       }
-      if (this.sim.cameraMode === 'free' && e.key === 'ArrowUp') this.sim.cameraY -= 30 / this.sim.zoom;
-      if (this.sim.cameraMode === 'free' && e.key === 'ArrowDown') this.sim.cameraY += 30 / this.sim.zoom;
-      if (this.sim.cameraMode === 'free' && e.key === 'ArrowLeft') this.sim.cameraX = Math.max(0, this.sim.cameraX - 30 / this.sim.zoom);
-      if (this.sim.cameraMode === 'free' && e.key === 'ArrowRight') this.sim.cameraX += 30 / this.sim.zoom;
+      if (this.sim.cameraMode === 'free' && e.key === 'ArrowUp') {
+        this.sim.cameraY -= 30 / this.sim.zoom;
+        notifyCameraChanged();
+      }
+      if (this.sim.cameraMode === 'free' && e.key === 'ArrowDown') {
+        this.sim.cameraY += 30 / this.sim.zoom;
+        notifyCameraChanged();
+      }
+      if (this.sim.cameraMode === 'free' && e.key === 'ArrowLeft') {
+        this.sim.cameraX -= 30 / this.sim.zoom;
+        notifyCameraChanged();
+      }
+      if (this.sim.cameraMode === 'free' && e.key === 'ArrowRight') {
+        this.sim.cameraX += 30 / this.sim.zoom;
+        notifyCameraChanged();
+      }
       if (e.code === 'Space' && callbacks.isSimScreen && callbacks.isSimScreen()) {
         onPause();
       }
@@ -389,25 +475,28 @@ export class Controls {
       });
     });
 
-    // Preset selector
-    const presetSelect = document.getElementById('preset-select');
-    if (presetSelect && callbacks.onPresetSelect) {
-      presetSelect.addEventListener('change', e => {
-        const idx = parseInt(e.target.value, 10);
-        if (idx >= 0) callbacks.onPresetSelect(idx);
-        e.target.value = '-1';
-      });
-    }
-
     // Ensure slider thumbs reflect current runtime values on first bind.
     const musmooth = document.getElementById('inp-musmooth');
     if (musmooth) musmooth.value = String(Math.round(this.sim.muscleSmoothing * 1000));
     const musbudget = document.getElementById('inp-musbudget');
     if (musbudget) musbudget.value = String(Math.round(this.sim.muscleActionBudget));
+    const wallSpeed = document.getElementById('inp-wall-speed');
+    if (wallSpeed) wallSpeed.value = String(Math.round(this.sim.deathWallSpeedMps * 100));
+    const wallStart = document.getElementById('inp-wall-start');
+    if (wallStart) wallStart.value = String(this.sim.deathWallStartBehindMeters.toFixed(1));
 
     this.setCameraMode('lock');
+    this.setViewMode(this.sim.viewMode || 'training');
+    this.setTrainingMode(this.sim.trainingMode || 'normal');
+    this.setTurboWallPolicy(this.sim.turboWallPolicy || 'full');
+    this.setBestRunTrigger(this.sim.bestRunTrigger || 'everyGen');
+    this.setTestingMode(this.sim.testingModeEnabled || false);
     this._updateStabilityMode();
+    this._updateAlgorithmModeUI();
     this.updateLabels();
+    if (!this._liveUiIntervalId) {
+      this._liveUiIntervalId = window.setInterval(() => this.updateLabels(), 140);
+    }
     this.setReplayIndex(-1);
     this.toggleReplayPlay(false);
   }
@@ -423,12 +512,69 @@ export class Controls {
   }
 
   setCameraMode(mode) {
+    this.sim.panning = false;
     this.sim.cameraMode = mode;
     const camLock = document.getElementById('cam-lock');
     const camFree = document.getElementById('cam-free');
     if (camLock) camLock.classList.toggle('active', mode === 'lock');
     if (camFree) camFree.classList.toggle('active', mode === 'free');
     if (this.els['val-cam']) this.els['val-cam'].textContent = mode.toUpperCase();
+  }
+
+  setViewMode(mode) {
+    if (this.sim.setViewMode) this.sim.setViewMode(mode);
+    const viewTraining = document.getElementById('view-training');
+    const viewBestRun = document.getElementById('view-best-run');
+    if (viewTraining) viewTraining.classList.toggle('active', this.sim.viewMode === 'training');
+    if (viewBestRun) viewBestRun.classList.toggle('active', this.sim.viewMode === 'bestRun');
+    if (this.els['val-viewmode']) {
+      this.els['val-viewmode'].textContent = this.sim.viewMode === 'bestRun' ? 'BEST RUN' : 'TRAINING';
+    }
+    this.updateLabels();
+  }
+
+  setTrainingMode(mode) {
+    if (this.sim.setTrainingMode) this.sim.setTrainingMode(mode);
+    const engineNormal = document.getElementById('engine-normal');
+    const engineTurbo = document.getElementById('engine-turbo');
+    if (engineNormal) engineNormal.classList.toggle('active', this.sim.trainingMode === 'normal');
+    if (engineTurbo) engineTurbo.classList.toggle('active', this.sim.trainingMode === 'turbo');
+    if (this.els['val-engine']) {
+      this.els['val-engine'].textContent = this.sim.trainingMode === 'turbo' ? 'ON' : 'OFF';
+    }
+    this.updateLabels();
+  }
+
+  setTurboWallPolicy(policy) {
+    if (this.sim.setTurboWallPolicy) this.sim.setTurboWallPolicy(policy);
+    const off = document.getElementById('turbo-wall-off');
+    const soft = document.getElementById('turbo-wall-soft');
+    const full = document.getElementById('turbo-wall-full');
+    if (off) off.classList.toggle('active', this.sim.turboWallPolicy === 'off');
+    if (soft) soft.classList.toggle('active', this.sim.turboWallPolicy === 'soft');
+    if (full) full.classList.toggle('active', this.sim.turboWallPolicy === 'full');
+    this.updateLabels();
+  }
+
+  setBestRunTrigger(mode) {
+    if (this.sim.setBestRunTrigger) this.sim.setBestRunTrigger(mode);
+    const allBest = document.getElementById('trigger-allbest');
+    const everyGen = document.getElementById('trigger-everygen');
+    if (allBest) allBest.classList.toggle('active', this.sim.bestRunTrigger === 'allTimeBest');
+    if (everyGen) everyGen.classList.toggle('active', this.sim.bestRunTrigger === 'everyGen');
+    if (this.els['val-best-trigger']) {
+      this.els['val-best-trigger'].textContent = this.sim.bestRunTrigger === 'everyGen' ? 'EVERY GEN' : 'ALL-TIME';
+    }
+    this.updateLabels();
+  }
+
+  setTestingMode(on) {
+    if (this.sim.setTestingMode) this.sim.setTestingMode(on);
+    const offBtn = document.getElementById('testing-off');
+    const onBtn = document.getElementById('testing-on');
+    if (offBtn) offBtn.classList.toggle('active', !this.sim.testingModeEnabled);
+    if (onBtn) onBtn.classList.toggle('active', !!this.sim.testingModeEnabled);
+    this.updateLabels();
   }
 
   setReplayIndex(index) {
@@ -453,6 +599,24 @@ export class Controls {
     if (stabOn) stabOn.classList.toggle('active', this.sim.rewardStability);
     if (stabOff) stabOff.classList.toggle('active', !this.sim.rewardStability);
     if (this.els['val-stabmode']) this.els['val-stabmode'].textContent = this.sim.rewardStability ? 'ON' : 'OFF';
+  }
+
+  _isNeatMode() {
+    return String(this.sim.trainingAlgorithm || '').toLowerCase() === 'neat';
+  }
+
+  _updateAlgorithmModeUI() {
+    const neatMode = this._isNeatMode();
+    const legacyControls = document.getElementById('legacy-nn-controls');
+    if (legacyControls) legacyControls.classList.toggle('readonly', neatMode);
+    if (this.els['neat-mode-badge']) this.els['neat-mode-badge'].textContent = neatMode ? 'ACTIVE' : 'LEGACY';
+    if (this.els['nn-control-hint']) this.els['nn-control-hint'].textContent = neatMode ? 'NEAT controls topology' : 'Manual (legacy)';
+    ['inp-hidden', 'inp-neurons', 'inp-elites', 'inp-tournament'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.disabled = neatMode;
+      el.setAttribute('aria-disabled', neatMode ? 'true' : 'false');
+    });
   }
 
   _updateEnergyMode() {
@@ -484,19 +648,183 @@ export class Controls {
     }
   }
 
+  _readFiniteNumber(value, fallback = 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  _firstFinite(values, fallback = 0) {
+    for (let i = 0; i < values.length; i++) {
+      const n = Number(values[i]);
+      if (Number.isFinite(n)) return n;
+    }
+    return fallback;
+  }
+
+  _getActuationMetrics() {
+    const s = this.sim;
+    const leader = s.visualLeader || (s.getLeader ? s.getLeader() : null);
+    const leaderFitness = leader?.getFitnessSnapshot ? leader.getFitnessSnapshot() : null;
+    const turbo = s.lastTurboDiagnostics || null;
+    const progressTail = Array.isArray(s.progressHistory) && s.progressHistory.length
+      ? s.progressHistory[s.progressHistory.length - 1]
+      : null;
+    const progressDiagnostics = progressTail?.diagnostics || null;
+    return {
+      intentUpdateHz: this._firstFinite([leaderFitness?.intentUpdateHz, turbo?.intentUpdateHz, progressDiagnostics?.intentUpdateHz], 0),
+      commandOscillationHz: this._firstFinite([leaderFitness?.commandOscillationHz, turbo?.commandOscillationHz, progressDiagnostics?.commandOscillationHz], 0),
+      avgCommandDeltaPerSec: this._firstFinite([leaderFitness?.avgCommandDeltaPerSec, turbo?.avgCommandDeltaPerSec, progressDiagnostics?.avgCommandDeltaPerSec], 0),
+      microActuationIndex: this._firstFinite([leaderFitness?.microActuationIndex, turbo?.microActuationIndex, progressDiagnostics?.microActuationIndex], 0),
+      slipWhileGrounded: this._firstFinite([leaderFitness?.slipWhileGrounded, leaderFitness?.groundSlipRate, leaderFitness?.groundSlip, turbo?.slipWhileGrounded, turbo?.groundSlip, progressDiagnostics?.slipWhileGrounded], 0)
+    };
+  }
+
+  _syncMuscleSelect(leader) {
+    const select = this.els['dbg-muscle-select'];
+    if (!select) return;
+    const count = Array.isArray(leader?.muscles) ? leader.muscles.length : 0;
+    if (!count) {
+      select.innerHTML = '<option value="0">No muscles</option>';
+      select.value = '0';
+      this._selectedMuscleIndex = 0;
+      return;
+    }
+    const desired = Math.max(0, Math.min(count - 1, this._selectedMuscleIndex));
+    if (select.options.length !== count) {
+      select.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const opt = document.createElement('option');
+        opt.value = String(i);
+        opt.textContent = `Muscle ${i + 1}`;
+        select.appendChild(opt);
+      }
+    }
+    if (select.value !== String(desired)) select.value = String(desired);
+    this._selectedMuscleIndex = desired;
+  }
+
+  _sampleSelectedMuscle(leader) {
+    const placeholder = this.els['dbg-muscle-placeholder'];
+    const canvas = document.getElementById('dbg-muscle-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    this._syncMuscleSelect(leader);
+    const muscles = Array.isArray(leader?.muscles) ? leader.muscles : null;
+    const muscle = muscles?.[this._selectedMuscleIndex];
+
+    if (!muscle) {
+      this._diagSeries = [];
+      this._drawActuationSparkline(ctx, canvas, []);
+      if (placeholder) placeholder.textContent = 'Waiting for muscle diagnostics...';
+      return;
+    }
+
+    const now = performance.now();
+    if ((now - this._lastSparklineSampleAt) >= 50 || this._diagSeries.length === 0) {
+      const phaseLockEnabled = leader?.simConfig?.phaseLockEnabled !== false;
+      const phaseBase = this._readFiniteNumber(leader?.gaitPhase, 0);
+      const phaseGroup = this._readFiniteNumber(muscle.phaseGroup, 0);
+      const carrierRaw = Number.isFinite(Number(muscle.carrier))
+        ? Number(muscle.carrier)
+        : (phaseLockEnabled ? Math.sin(phaseBase + phaseGroup) : 1);
+      this._diagSeries.push({
+        intent: this._readFiniteNumber(muscle.intent, 0),
+        carrier: this._readFiniteNumber(carrierRaw, 0),
+        command: this._readFiniteNumber(muscle.command, 0)
+      });
+      if (this._diagSeries.length > this._diagSeriesLimit) {
+        this._diagSeries.splice(0, this._diagSeries.length - this._diagSeriesLimit);
+      }
+      this._lastSparklineSampleAt = now;
+    }
+
+    this._drawActuationSparkline(ctx, canvas, this._diagSeries);
+    if (placeholder) {
+      placeholder.textContent = this._diagSeries.length > 1
+        ? `Tracking Muscle ${this._selectedMuscleIndex + 1}`
+        : 'Collecting samples...';
+    }
+  }
+
+  _drawActuationSparkline(ctx, canvas, series) {
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(5, 8, 16, 0.9)';
+    ctx.fillRect(0, 0, w, h);
+
+    const padX = 4;
+    const padY = 6;
+    const midY = h * 0.5;
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padX, midY);
+    ctx.lineTo(w - padX, midY);
+    ctx.stroke();
+
+    if (!Array.isArray(series) || series.length < 2) {
+      ctx.fillStyle = 'rgba(148,163,184,0.65)';
+      ctx.font = '10px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('No sparkline data yet', w * 0.5, h * 0.5 + 4);
+      ctx.textAlign = 'left';
+      return;
+    }
+
+    const toX = (i) => padX + (i / Math.max(1, series.length - 1)) * (w - padX * 2);
+    const toY = (v) => {
+      const clamped = Math.max(-1, Math.min(1, this._readFiniteNumber(v, 0)));
+      return padY + (1 - (clamped + 1) * 0.5) * (h - padY * 2);
+    };
+
+    const drawChannel = (key, color, alphaFill = null) => {
+      if (alphaFill) {
+        ctx.beginPath();
+        ctx.moveTo(toX(0), h - padY);
+        for (let i = 0; i < series.length; i++) ctx.lineTo(toX(i), toY(series[i][key]));
+        ctx.lineTo(toX(series.length - 1), h - padY);
+        ctx.closePath();
+        ctx.fillStyle = alphaFill;
+        ctx.fill();
+      }
+
+      ctx.beginPath();
+      for (let i = 0; i < series.length; i++) {
+        const x = toX(i);
+        const y = toY(series[i][key]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.25;
+      ctx.stroke();
+    };
+
+    drawChannel('carrier', '#fbbf24');
+    drawChannel('intent', '#7dd3fc');
+    drawChannel('command', '#34d399', 'rgba(52, 211, 153, 0.10)');
+  }
+
   updateLabels() {
     const s = this.sim;
     const set = (id, val) => { if (this.els[id]) this.els[id].textContent = val; };
+    const neatMode = this._isNeatMode();
+    this._updateAlgorithmModeUI();
     set('val-speed', `${s.simSpeed}x`);
+    set('val-wall-speed', `${s.deathWallSpeedMps.toFixed(2)} m/s`);
+    set('val-wall-start', `${s.deathWallStartBehindMeters.toFixed(1)} m behind`);
     set('val-duration', `${s.simDuration}s`);
     set('val-pop', `${s.popSize}`);
-    set('val-strength', `${Math.round(s.muscleStrength * 100)}%`);
-    set('val-gravity', s.gravity.toFixed(1));
+    const baseStrength = CONFIG.defaultMuscleStrength || 1;
+    set('val-strength', `${Math.round((s.muscleStrength / baseStrength) * 100)}%`);
+    set('val-gravity', s.gravity.toFixed(2));
     set('val-groundfric', `${s.groundFriction.toFixed(2)}`);
     set('val-musrange', `${Math.round(s.muscleRange * 100)}%`);
     set('val-musminlen', `${Math.round((s.muscleMinLength ?? 0.8) * 100)}%`);
     set('val-musmaxlen', `${Math.round((s.muscleMaxLength ?? 1.1) * 100)}%`);
-    set('val-musmooth', `${(s.muscleSmoothing * 100).toFixed(1)}%`);
+    set('val-musmooth', `${(s.muscleSmoothing * 100).toFixed(2)}%`);
     set('val-musbudget', `${Math.round(s.muscleActionBudget)}f (${(s.muscleActionBudget / 60).toFixed(2)}s)`);
     set('val-maxenergy', `${Math.round(s.maxEnergy)}`);
     set('val-regen', `${Math.round(s.energyRegenRate)}/s`);
@@ -506,21 +834,91 @@ export class Controls {
     set('val-slippen', `${s.groundSlipPenaltyWeight}`);
     set('val-mut', `${Math.round(s.mutationRate * 100)}%`);
     set('val-mutsize', `${s.mutationSize.toFixed(2)}x`);
+    if (neatMode) {
+      set('val-hidden', 'AUTO');
+      set('val-neurons', 'AUTO');
+      set('val-elites', 'N/A');
+      set('val-tournament', 'N/A');
+    } else {
+      set('val-hidden', `${Math.round(s.hiddenLayers || 0)}`);
+      set('val-neurons', `${Math.round(s.neuronsPerLayer || 0)}`);
+      set('val-elites', `${Math.round(s.eliteCount || 0)}`);
+      set('val-tournament', `${Math.round(s.tournamentSize || 0)}`);
+    }
     set('val-zoom', `${s.zoom.toFixed(2)}x`);
+    set('val-viewmode', s.viewMode === 'bestRun' ? 'BEST RUN' : 'TRAINING');
+    set('val-engine', s.trainingMode === 'turbo' ? 'ON' : 'OFF');
+    set('turbo-status', (s.turboStatus || 'idle').toUpperCase());
+    set('val-turbo-wall-policy', (s.turboWallPolicy || 'full').toUpperCase());
+    set('val-best-trigger', s.bestRunTrigger === 'everyGen' ? 'EVERY GEN' : 'ALL-TIME');
+    const testSnapshot = s.getTurboTestSnapshot ? s.getTurboTestSnapshot() : null;
+    set('testing-scope', 'Turbo Verification');
+    if (testSnapshot?.last) {
+      const reasons = Array.isArray(testSnapshot.last.reasons) && testSnapshot.last.reasons.length
+        ? ` • ${testSnapshot.last.reasons[0]}`
+        : '';
+      const turboX = Number.isFinite(testSnapshot.last.throughputX)
+        ? ` • ${testSnapshot.last.throughputX.toFixed(2)}x`
+        : '';
+      set('testing-last-run', `G${testSnapshot.last.generation} • ${testSnapshot.last.status.toUpperCase()}${turboX}${reasons}`);
+    } else {
+      set('testing-last-run', 'Waiting for cycle...');
+    }
+    set('testing-health', (s.testingStatus || 'idle').toUpperCase());
+    const healthEl = this.els['testing-health'];
+    if (healthEl) {
+      const status = (s.testingStatus || 'idle').toLowerCase();
+      healthEl.style.color = status === 'pass'
+        ? '#22c55e'
+        : (status === 'warn' ? '#fbbf24' : (status === 'fail' ? '#f87171' : '#67e8f9'));
+    }
     
     // Update NN architecture display
-    const leader = s.getLeader ? s.getLeader() : null;
+    const leader = s.visualLeader || (s.getLeader ? s.getLeader() : null);
     if (leader && leader.brain) {
-      const layers = leader.brain.layerSizes;
-      const archText = `${layers.length - 2}h × ${layers[1]}n`;
-      set('val-nn-arch', archText);
+      if (leader.controllerType === 'neat') {
+        const nodes = Number(leader?.genome?.nodes?.size) || Number(leader?.architecture?.neatNodeCount) || 0;
+        const conns = Number(leader?.genome?.connections?.size) || Number(leader?.architecture?.neatConnCount) || 0;
+        set('val-nn-arch', `NEAT N${nodes}/C${conns}`);
+      } else {
+        const layers = leader.brain.layerSizes;
+        const archText = `${layers.length - 2}h × ${layers[1]}n`;
+        set('val-nn-arch', archText);
+      }
     }
+
+    const neatStatus = s.neatStatus || (s.progressHistory?.length ? s.progressHistory[s.progressHistory.length - 1]?.neatStatus : null) || {};
+    const speciesCount = Number.isFinite(neatStatus?.speciesCount)
+      ? neatStatus.speciesCount
+      : (Number.isFinite(s.neatSpeciesCount) ? s.neatSpeciesCount : '--');
+    const innovationCount = Number.isFinite(neatStatus?.innovationCount)
+      ? neatStatus.innovationCount
+      : (Number.isFinite(s.neatInnovationCount) ? s.neatInnovationCount : '--');
+    const champComplexity = neatStatus?.championComplexity
+      ? `N${neatStatus.championComplexity.nodes} W${neatStatus.championComplexity.connections}`
+      : (leader?.controllerType === 'neat'
+        ? `N${Number(leader?.genome?.nodes?.size) || 0} W${Number(leader?.genome?.connections?.size) || 0}`
+        : (leader?.brain?.layerSizes
+          ? `N${leader.brain.layerSizes.reduce((sum, width) => sum + width, 0)} W${leader.brain.getWeightCount()}`
+          : '--'));
+    set('neat-species-count', String(speciesCount));
+    set('neat-innovation-count', String(innovationCount));
+    set('neat-champion-complexity', champComplexity);
+    const actuation = this._getActuationMetrics();
+    set('dbg-intent-hz', `${actuation.intentUpdateHz.toFixed(2)} Hz`);
+    set('dbg-osc-hz', `${actuation.commandOscillationHz.toFixed(2)} Hz`);
+    set('dbg-delta-sec', `${actuation.avgCommandDeltaPerSec.toFixed(2)}`);
+    set('dbg-micro-index', `${actuation.microActuationIndex.toFixed(2)}`);
+    set('dbg-grounded-slip', `${actuation.slipWhileGrounded.toFixed(2)}`);
+    this._sampleSelectedMuscle(leader);
   }
 
   updateFitnessPanel(fitness, creature) {
-    const f = fitness || { speed: 0, stability: 0, upright: 0.5 };
-    if (this.els['fitness-speed']) this.els['fitness-speed'].textContent = `${(f.speed / 100).toFixed(1)} m/s`;
-    if (this.els['fitness-stability']) this.els['fitness-stability'].textContent = `${f.stability.toFixed(0)}%`;
+    const f = fitness || { speed: 0, groundSlip: 0, actuationLevel: 0 };
+    const speedMps = Number.isFinite(f.speed) ? (f.speed / SCALE) : 0;
+    if (this.els['fitness-speed']) this.els['fitness-speed'].textContent = `${speedMps.toFixed(2)} m/s`;
+    const slip = Number.isFinite(f.groundSlipRate) ? f.groundSlipRate : (f.groundSlip || 0);
+    if (this.els['fitness-stability']) this.els['fitness-stability'].textContent = slip.toFixed(2);
 
     // Energy bar
     if (creature && creature.energy && creature.energy.enabled) {
@@ -532,7 +930,7 @@ export class Controls {
       if (this.els['fitness-energy-bar']) this.els['fitness-energy-bar'].style.width = '0%';
     }
 
-    if (this.els['fitness-upright']) this.els['fitness-upright'].textContent = `${((f.upright || 0) * 100).toFixed(0)}%`;
+    if (this.els['fitness-upright']) this.els['fitness-upright'].textContent = `${((f.actuationLevel || 0) * 100).toFixed(0)}%`;
   }
 
   resetToDefaults() {
@@ -560,13 +958,22 @@ export class Controls {
     s.energyRegenRate = CONFIG.defaultEnergyRegenRate;
     s.energyUsagePerActuation = CONFIG.defaultEnergyUsagePerActuation;
     s.baseDrain = CONFIG.ENERGY_CONFIG.baseDrain;
+    s.deathWallSpeedMps = CONFIG.defaultDeathWallSpeedMps ?? 1.0;
+    s.deathWallStartBehindMeters = CONFIG.defaultDeathWallStartBehindMeters ?? 10;
+    if (s.resetDeathWall) s.resetDeathWall();
+    s.turboWallPolicy = 'full';
+    if (s.setTrainingMode) s.setTrainingMode('normal');
+    if (s.setViewMode) s.setViewMode('training');
+    if (s.setBestRunTrigger) s.setBestRunTrigger('allTimeBest');
 
     const sliderValues = {
       'inp-speed': String(Math.round(s.simSpeed)),
+      'inp-wall-speed': String(Math.round(s.deathWallSpeedMps * 100)),
+      'inp-wall-start': s.deathWallStartBehindMeters.toFixed(1),
       'inp-duration': String(Math.round(s.simDuration)),
       'inp-pop': String(Math.round(s.popSize)),
-      'inp-strength': String(Math.round(s.muscleStrength * 100)),
-      'inp-gravity': s.gravity.toFixed(1),
+      'inp-strength': String(Math.round((s.muscleStrength / (CONFIG.defaultMuscleStrength || 1)) * 100)),
+      'inp-gravity': s.gravity.toFixed(2),
       'inp-groundfric': String(Math.round(s.groundFriction * 100)),
       'inp-musrange': String(Math.round(s.muscleRange * 100)),
       'inp-musminlen': String(Math.round(s.muscleMinLength * 100)),
@@ -590,6 +997,10 @@ export class Controls {
     });
     this._updateEnergyMode();
     this._updateTiltLimitMode();
+    this.setTrainingMode(s.trainingMode || 'normal');
+    this.setTurboWallPolicy(s.turboWallPolicy || 'full');
+    this.setViewMode(s.viewMode || 'training');
+    this.setBestRunTrigger(s.bestRunTrigger || 'everyGen');
     s.syncCreatureRuntimeSettings();
     this.updateLabels();
   }

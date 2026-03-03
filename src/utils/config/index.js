@@ -23,6 +23,7 @@ export const CONFIG = {
   defaultMutationSize: EVOLUTION_CONFIG.mutationSize,
   stagnantMutBonus: EVOLUTION_CONFIG.stagnantMutBonus,
   maxMutationRate: EVOLUTION_CONFIG.maxMutationRate,
+  defaultTrainingAlgorithm: EVOLUTION_CONFIG.trainingAlgorithm,
 
   // Simulation Timing
   defaultSimDuration: EVOLUTION_CONFIG.generationDuration,
@@ -40,6 +41,9 @@ export const CONFIG = {
   defaultGroundedDownwardDamping: PHYSICS_CONFIG.groundedDownwardDamping,
   defaultMaxHorizontalVelocity: PHYSICS_CONFIG.maxHorizontalVelocity,
   defaultMaxVerticalVelocity: PHYSICS_CONFIG.maxVerticalVelocity,
+  defaultGroundNoSlipEnabled: PHYSICS_CONFIG.groundNoSlipEnabled,
+  defaultGroundNoSlipFactor: PHYSICS_CONFIG.groundNoSlipFactor,
+  defaultGroundNoSlipEpsilon: PHYSICS_CONFIG.groundNoSlipEpsilon,
   defaultTiltLimitEnabled: PHYSICS_CONFIG.tiltLimitEnabled,
   defaultMaxTiltDeg: PHYSICS_CONFIG.maxTiltDeg,
   defaultBodyFriction: PHYSICS_CONFIG.bodyFriction,
@@ -69,6 +73,10 @@ export const CONFIG = {
   defaultGroundedSignFlipDeadband: MUSCLE_CONFIG.groundedSignFlipDeadband,
   defaultGroundedMinForceMagnitude: MUSCLE_CONFIG.groundedMinForceMagnitude,
   defaultMuscleActionBudget: MUSCLE_CONFIG.actionBudget,
+  defaultPhaseLockEnabled: MUSCLE_CONFIG.phaseLockEnabled,
+  defaultGaitHz: MUSCLE_CONFIG.gaitHz,
+  defaultCommandDeadband: MUSCLE_CONFIG.commandDeadband,
+  defaultMaxCommandDeltaPerStep: MUSCLE_CONFIG.maxCommandDeltaPerStep,
 
   // Fitness Weights
   defaultDistanceRewardWeight: FITNESS_CONFIG.distanceWeight,
@@ -87,6 +95,10 @@ export const CONFIG = {
   defaultGroundedRatioBonusWeight: FITNESS_CONFIG.groundedRatioBonusWeight,
   defaultAirtimePenaltyWeight: FITNESS_CONFIG.airtimePenaltyWeight,
   defaultVerticalSpeedPenalty: FITNESS_CONFIG.verticalSpeedPenalty,
+  defaultDeathWallEnabled: FITNESS_CONFIG.deathWallEnabled,
+  defaultDeathWallStartBehindMeters: FITNESS_CONFIG.deathWallStartBehindMeters,
+  defaultDeathWallSpeedMps: FITNESS_CONFIG.deathWallSpeedMps,
+  defaultDeathWallThicknessPx: FITNESS_CONFIG.deathWallThicknessPx,
 
   // Energy System
   defaultEnergyEnabled: ENERGY_CONFIG.enabled,
@@ -102,7 +114,12 @@ export const CONFIG = {
   defaultActivation: EVOLUTION_CONFIG.activation,
 
   // Full config modules (for direct access)
+  PHYSICS_CONFIG,
+  MUSCLE_CONFIG,
+  FITNESS_CONFIG,
+  EVOLUTION_CONFIG,
   ENERGY_CONFIG,
+  VISUAL_CONFIG,
 
   // Visual
   nodeRadius: PHYSICS_CONFIG.nodeRadius,
@@ -127,66 +144,6 @@ export {
   EVOLUTION_CONFIG,
   VISUAL_CONFIG,
 };
-
-/**
- * Config Presets for different scenarios
- */
-export const PRESETS = {
-  // Fast but potentially unstable evolution
-  SPEED: {
-    ...EVOLUTION_CONFIG,
-    simulationSpeed: 4,
-    generationDuration: 6,
-  },
-
-  // Slow but very stable physics
-  STABLE: {
-    ...PHYSICS_CONFIG,
-    positionIterations: 30,
-    velocityIterations: 24,
-    constraintIterations: 36,
-  },
-
-  // Emphasize realistic walking
-  WALKING: {
-    ...MUSCLE_CONFIG,
-    strength: 0.9,
-    moveSpeed: 0.6,
-    ...FITNESS_CONFIG,
-    spinPenalty: 20000,
-    airtimePenaltyWeight: 0.5,
-  },
-
-  // Rapid evolution with reduced constraints
-  EXPLORATORY: {
-    ...MUSCLE_CONFIG,
-    strength: 1.3,
-    moveSpeed: 1.0,
-    ...EVOLUTION_CONFIG,
-    mutationRate: 0.15,
-    mutationSize: 1.5,
-  },
-
-  // Energy-efficient gaits
-  EFFICIENT: {
-    ...ENERGY_CONFIG,
-    usagePerActuation: 1.2,
-    regenRate: 20,
-    efficiencyBonus: 1.0,
-  },
-};
-
-/**
- * Helper function to merge preset with current config
- */
-export function applyPreset(currentConfig, presetName) {
-  const preset = PRESETS[presetName];
-  if (!preset) {
-    console.warn(`Preset "${presetName}" not found`);
-    return currentConfig;
-  }
-  return { ...currentConfig, ...preset };
-}
 
 /**
  * Helper to get all tunable parameters with their current values

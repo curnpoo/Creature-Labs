@@ -11,6 +11,13 @@
  *   speedWeight, stabilityWeight, stumblePenaltyWeight, jitterPenalty, spinAccumulatedPenalty
  */
 export const FITNESS_CONFIG = {
+  // DEATH WALL objective: a wall starts behind spawn and advances rightward.
+  // Creatures touching it are eliminated, selecting for steady forward locomotion.
+  deathWallEnabled: true,
+  deathWallStartBehindMeters: 10,
+  deathWallSpeedMps: 1.0,
+  deathWallThicknessPx: 24,
+
   // PRIMARY reward: distance traveled × this multiplier
   distanceWeight: 10,
 

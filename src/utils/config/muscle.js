@@ -4,20 +4,20 @@
  */
 export const MUSCLE_CONFIG = {
   // Base Muscle Properties
-  strength: 1.0, // Base muscle strength (1.0 = 100%, normal strength)
+  strength: 1.0, // Base muscle strength
   moveSpeed: 0.1, // Muscle response speed (0.1 = slow/minimum)
   range: 1.0,                   // Muscle range multiplier (1.0 = 80% max change with 0.8 amplitude)
-  smoothing: 0.08,              // Muscle signal smoothing (lower = slower target change)
+  smoothing: 0.05,              // Muscle signal smoothing (5% default)
   signalRateLimit: 0.08,        // Max activation change per physics step (prevents snap impulses)
 
   // Spring physics (controls muscle impulse behavior)
-  springConstant: 4.5,          // Lower = less launchy
-  damping: 5.0,                 // Higher = less bounce/jitter
+  springConstant: 2.8,          // Softer spring to avoid kick/spike behavior
+  damping: 8.0,                 // Strong damping to prevent oscillation
 
   // Ground-Dependent Strength (prevents air-pushing exploits)
   groundedBothBodies: 1.0,      // Strength when both bodies grounded (100%)
   groundedOneBody: 0.7,         // Strength when one body grounded (70%)
-  groundedNoBodies: 0.15,       // Strength when airborne (15% - internal tension only)
+  groundedNoBodies: 0.03,       // Strength when airborne (3% - strongly suppress flap-like propulsion)
   groundedVerticalForceScale: 0.3, // Vertical muscle-force scale when either endpoint is grounded
   groundedDeadbandErrorPx: 1.25, // Grounded error deadband where micro spring corrections are ignored
   groundedDeadbandVelPxPerSec: 10, // Grounded relative velocity deadband along muscle axis
@@ -34,9 +34,15 @@ export const MUSCLE_CONFIG = {
   jointFreedom: 1.0, // Joint freedom (1.0 = free, 0.0 = rigid)
 
   // Action Budget (frames between muscle state changes)
-  actionBudget: 3, // ~0.05s at 60Hz - responsive enough to walk without chatter spam
+  actionBudget: 2, // Slightly slower updates to reduce twitching
+
+  // Phase-locked control
+  phaseLockEnabled: false,     // Let NEAT learn timing directly instead of fixed carrier gating
+  gaitHz: 1.6,                 // Base gait carrier frequency in Hz
+  commandDeadband: 0.01,       // Keep tiny control signals instead of flattening exploration
+  maxCommandDeltaPerStep: 0.06,// Stronger slew limit for stable actuation
 
   // Muscle Length Limits (as ratio of base length)
-  minLength: 0.8,   // 80% - can shrink to 80% of base length
-  maxLength: 1.1,   // 110% - can extend to 110% of base length
+  minLength: 0.8,   // 80% - tighter contraction range for stability
+  maxLength: 1.2,   // 120% - tighter extension range for stability
 };

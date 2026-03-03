@@ -108,16 +108,10 @@
                 <button
                     class="btn-tool text-sky-300 hover:text-sky-200"
                     id="tool-load"
-                    title="Load Design"
+                    title="Open Creature Catalog"
                 >
                     <i class="fas fa-folder-open"></i>
                 </button>
-                <input
-                    id="design-file-input"
-                    type="file"
-                    accept=".json,application/json"
-                    class="hidden"
-                >
                 <button
                     class="btn-tool text-red-400 hover:text-red-500"
                     id="tool-clear"
@@ -125,14 +119,31 @@
                 >
                     <i class="fas fa-trash"></i>
                 </button>
-                <div class="w-px bg-white/10 mx-1"></div>
-                <select
-                    id="preset-select"
-                    class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-300 cursor-pointer hover:bg-white/10"
-                >
-                    <option value="-1">Load Preset...</option>
-                </select>
             </div>
+
+            <div id="creature-catalog" class="catalog-panel hidden">
+                <div class="catalog-header">
+                    <div class="catalog-title">
+                        <i class="fas fa-layer-group mr-2"></i>Creature Catalog
+                    </div>
+                    <div class="catalog-actions">
+                        <button id="btn-catalog-import" class="catalog-btn">
+                            <i class="fas fa-file-import mr-1"></i>Import
+                        </button>
+                        <button id="btn-catalog-close" class="catalog-btn">
+                            <i class="fas fa-xmark mr-1"></i>Close
+                        </button>
+                    </div>
+                </div>
+                <div id="catalog-grid" class="catalog-grid"></div>
+            </div>
+            <input
+                id="catalog-file-input"
+                type="file"
+                accept=".json,application/json"
+                multiple
+                class="hidden"
+            >
 
             <div
                 class="absolute bottom-24 left-1/2 -translate-x-1/2 text-gray-400 text-sm pointer-events-none text-center px-4"
@@ -163,14 +174,6 @@
         <!-- ═══ SIMULATION SCREEN ═══ -->
         <div id="screen-sim" class="screen">
             <canvas id="world"></canvas>
-
-            <div id="gen-summary" class="opacity-0">
-                <div
-                    class="text-lg font-bold text-cyan-300"
-                    id="gen-summary-text"
-                >
-                </div>
-            </div>
 
             <!-- Panel Toggle Buttons (Outside panels so they stay visible) -->
             <button class="panel-toggle-btn" id="toggle-top" data-panel="panel-top-bar" title="Toggle Top Panel" style="position: fixed; top: 8px; right: 50%; transform: translateX(50%); z-index: 100;">
@@ -300,12 +303,12 @@
                                 <span class="sandbox-stat-value-inline text-purple-300" id="sandbox-stat-speed">0.0 m/s</span>
                             </div>
                             <div class="sandbox-stat-inline">
-                                <span class="sandbox-stat-label-inline">Stability</span>
-                                <span class="sandbox-stat-value-inline text-emerald-300" id="sandbox-stat-stability">0%</span>
+                                <span class="sandbox-stat-label-inline">Ground Slip</span>
+                                <span class="sandbox-stat-value-inline text-emerald-300" id="sandbox-stat-stability">0.00</span>
                             </div>
                             <div class="sandbox-stat-inline">
-                                <span class="sandbox-stat-label-inline">Falls</span>
-                                <span class="sandbox-stat-value-inline text-red-300" id="sandbox-stat-falls">0</span>
+                                <span class="sandbox-stat-label-inline">Actuation</span>
+                                <span class="sandbox-stat-value-inline text-red-300" id="sandbox-stat-falls">0%</span>
                             </div>
                         </div>
                         
@@ -323,12 +326,21 @@
                                 <i class="fas fa-sign-out-alt mr-1"></i> Exit
                             </button>
                         </div>
+
+                        <div class="control-group mt-3">
+                            <div class="control-label">Camera</div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <button id="btn-sandbox-cam-lock" class="cam-btn active">Lock</button>
+                                <button id="btn-sandbox-cam-free" class="cam-btn">Free</button>
+                                <button id="btn-sandbox-cam-reset" class="cam-btn">Reset</button>
+                            </div>
+                        </div>
                         
                         <div class="section-divider"></div>
                         
                         <!-- Live Graphs -->
                         <div class="control-group">
-                            <div class="control-label">Live Metrics (60s)</div>
+                            <div class="control-label">Live Metrics (60s Sim)</div>
                             <div class="sandbox-graphs-grid">
                                 <div class="sandbox-graph-container">
                                     <canvas id="sandbox-graph-distance" width="320" height="100"></canvas>
@@ -340,7 +352,7 @@
                                 </div>
                                 <div class="sandbox-graph-container">
                                     <canvas id="sandbox-graph-stability" width="320" height="100"></canvas>
-                                    <div class="sandbox-graph-label">Stability</div>
+                                    <div class="sandbox-graph-label">Ground Slip</div>
                                 </div>
                                 <div class="sandbox-graph-container">
                                     <canvas id="sandbox-graph-actuation" width="320" height="100"></canvas>
@@ -430,6 +442,51 @@
 
                     <div class="section-divider"></div>
 
+                    <div class="control-group">
+                        <div class="control-label">
+                            View Mode <span class="control-val" id="val-viewmode">TRAINING</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="view-training" class="toggle-btn active">Training View</button>
+                            <button id="view-best-run" class="toggle-btn">Best-Run View</button>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Turbo Mode <span class="control-val" id="val-engine">OFF</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="engine-normal" class="toggle-btn active">Off</button>
+                            <button id="engine-turbo" class="toggle-btn turbo-gold">Turbo Mode</button>
+                        </div>
+                        <div class="info-text mt-1">
+                            Turbo Status: <span id="turbo-status">IDLE</span>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">
+                            Turbo Wall Policy <span class="control-val" id="val-turbo-wall-policy">FULL</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="turbo-wall-off" class="toggle-btn">Off</button>
+                            <button id="turbo-wall-soft" class="toggle-btn">Soft</button>
+                            <button id="turbo-wall-full" class="toggle-btn active">Full</button>
+                        </div>
+                        <div class="info-text mt-1">
+                            Off disables wall in turbo. Soft keeps pressure with slower/farther wall.
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control-label">Best-Run Trigger <span class="control-val" id="val-best-trigger">ALL-TIME</span></div>
+                        <div class="flex gap-2">
+                            <button id="trigger-allbest" class="toggle-btn active">All-Time Best</button>
+                            <button id="trigger-everygen" class="toggle-btn">Every Gen</button>
+                        </div>
+                    </div>
+
                     <!-- Challenges -->
                     <div class="control-group">
                         <div class="control-label">Challenges</div>
@@ -502,12 +559,12 @@
                                 </div>
                             </div>
                             <div class="fitness-card">
-                                <div class="fitness-card-label">Stability</div>
+                                <div class="fitness-card-label">Ground Slip</div>
                                 <div
                                     class="fitness-card-value text-emerald-300"
                                     id="fitness-stability"
                                 >
-                                    0%
+                                    0.00
                                 </div>
                             </div>
                             <div class="fitness-card">
@@ -522,7 +579,7 @@
                                 </div>
                             </div>
                             <div class="fitness-card">
-                                <div class="fitness-card-label">Upright</div>
+                                <div class="fitness-card-label">Actuation</div>
                                 <div
                                     class="fitness-card-value text-emerald-400"
                                     id="fitness-upright"
@@ -534,18 +591,6 @@
                     </div>
 
                     <div class="section-divider"></div>
-
-                    <div class="control-group">
-                        <div class="control-label">Self Collision</div>
-                        <div class="flex gap-2">
-                            <button id="selfcol-on" class="toggle-btn active">
-                                <i class="fas fa-check mr-1"></i>On
-                            </button>
-                            <button id="selfcol-off" class="toggle-btn">
-                                <i class="fas fa-xmark mr-1"></i>Off
-                            </button>
-                        </div>
-                    </div>
 
                     <div class="control-group">
                         <div class="control-label">Tilt Limit</div>
@@ -608,6 +653,42 @@
                         >
                     </div>
 
+                    <!-- Death Wall Speed -->
+                    <div class="control-group">
+                        <div class="control-label">
+                            Wall Of Death Speed <span
+                                class="control-val"
+                                id="val-wall-speed"
+                            >1.00 m/s</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-wall-speed"
+                            min="10"
+                            max="300"
+                            value="100"
+                            step="5"
+                        >
+                    </div>
+
+                    <!-- Death Wall Start Offset -->
+                    <div class="control-group">
+                        <div class="control-label">
+                            Wall Start Offset <span
+                                class="control-val"
+                                id="val-wall-start"
+                            >10.0 m behind</span>
+                        </div>
+                        <input
+                            type="range"
+                            id="inp-wall-start"
+                            min="0"
+                            max="40"
+                            value="10"
+                            step="0.5"
+                        >
+                    </div>
+
                     <!-- Zoom -->
                     <div class="control-group">
                         <div class="control-label">
@@ -630,14 +711,14 @@
                             Generation Time <span
                                 class="control-val"
                                 id="val-duration"
-                            >8s</span>
+                            >30s</span>
                         </div>
                         <input
                             type="range"
                             id="inp-duration"
                             min="4"
                             max="60"
-                            value="8"
+                            value="30"
                             step="1"
                         >
                     </div>
@@ -673,6 +754,46 @@
   </div>
   <div class="text-xs text-gray-400 mt-1" style="font-family: 'JetBrains Mono', monospace">
     Starts minimal, grows with fitness
+  </div>
+</div>
+
+<div class="control-group neat-status-panel">
+  <div class="control-label">
+    NEAT Status <span class="control-val" id="neat-mode-badge">INACTIVE</span>
+  </div>
+  <div class="debug-metric-row">
+    <span class="debug-metric-label">Species</span>
+    <span class="debug-metric-value" id="neat-species-count">--</span>
+  </div>
+  <div class="debug-metric-row">
+    <span class="debug-metric-label">Innovations</span>
+    <span class="debug-metric-value" id="neat-innovation-count">--</span>
+  </div>
+  <div class="debug-metric-row">
+    <span class="debug-metric-label">Champion Complexity</span>
+    <span class="debug-metric-value" id="neat-champion-complexity">--</span>
+  </div>
+</div>
+
+<div class="control-group nn-readonly-group" id="legacy-nn-controls">
+  <div class="control-label">
+    Legacy NN Knobs <span class="control-val" id="nn-control-hint">NEAT controls topology</span>
+  </div>
+  <div class="debug-metric-row">
+    <span class="debug-metric-label">Hidden Layers</span>
+    <span class="debug-metric-value" id="val-hidden">--</span>
+  </div>
+  <div class="debug-metric-row">
+    <span class="debug-metric-label">Neurons / Layer</span>
+    <span class="debug-metric-value" id="val-neurons">--</span>
+  </div>
+  <div class="debug-metric-row">
+    <span class="debug-metric-label">Elites</span>
+    <span class="debug-metric-value" id="val-elites">--</span>
+  </div>
+  <div class="debug-metric-row">
+    <span class="debug-metric-label">Tournament</span>
+    <span class="debug-metric-value" id="val-tournament">--</span>
   </div>
 </div>
 
@@ -737,15 +858,15 @@ step="10"
                             Ground Friction <span
                                 class="control-val"
                                 id="val-groundfric"
-                            >0.95</span>
+                            >1.35</span>
                         </div>
                         <input
                             type="range"
                             id="inp-groundfric"
-                            min="0.1"
-                            max="1.0"
-                            value="0.95"
-                            step="0.05"
+                            min="10"
+                            max="300"
+                            value="135"
+                            step="5"
                         >
                     </div>
 
@@ -754,7 +875,7 @@ step="10"
                             Muscle Min Length <span
                                 class="control-val"
                                 id="val-musminlen"
-                            >80%</span>
+                            >50%</span>
                             <span class="text-xs text-gray-500">(50-100%)</span>
                         </div>
                         <input
@@ -762,7 +883,7 @@ step="10"
                             id="inp-musminlen"
                             min="50"
                             max="100"
-                            value="80"
+                            value="50"
                             step="5"
                         >
                     </div>
@@ -772,7 +893,7 @@ step="10"
                             Muscle Max Length <span
                                 class="control-val"
                                 id="val-musmaxlen"
-                            >110%</span>
+                            >150%</span>
                             <span class="text-xs text-gray-500">(100-150%)</span>
                         </div>
                         <input
@@ -780,7 +901,7 @@ step="10"
                             id="inp-musmaxlen"
                             min="100"
                             max="150"
-                            value="110"
+                            value="150"
                             step="5"
                         >
                     </div>
@@ -790,7 +911,7 @@ step="10"
                             Muscle Speed <span
                                 class="control-val"
                                 id="val-musmooth"
-                            >10.0%</span>
+                            >5.0%</span>
                             <span class="text-xs text-gray-500">(1.0%=slow/no jitter · 10.0%=fast/may jitter)</span>
                         </div>
 <input
@@ -798,7 +919,7 @@ step="10"
                 id="inp-musmooth"
                 min="10"
                 max="100"
-                value="100"
+                value="50"
                 step="1"
               >
             </div>
@@ -946,6 +1067,71 @@ step="1"
                         Evolution: tournament selection + uniform crossover +
                         gaussian mutation.
                     </div>
+
+                    <div class="section-divider"></div>
+                    <div class="control-group" style="margin-top: 8px;">
+                        <div class="control-label">
+                            Testing Mode <span class="control-val" id="testing-health">IDLE</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="testing-off" class="toggle-btn active">Off</button>
+                            <button id="testing-on" class="toggle-btn">On</button>
+                        </div>
+                        <div class="info-text mt-1">
+                            Scope: <span id="testing-scope">Turbo Verification</span>
+                        </div>
+                        <div class="info-text mt-1">
+                            Last Run: <span id="testing-last-run">Waiting for cycle...</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mt-2">
+                            <button id="testing-copy-compact" class="cam-btn">
+                                <i class="fas fa-copy mr-1"></i>Copy Compact
+                            </button>
+                            <button id="testing-copy-full" class="cam-btn">
+                                <i class="fas fa-file-lines mr-1"></i>Copy Full
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="section-divider"></div>
+                    <div class="section-title text-cyan-400">Actuation Debug</div>
+                    <div class="control-group actuation-debug-panel">
+                        <div class="debug-metric-row">
+                            <span class="debug-metric-label">Intent Update Rate</span>
+                            <span class="debug-metric-value" id="dbg-intent-hz">0.00 Hz</span>
+                        </div>
+                        <div class="debug-metric-row">
+                            <span class="debug-metric-label">Command Oscillation</span>
+                            <span class="debug-metric-value" id="dbg-osc-hz">0.00 Hz</span>
+                        </div>
+                        <div class="debug-metric-row">
+                            <span class="debug-metric-label">Avg |Δcommand| / sec</span>
+                            <span class="debug-metric-value" id="dbg-delta-sec">0.00</span>
+                        </div>
+                        <div class="debug-metric-row">
+                            <span class="debug-metric-label">Micro-Actuation Index</span>
+                            <span class="debug-metric-value" id="dbg-micro-index">0.00</span>
+                        </div>
+                        <div class="debug-metric-row">
+                            <span class="debug-metric-label">Grounded Slip</span>
+                            <span class="debug-metric-value" id="dbg-grounded-slip">0.00</span>
+                        </div>
+                        <div class="actuation-sparkline-wrap">
+                            <div class="actuation-sparkline-header">
+                                <span class="debug-metric-label">Selected Muscle</span>
+                                <select id="dbg-muscle-select" class="actuation-sparkline-select">
+                                    <option value="0">Muscle 1</option>
+                                </select>
+                            </div>
+                            <canvas id="dbg-muscle-canvas" width="284" height="64"></canvas>
+                            <div id="dbg-muscle-placeholder" class="actuation-sparkline-placeholder">Waiting for muscle diagnostics...</div>
+                            <div class="actuation-sparkline-legend">
+                                <span class="sparkline-pill"><i style="background:#7dd3fc"></i>Intent</span>
+                                <span class="sparkline-pill"><i style="background:#fbbf24"></i>Carrier</span>
+                                <span class="sparkline-pill"><i style="background:#34d399"></i>Command</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 </div>
 
@@ -958,7 +1144,7 @@ style="grid-area: bottom; border-top: 1px solid var(--border-color); border-radi
                     <!-- TRAINING MODE DETAILS -->
                     <div id="training-details" class="h-full flex flex-col">
                         <div class="sim-panel-title" style="border: none; padding: 4px 0 2px">
-                            <span><i class="fas fa-chart-bar mr-1"></i> Current Run</span>
+                            <span id="scorecard-title"><i class="fas fa-chart-bar mr-1"></i> Current Run</span>
                             <span id="score-mode" class="text-cyan-300 text-[9px]">TRAINING</span>
                         </div>
                         <!-- Individual metric graphs in horizontal layout -->
@@ -981,12 +1167,12 @@ style="grid-area: bottom; border-top: 1px solid var(--border-color); border-radi
                                 <div class="fitness-card-value text-cyan-300" style="font-size: 20px" id="sandbox-speed">0.0 m/s</div>
                             </div>
                             <div class="fitness-card" style="padding: 12px 6px">
-                                <div class="fitness-card-label" style="font-size: 10px">Stability</div>
-                                <div class="fitness-card-value text-purple-300" style="font-size: 20px" id="sandbox-stability">0%</div>
+                                <div class="fitness-card-label" style="font-size: 10px">Ground Slip</div>
+                                <div class="fitness-card-value text-purple-300" style="font-size: 20px" id="sandbox-stability">0.00</div>
                             </div>
                             <div class="fitness-card" style="padding: 12px 6px">
-                                <div class="fitness-card-label" style="font-size: 10px">Stumbles</div>
-                                <div class="fitness-card-value text-rose-300" style="font-size: 20px" id="sandbox-falls">0</div>
+                                <div class="fitness-card-label" style="font-size: 10px">Actuation</div>
+                                <div class="fitness-card-value text-rose-300" style="font-size: 20px" id="sandbox-falls">0%</div>
                             </div>
                             <div class="fitness-card" style="padding: 12px 6px">
                                 <div class="fitness-card-label" style="font-size: 10px">Ground Slip</div>
@@ -1020,6 +1206,26 @@ style="grid-area: bottom; border-top: 1px solid var(--border-color); border-radi
                             class="w-full h-full"
                             style="display: block;"
                         ></canvas>
+                    </div>
+
+                    <!-- NEAT Progress (compact, left panel) -->
+                    <div id="left-neat-progress" style="padding: 8px 10px 6px; border-bottom: 1px solid var(--border-color); flex-shrink: 0; background: rgba(6, 10, 18, 0.72);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <span style="font-size:11px; color:#67e8f9; font-family:'JetBrains Mono', monospace; letter-spacing:0.4px;">NEAT Progress</span>
+                            <span id="left-neat-mode" style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono', monospace;">ACTIVE</span>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns: 1fr auto; gap:2px 8px; margin-bottom:6px; font-family:'JetBrains Mono', monospace; font-size:11px;">
+                            <span style="color:#7dd3fc;">Species</span><span id="left-neat-species" style="color:#e2e8f0;">--</span>
+                            <span style="color:#a78bfa;">Innovations</span><span id="left-neat-innovations" style="color:#e2e8f0;">--</span>
+                            <span style="color:#fbbf24;">Champion (N/C)</span><span id="left-neat-champion" style="color:#e2e8f0;">--</span>
+                        </div>
+
+                        <div style="display:flex; flex-direction:column; gap:4px;">
+                            <canvas id="left-neat-species-spark" width="300" height="24" style="width:100%; height:24px; background:rgba(0,0,0,0.2); border-radius:4px;"></canvas>
+                            <canvas id="left-neat-innov-spark" width="300" height="24" style="width:100%; height:24px; background:rgba(0,0,0,0.2); border-radius:4px;"></canvas>
+                            <canvas id="left-neat-complexity-spark" width="300" height="24" style="width:100%; height:24px; background:rgba(0,0,0,0.2); border-radius:4px;"></canvas>
+                        </div>
                     </div>
 
                     <!-- Evolution Health -->
@@ -1094,16 +1300,16 @@ id="sandbox-speed-left"
 </div>
 </div>
 <div class="sandbox-stat">
-<div class="sandbox-stat-label">Stability</div>
+<div class="sandbox-stat-label">Ground Slip</div>
 <div
 class="sandbox-stat-value text-emerald-300"
 id="sandbox-stability-left"
 >
-0%
+0.00
 </div>
 </div>
 <div class="sandbox-stat">
-<div class="sandbox-stat-label">Falls</div>
+<div class="sandbox-stat-label">Actuation</div>
 <div
 class="sandbox-stat-value text-rose-300"
 id="sandbox-falls-left"

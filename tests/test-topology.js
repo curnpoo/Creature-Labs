@@ -71,7 +71,7 @@ console.log('  Child layers:', child.layerSizes);
 console.log('  [OK] Crossover works\n');
 
 // Test 7: Evolution with topology mutations
-console.log('Test 7: Evolution with topology mutations');
+console.log('Test 7: Evolution compatibility (legacy + NEAT)');
 
 // First verify each creature's DNA is valid
 const creatureDNAs = [
@@ -84,9 +84,10 @@ const creatureDNAs = [
 console.log('  Creature DNA lengths:', creatureDNAs.map(d => d.length));
 
 const creatures = creatureDNAs.map((dna, i) => ({ dna, fitness: 10 - i * 2 }));
+let nextGen = null;
 
 try {
-  const nextGen = Evolution.evolve(creatures, 4, {
+  nextGen = Evolution.evolve(creatures, 4, {
     mutationRate: 0.1,
     mutationSize: 1.0,
     eliteCount: 1,
@@ -99,22 +100,27 @@ try {
     removeNeuronRate: 0.1
   }, { inputs: 4, outputs: 3 });
 
-  console.log('  Generated', nextGen.length, 'new DNAs');
-  console.log('  DNA lengths:', nextGen.map(d => d.length));
+  const nextGenDna = nextGen.map(entry => entry?.dna || entry).filter(Boolean);
+  console.log('  Generated', nextGen.length, 'new entries');
+  console.log('  DNA lengths:', nextGenDna.map(d => d.length));
   
   const architectures = [];
-  for (let i = 0; i < nextGen.length; i++) {
+  for (let i = 0; i < nextGenDna.length; i++) {
     try {
-      const dna = nextGen[i];
+      const dna = nextGenDna[i];
       if (!dna || dna.length < 2) {
         console.error(`  DNA ${i} is invalid:`, dna);
         architectures.push('INVALID');
         continue;
       }
-      const net = new TopologyNeuralNetwork(dna);
-      architectures.push(net.layerSizes.join('-'));
+      if (TopologyNeuralNetwork._looksLikeDna(dna)) {
+        const net = new TopologyNeuralNetwork(dna);
+        architectures.push(net.layerSizes.join('-'));
+      } else {
+        architectures.push(`flat-${dna.length}`);
+      }
     } catch (e) {
-      console.error(`  DNA ${i} failed:`, e.message, 'length:', nextGen[i]?.length);
+      console.error(`  DNA ${i} failed:`, e.message, 'length:', nextGenDna[i]?.length);
       architectures.push('ERROR');
     }
   }
@@ -125,8 +131,8 @@ try {
   console.error('  Stack:', e.stack);
 }
 
-// Test 8: Population stats (if we have nextGen from test 7)
-if (typeof nextGen !== 'undefined') {
+// Test 8: Population stats (legacy compatibility)
+if (nextGen) {
   const stats = Evolution.getPopulationStats(nextGen);
   console.log('  Architecture distribution:');
   stats.architectures.forEach((count, arch) => {
@@ -137,6 +143,36 @@ if (typeof nextGen !== 'undefined') {
   console.log('  [OK] Population stats work\n');
 } else {
   console.log('  Test 8 skipped (nextGen not available)\n');
+}
+
+// Test 9: NEAT-era output expectations
+console.log('Test 9: NEAT evolve output shape');
+try {
+  const neatNext = Evolution.evolve([
+    { dna: new Float32Array([0.1, -0.2, 0.3]), fitness: 10 },
+    { dna: new Float32Array([0.4, 0.2, -0.6]), fitness: 8 },
+    { dna: new Float32Array([-0.1, 0.9, 0.05]), fitness: 6 },
+    { dna: new Float32Array([0.7, -0.4, 0.2]), fitness: 5 }
+  ], 4, {
+    trainingAlgorithm: 'neat',
+    neatMode: true,
+    neatInputCount: 4,
+    neatOutputCount: 3
+  });
+
+  const hasGenome = neatNext.every(entry => entry && typeof entry === 'object' && entry.genome);
+  const hasGenomeId = neatNext.every(entry => entry && Number.isFinite(entry.genomeId));
+  const hasControllerType = neatNext.every(entry => entry && entry.controllerType === 'neat');
+  console.log('  Entries:', neatNext.length);
+  console.log('  Has genome metadata:', hasGenome);
+  console.log('  Has genome IDs:', hasGenomeId);
+  console.log('  Has NEAT controller type:', hasControllerType);
+  if (!hasGenome || !hasGenomeId || !hasControllerType || neatNext.length !== 4) {
+    throw new Error('NEAT evolve output shape mismatch');
+  }
+  console.log('  [OK] NEAT output shape is valid\n');
+} catch (e) {
+  console.error('  ✗ NEAT compatibility failed:', e.message);
 }
 
 console.log('=== All tests passed! ===');
