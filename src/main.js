@@ -77,12 +77,6 @@ function showBrainMigrationNoticeOnce(migration) {
   try {
     const shownVersion = localStorage.getItem(BRAIN_MIGRATION_NOTICE_KEY);
     if (shownVersion === BRAIN_SCHEMA_VERSION) return;
-    const clearedCount = migration.clearedKeys.length;
-    const noun = clearedCount === 1 ? 'entry' : 'entries';
-    alert(
-      `Training brains were reset for compatibility with the latest NEAT/controller update. ` +
-      `Cleared ${clearedCount} incompatible brain ${noun}. Creature catalog designs were kept.`
-    );
     localStorage.setItem(BRAIN_MIGRATION_NOTICE_KEY, BRAIN_SCHEMA_VERSION);
   } catch {
     // Ignore notice failures; migration already completed.
