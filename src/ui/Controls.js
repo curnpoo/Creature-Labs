@@ -108,8 +108,7 @@ export class Controls {
     });
     this._bindSlider('inp-pop', v => { this.sim.popSize = v; });
     this._bindSlider('inp-strength', v => {
-      const base = CONFIG.defaultMuscleStrength || 1;
-      this.sim.muscleStrength = (v / 100) * base;
+      this.sim.muscleStrength = v / 100;
       this.sim.creatures.forEach(c => { c.simConfig.muscleStrength = this.sim.muscleStrength; });
     });
     this._bindSlider('inp-gravity', v => {
@@ -697,8 +696,7 @@ export class Controls {
     set('val-wall-start', `${s.deathWallStartBehindMeters.toFixed(1)} m behind`);
     set('val-duration', `${s.simDuration}s`);
     set('val-pop', `${s.popSize}`);
-    const baseStrength = CONFIG.defaultMuscleStrength || 1;
-    set('val-strength', `${Math.round((s.muscleStrength / baseStrength) * 100)}%`);
+    set('val-strength', `${Math.round(s.muscleStrength * 100)}%`);
     set('val-gravity', s.gravity.toFixed(2));
     set('val-groundfric', `${s.groundFriction.toFixed(2)}`);
     set('val-musrange', `${Math.round(s.muscleRange * 100)}%`);
@@ -834,7 +832,7 @@ export class Controls {
       'inp-turbo-poles': String(Math.max(1, Math.min(20, Math.round(s.turboGenPoleCount || 5)))),
       'inp-duration': String(Math.round(s.simDuration)),
       'inp-pop': String(Math.round(s.popSize)),
-      'inp-strength': String(Math.round((s.muscleStrength / (CONFIG.defaultMuscleStrength || 1)) * 100)),
+      'inp-strength': String(Math.round(s.muscleStrength * 100)),
       'inp-gravity': s.gravity.toFixed(2),
       'inp-groundfric': String(Math.round(s.groundFriction * 100)),
       'inp-musrange': String(Math.round(s.muscleRange * 100)),
