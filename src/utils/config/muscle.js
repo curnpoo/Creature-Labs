@@ -4,7 +4,7 @@
  */
 export const MUSCLE_CONFIG = {
   // Base Muscle Properties
-  strength: 1.0, // Base muscle strength
+  strength: 2.0, // Base muscle strength (200% default power)
   moveSpeed: 0.1, // Muscle response speed (0.1 = slow/minimum)
   range: 1.0,                   // Muscle range multiplier (1.0 = 80% max change with 0.8 amplitude)
   smoothing: 0.05,              // Muscle signal smoothing (5% default)
@@ -43,6 +43,6 @@ export const MUSCLE_CONFIG = {
   maxCommandDeltaPerStep: 0.06,// Stronger slew limit for stable actuation
 
   // Muscle Length Limits (as ratio of base length)
-  minLength: 0.6,   // 60% minimum length
-  maxLength: 1.3,   // 130% maximum length
+  minLength: 0.5,   // 50% minimum length
+  maxLength: 1.5,   // 150% maximum length
 };
