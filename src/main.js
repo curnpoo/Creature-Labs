@@ -95,6 +95,7 @@ let creatureCatalog = [];
 let creatureCatalogUpdatedAt = 0;
 let creatureCatalogDbPromise = null;
 let hasShownCreatureCatalogStorageWarning = false;
+let hasHydratedCreatureCatalog = false;
 
 function getCurrentAppState() {
   return {
@@ -1725,6 +1726,8 @@ function loadCreatureCatalog() {
 }
 
 async function hydrateCreatureCatalogFromIndexedDb() {
+  if (hasHydratedCreatureCatalog) return;
+  hasHydratedCreatureCatalog = true;
   const [indexedDbRecord, cacheRecord] = await Promise.all([
     readCreatureCatalogFromIndexedDb(),
     readCreatureCatalogFromCacheStorage()
@@ -1765,11 +1768,17 @@ async function persistCreatureCatalog() {
     writeCreatureCatalogToCacheStorage(record)
   ]);
   const persisted = localStorageSaved || indexedDbSaved || cacheStorageSaved;
+  const result = {
+    persisted,
+    localStorageSaved,
+    indexedDbSaved,
+    cacheStorageSaved
+  };
   if (!persisted && !hasShownCreatureCatalogStorageWarning) {
     hasShownCreatureCatalogStorageWarning = true;
     alert('Save failed on this device. Export JSON to keep a backup.');
   }
-  return persisted;
+  return result;
 }
 
 async function wasCatalogEntryPersisted(entryId) {
@@ -1881,16 +1890,24 @@ async function saveCurrentCreatureToCatalog(name = null) {
   };
   creatureCatalog.unshift(entry);
   if (creatureCatalog.length > 120) creatureCatalog = creatureCatalog.slice(0, 120);
-  const persisted = await persistCreatureCatalog();
-  const verified = persisted ? await wasCatalogEntryPersisted(entry.id) : false;
+  const persistStatus = await persistCreatureCatalog();
+  const verified = persistStatus?.persisted ? await wasCatalogEntryPersisted(entry.id) : false;
+  if (!verified) {
+    creatureCatalog = creatureCatalog.filter(item => item.id !== entry.id);
+  }
   renderCreatureCatalog();
   if (!verified) {
-    alert('Saved for this session only. iOS storage blocked persistence; export JSON as backup.');
+    const failures = [
+      !persistStatus?.localStorageSaved ? 'localStorage' : null,
+      !persistStatus?.indexedDbSaved ? 'IndexedDB' : null,
+      !persistStatus?.cacheStorageSaved ? 'CacheStorage' : null
+    ].filter(Boolean).join(', ');
+    alert(`Save did not persist on this device (${failures || 'unknown'} unavailable). Use Export JSON as backup.`);
   }
 
   // Show a temporary toast notification instead of opening the catalog
   const toast = document.createElement('div');
-  toast.textContent = verified ? 'Save successful' : 'Saved (session only)';
+  toast.textContent = verified ? 'Save successful' : 'Save failed';
   toast.style.cssText = `
     position: absolute;
     top: 24px;
@@ -1945,6 +1962,7 @@ function toggleCreatureCatalog(forceOpen = null) {
   
   let backdrop = document.getElementById('catalog-backdrop');
   if (open) {
+    void hydrateCreatureCatalogFromIndexedDb();
     renderCreatureCatalog();
     if (!backdrop) {
       backdrop = document.createElement('div');
@@ -2605,7 +2623,6 @@ if (localCatalogRecord && localCatalogRecord.items.length) {
   creatureCatalog = buildCatalogRuntimeEntries(buildDefaultCreatureCatalogEntries());
   creatureCatalogUpdatedAt = 0;
 }
-void hydrateCreatureCatalogFromIndexedDb();
 renderCreatureCatalog();
 
 const setChallengeTool = tool => {
