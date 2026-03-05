@@ -169,8 +169,10 @@ export class Designer {
 
   resize() {
     if (this.canvas) {
-      this.canvas.width = window.innerWidth;
-      this.canvas.height = window.innerHeight;
+      const viewportWidth = Math.max(window.innerWidth || 0, document.documentElement?.clientWidth || 0);
+      const viewportHeight = Math.max(window.innerHeight || 0, document.documentElement?.clientHeight || 0);
+      this.canvas.width = viewportWidth;
+      this.canvas.height = viewportHeight;
     }
   }
 

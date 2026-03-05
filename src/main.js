@@ -40,6 +40,24 @@ function updateOrientationClasses() {
 window.addEventListener('resize', updateOrientationClasses);
 updateOrientationClasses();
 
+function updateMobileViewportInsets() {
+  if (!document.body.classList.contains('app-mobile')) return;
+  const viewport = window.visualViewport;
+  let browserBottomInset = 0;
+  if (viewport) {
+    const layoutHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
+    browserBottomInset = Math.max(0, Math.round(layoutHeight - viewport.height - viewport.offsetTop));
+  }
+  document.documentElement.style.setProperty('--mobile-browser-ui-bottom', `${browserBottomInset}px`);
+}
+
+window.addEventListener('resize', updateMobileViewportInsets);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', updateMobileViewportInsets);
+  window.visualViewport.addEventListener('scroll', updateMobileViewportInsets);
+}
+updateMobileViewportInsets();
+
 // --- State ---
 let currentScreen = 'splash';
 const screens = {
@@ -341,9 +359,11 @@ function setScreen(name) {
 }
 
 function resizeCanvases() {
+  const viewportWidth = Math.max(window.innerWidth || 0, document.documentElement?.clientWidth || 0);
+  const viewportHeight = Math.max(window.innerHeight || 0, document.documentElement?.clientHeight || 0);
   designer.resize();
-  worldCanvas.width = window.innerWidth;
-  worldCanvas.height = window.innerHeight;
+  worldCanvas.width = viewportWidth;
+  worldCanvas.height = viewportHeight;
 }
 
 function worldPointFromEvent(e) {
