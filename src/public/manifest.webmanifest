@@ -2,17 +2,23 @@
   "name": "Creature Labs - Evolve!",
   "short_name": "Creature Labs",
   "description": "Design creatures and evolve neural locomotion in Creature Labs.",
-  "start_url": "./",
-  "scope": "./",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#06080e",
   "theme_color": "#06080e",
   "orientation": "any",
   "icons": [
     {
-      "src": "./assets/Creature-Labs.svg",
+      "src": "/creaturelabs-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/creaturelabs-icon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]
