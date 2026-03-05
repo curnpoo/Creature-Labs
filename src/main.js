@@ -1803,7 +1803,7 @@ window.addEventListener('keydown', e => {
 const startTrainingNow = ({ startPaused = false } = {}) => {
   progressChart.clear();
   if (!sim.startSimulation()) {
-    alert('Design needs at least 2 nodes, 1 bone, and 1 muscle.');
+    alert('Design needs at least 2 nodes and 1 muscle.');
     return false;
   }
   if (sim.sandboxMode) {
