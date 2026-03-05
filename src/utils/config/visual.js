@@ -5,6 +5,8 @@
 export const VISUAL_CONFIG = {
   // Camera
   defaultZoom: 1.8,             // Default zoom level
+  minZoom: 0.15,                // Minimum camera zoom (supports larger creatures)
+  maxZoom: 2.5,                 // Maximum camera zoom
   cameraMode: 'lock',           // Camera mode: 'lock' or 'free'
 
   // Ghost/History

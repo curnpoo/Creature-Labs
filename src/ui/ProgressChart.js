@@ -127,6 +127,11 @@ export class ProgressChart {
 
     const modeConfig = this.catalog[this.mode];
     const findMetric = id => modeConfig.metrics.find(m => m.id === id);
+    const useMobileTopPack = document.body.classList.contains('app-mobile') && !!this.topContainer;
+    const topMetricIds = [...modeConfig.layout.top];
+    const secondaryBottomIds = useMobileTopPack
+      ? modeConfig.layout.bottom.filter(id => !topMetricIds.includes(id))
+      : [...modeConfig.layout.bottom];
 
     const mount = (location, ids) => {
       const container = location === 'left' ? this.leftContainer : (location === 'top' ? this.topContainer : this.bottomContainer);
@@ -141,17 +146,23 @@ export class ProgressChart {
     };
 
     mount('left', modeConfig.layout.left);
-    mount('top', modeConfig.layout.top);
-    mount('bottom', modeConfig.layout.bottom);
+    mount('top', topMetricIds);
+    mount('bottom', secondaryBottomIds);
   }
 
   createMetricGraph(metric, location) {
     const container = document.createElement('div');
 
+    const mobileTopSheet = location === 'top' && document.body.classList.contains('app-mobile');
+
     if (location === 'left') {
       container.style.cssText = 'display:flex;flex-direction:column;background:rgba(5,8,16,0.4);border:1px solid rgba(255,255,255,0.05);border-radius:6px;padding:6px 8px;min-height:70px;';
     } else if (location === 'top') {
-      container.style.cssText = 'flex:1;display:flex;flex-direction:column;background:rgba(5,8,16,0.3);border-radius:4px;padding:4px 6px;min-width:0;';
+      if (mobileTopSheet) {
+        container.style.cssText = 'display:flex;flex-direction:column;background:rgba(5,8,16,0.46);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:10px;min-height:124px;';
+      } else {
+        container.style.cssText = 'flex:1;display:flex;flex-direction:column;background:rgba(5,8,16,0.3);border-radius:4px;padding:4px 6px;min-width:0;';
+      }
     } else {
       container.style.cssText = 'display:flex;flex-direction:column;background:rgba(5,8,16,0.4);border:1px solid rgba(255,255,255,0.05);border-radius:6px;padding:6px 8px;min-height:90px;';
     }
@@ -161,17 +172,19 @@ export class ProgressChart {
 
     const label = document.createElement('div');
     label.textContent = metric.label;
-    label.style.cssText = `font-size:${location === 'top' ? '9px' : '10px'};color:rgba(255,255,255,0.44);font-family:"Inter",sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.45px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
+    label.style.cssText = `font-size:${location === 'top' ? (mobileTopSheet ? '10px' : '9px') : '10px'};color:rgba(255,255,255,0.44);font-family:"Inter",sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:0.45px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`;
 
     const value = document.createElement('div');
-    value.style.cssText = `font-size:${location === 'top' ? '11px' : '13px'};color:${metric.color};font-weight:700;font-family:"Inter",sans-serif;letter-spacing:0.2px;white-space:nowrap;`;
+    value.style.cssText = `font-size:${location === 'top' ? (mobileTopSheet ? '17px' : '11px') : '13px'};color:${metric.color};font-weight:700;font-family:"Inter",sans-serif;letter-spacing:0.2px;white-space:nowrap;`;
     value.textContent = metric.format(0);
 
     header.appendChild(label);
     header.appendChild(value);
 
     const canvas = document.createElement('canvas');
-    const canvasHeight = location === 'top' ? 32 : (location === 'left' ? 42 : 50);
+    const canvasHeight = location === 'top'
+      ? (mobileTopSheet ? 72 : 32)
+      : (location === 'left' ? 42 : 50);
     canvas.width = 300;
     canvas.height = canvasHeight;
     canvas.style.cssText = `width:100%;height:${canvasHeight}px;display:block;`;

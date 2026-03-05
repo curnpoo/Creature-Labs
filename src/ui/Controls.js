@@ -40,16 +40,32 @@ export class Controls {
   }
 
   bind(callbacks) {
-    const { onPause, onReset, onEdit, onStartDraw, onBack, onRun, onStartSim, onResetSettings } = callbacks;
+    const { onPause, onReset, onEdit, onStartDraw, onBack, onRun, onStartSim, onResetSettings, onFitCameraToCreature } = callbacks;
     const notifyCameraChanged = () => {
       if (callbacks.onCameraChanged) callbacks.onCameraChanged();
     };
+    const minZoom = Number.isFinite(CONFIG.minZoom) ? CONFIG.minZoom : 0.15;
+    const maxZoom = Number.isFinite(CONFIG.maxZoom) ? CONFIG.maxZoom : 2.5;
+    const clampZoom = value => Math.max(minZoom, Math.min(maxZoom, value));
 
     // Screen nav
+    const btnLoginSplash = document.getElementById('btn-login-splash');
+    if (btnLoginSplash) btnLoginSplash.onclick = onStartDraw;
     const btnStartDraw = document.getElementById('btn-start-draw');
-    if (btnStartDraw) btnStartDraw.onclick = onStartDraw;
+    if (btnStartDraw) {
+      btnStartDraw.onclick = () => {
+        if (btnStartDraw.classList.contains('is-launching')) return;
+        btnStartDraw.classList.add('is-launching');
+        window.setTimeout(() => {
+          btnStartDraw.classList.remove('is-launching');
+          onStartDraw();
+        }, 240);
+      };
+    }
     const btnBack = document.getElementById('btn-back');
     if (btnBack) btnBack.onclick = onBack;
+    const btnBackMobile = document.getElementById('btn-back-toolbar');
+    if (btnBackMobile) btnBackMobile.onclick = onBack;
     const btnRun = document.getElementById('btn-run');
     if (btnRun) btnRun.onclick = onRun;
 
@@ -101,7 +117,7 @@ export class Controls {
       if (this.sim.setTurboGenPoleCount) this.sim.setTurboGenPoleCount(v);
       else this.sim.turboGenPoleCount = Math.max(1, Math.min(20, Math.round(v)));
     });
-    this._bindSlider('inp-zoom', v => { this.sim.zoom = v / 100; });
+    this._bindSlider('inp-zoom', v => { this.sim.zoom = clampZoom(v / 100); });
     this._bindSlider('inp-duration', v => {
       this.sim.simDuration = v;
       this.sim.timer = Math.min(this.sim.timer, v);
@@ -182,9 +198,13 @@ export class Controls {
       notifyCameraChanged();
     };
     if (camReset) camReset.onclick = () => {
-      this.sim.cameraX = 0;
-      this.sim.cameraY = 0;
-      this.setCameraMode('lock');
+      if (typeof onFitCameraToCreature === 'function') {
+        onFitCameraToCreature();
+      } else {
+        this.sim.cameraX = 0;
+        this.sim.cameraY = 0;
+        this.setCameraMode('lock');
+      }
       notifyCameraChanged();
     };
 
@@ -287,7 +307,7 @@ export class Controls {
         const worldX = sx / this.sim.zoom + this.sim.cameraX;
         const worldY = sy / this.sim.zoom + this.sim.cameraY;
         const delta = Math.max(-120, Math.min(120, e.deltaY));
-        const nextZoom = Math.max(0.35, Math.min(2.5, this.sim.zoom * Math.exp(-delta * 0.0015)));
+        const nextZoom = clampZoom(this.sim.zoom * Math.exp(-delta * 0.0015));
         this.sim.cameraX = worldX - sx / nextZoom;
         this.sim.cameraY = worldY - sy / nextZoom;
         this.sim.zoom = nextZoom;
@@ -297,6 +317,85 @@ export class Controls {
         notifyCameraChanged();
         e.preventDefault();
       }, { passive: false });
+
+      // Touch Handling for Mobile Camera
+      let touchStartDist = 0;
+      let initialZoom = 1;
+      let lastTouchMove = 0;
+      
+      world.addEventListener('touchstart', e => {
+        if (e.touches.length === 0) return;
+        
+        lastTouchMove = Date.now();
+        if (e.touches.length === 1) {
+          if (this.sim.cameraMode !== 'free') return;
+          this.sim.panning = true;
+          this.sim.panX = e.touches[0].clientX;
+          this.sim.panY = e.touches[0].clientY;
+        } else if (e.touches.length === 2) {
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          touchStartDist = Math.sqrt(dx * dx + dy * dy);
+          initialZoom = this.sim.zoom;
+          this.sim.panning = false;
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      world.addEventListener('touchmove', e => {
+        if (e.touches.length === 1 && this.sim.panning && this.sim.cameraMode === 'free') {
+          const dx = e.touches[0].clientX - this.sim.panX;
+          const dy = e.touches[0].clientY - this.sim.panY;
+          this.sim.panX = e.touches[0].clientX;
+          this.sim.panY = e.touches[0].clientY;
+          this.sim.cameraX -= dx / this.sim.zoom;
+          this.sim.cameraY -= dy / this.sim.zoom;
+          notifyCameraChanged();
+          
+          if (Date.now() - lastTouchMove > 50 || Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+             e.preventDefault(); // Only prevent default if actually dragging, allowing short taps to become clicks
+          }
+        } else if (e.touches.length === 2) {
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (touchStartDist > 0) {
+            const scale = dist / touchStartDist;
+            const nextZoom = clampZoom(initialZoom * scale);
+            
+            if (this.sim.cameraMode === 'free') {
+              const rect = world.getBoundingClientRect();
+              const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+              const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+              
+              const worldX = cx / this.sim.zoom + this.sim.cameraX;
+              const worldY = cy / this.sim.zoom + this.sim.cameraY;
+              
+              this.sim.cameraX = worldX - cx / nextZoom;
+              this.sim.cameraY = worldY - cy / nextZoom;
+            }
+            this.sim.zoom = nextZoom;
+            
+            const zoomSlider = document.getElementById('inp-zoom');
+            if (zoomSlider) zoomSlider.value = String(Math.round(this.sim.zoom * 100));
+            this.updateLabels();
+            notifyCameraChanged();
+          }
+          e.preventDefault();
+        }
+      }, { passive: false });
+      
+      world.addEventListener('touchend', e => {
+        if (e.touches.length === 0) {
+          this.sim.panning = false;
+        } else if (e.touches.length === 1 && this.sim.cameraMode === 'free') {
+          this.sim.panning = true;
+          this.sim.panX = e.touches[0].clientX;
+          this.sim.panY = e.touches[0].clientY;
+        } else {
+          this.sim.panning = false;
+        }
+      });
     }
 
     window.addEventListener('mousemove', e => {
@@ -318,7 +417,7 @@ export class Controls {
         const cy = window.innerHeight * 0.5;
         const wx = cx / this.sim.zoom + this.sim.cameraX;
         const wy = cy / this.sim.zoom + this.sim.cameraY;
-        this.sim.zoom = Math.min(2.5, this.sim.zoom + 0.08);
+        this.sim.zoom = clampZoom(this.sim.zoom + 0.08);
         this.sim.cameraX = wx - cx / this.sim.zoom;
         this.sim.cameraY = wy - cy / this.sim.zoom;
         const zoomSlider = document.getElementById('inp-zoom');
@@ -331,7 +430,7 @@ export class Controls {
         const cy = window.innerHeight * 0.5;
         const wx = cx / this.sim.zoom + this.sim.cameraX;
         const wy = cy / this.sim.zoom + this.sim.cameraY;
-        this.sim.zoom = Math.max(0.35, this.sim.zoom - 0.08);
+        this.sim.zoom = clampZoom(this.sim.zoom - 0.08);
         this.sim.cameraX = wx - cx / this.sim.zoom;
         this.sim.cameraY = wy - cy / this.sim.zoom;
         const zoomSlider = document.getElementById('inp-zoom');
@@ -394,6 +493,14 @@ export class Controls {
     if (wallStart) wallStart.value = String(this.sim.deathWallStartBehindMeters.toFixed(1));
     const turboPoles = document.getElementById('inp-turbo-poles');
     if (turboPoles) turboPoles.value = String(Math.max(1, Math.min(20, Math.round(this.sim.turboGenPoleCount || 5))));
+    const zoomSlider = document.getElementById('inp-zoom');
+    if (zoomSlider) {
+      zoomSlider.min = String(Math.round(minZoom * 100));
+      zoomSlider.max = String(Math.round(maxZoom * 100));
+      zoomSlider.step = '1';
+      this.sim.zoom = clampZoom(this.sim.zoom);
+      zoomSlider.value = String(Math.round(this.sim.zoom * 100));
+    }
 
     this.setCameraMode('lock');
     this.setViewMode(this.sim.viewMode || 'training');
@@ -811,7 +918,9 @@ export class Controls {
     s.muscleActionBudget = CONFIG.defaultMuscleActionBudget;
     s.mutationRate = CONFIG.defaultMutationRate;
     s.mutationSize = CONFIG.defaultMutationSize;
-    s.zoom = CONFIG.defaultZoom;
+    const minZoom = Number.isFinite(CONFIG.minZoom) ? CONFIG.minZoom : 0.15;
+    const maxZoom = Number.isFinite(CONFIG.maxZoom) ? CONFIG.maxZoom : 2.5;
+    s.zoom = Math.max(minZoom, Math.min(maxZoom, CONFIG.defaultZoom));
     s.tiltLimitEnabled = false;
     s.maxTiltDeg = CONFIG.defaultMaxTiltDeg;
     s.maxTiltRad = (s.maxTiltDeg * Math.PI) / 180;

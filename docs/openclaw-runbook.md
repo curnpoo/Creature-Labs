@@ -6,7 +6,7 @@
 - The portal service (http://100.79.186.77:8080) can host release zips, simulation snapshots, or notes related to Creature Labs without leaving the OpenClaw cluster.
 
 ## Environment & scripts
-- Use Node 22 (`node --version`) when running `npm run dev`, `npm run build:win`, or the Electron runner (`npm run app`).
+- Use Node 22 (`node --version`) when running `npm run dev`, `npm run build`, and `npm run preview`.
 - The project already has known build commands, so keep them documented in this repo; I’ve surfaced them here so we remember to run them inside the workspace.
 - When you need to capture metrics or headless screenshot exports, drop them into `/root/openclaw/workspace/tools` or `/root/openclaw/workspace/memory` so the daily memory cron job logs them.
 

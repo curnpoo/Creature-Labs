@@ -1,0 +1,1590 @@
+/* 
+ * Mobile Layout Overrides
+ * Scoped to .app-mobile. Applies orientation-specific layouts for existing desktop components.
+ */
+
+.app-mobile {
+  --mobile-safe-top: env(safe-area-inset-top, 0px);
+  --mobile-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --mobile-safe-left: env(safe-area-inset-left, 0px);
+  --mobile-safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* Base touch adjustments for mobile */
+.app-mobile #world,
+.app-mobile #design-area,
+.app-mobile #design-area canvas {
+  touch-action: none; /* Let JS handle gestures */
+}
+
+/* Ensure no hover states get stuck on tooltips */
+.app-mobile .btn-tool[data-tip]::after,
+.app-mobile .btn-tool[data-tip]::before {
+  display: none !important;
+}
+
+/* Hide legacy desktop elements on mobile */
+.app-mobile #btn-back,
+.app-mobile #hint-text,
+.app-mobile [style*="bottom-24"] {
+  display: none !important;
+}
+
+/* ─── Splash Screen Layout Overrides ─── */
+.app-mobile .splash-screen {
+  background: #141414;
+}
+
+.app-mobile .splash-bg {
+  filter: brightness(0.82);
+}
+
+.app-mobile .splash-grid {
+  opacity: 0.32;
+}
+
+.app-mobile .splash-title {
+  font-size: clamp(24px, 7vw, 38px) !important;
+  width: 90%;
+  margin: 0 auto;
+  line-height: 1.1;
+}
+
+.app-mobile .splash-action-wrap {
+  margin-top: 60px !important; /* Move buttons lower */
+}
+
+@media (orientation: portrait) {
+  .app-mobile {
+    --mobile-evolve-bottom: calc(10px + var(--mobile-safe-bottom));
+    --mobile-evolve-height: 60px;
+    --mobile-l-gap-above-evolve: 8px;
+    --mobile-l-base-height: 64px;
+    --mobile-l-base-bottom: calc(var(--mobile-evolve-bottom) + var(--mobile-evolve-height) + var(--mobile-l-gap-above-evolve));
+  }
+
+  .app-mobile .splash-bg {
+    transform: rotate(90deg) scale(1.6); /* Background rotation for portrait coverage */
+    transform-origin: center;
+  }
+  
+  .app-mobile .splash-canvas {
+    width: 100vw;
+    height: 100vh;
+    aspect-ratio: auto;
+  }
+}
+
+/* ─── Editor Layout Overrides ─── */
+
+/* Common mobile toolbar adjustments */
+.app-mobile .design-toolbar {
+  top: calc(10px + var(--mobile-safe-top));
+  z-index: 100;
+}
+
+/* Mobile designer: remove panel drop shadows from both toolbars */
+.app-mobile #screen-draw .design-toolbar-left,
+.app-mobile #screen-draw .design-toolbar-right {
+  box-shadow: none !important;
+}
+
+.app-mobile .btn-tool {
+  width: 44px; /* Compact tap targets */
+  height: 48px;
+}
+
+.app-mobile .btn-tool i {
+  font-size: 16px;
+  margin-bottom: 2px;
+}
+
+.app-mobile .btn-tool .tool-label {
+  font-size: 9px;
+}
+
+@media (orientation: portrait) {
+  /* Restore splash overrides */
+  .app-mobile .splash-bg-viewport {
+    position: absolute;
+    inset: -30%;
+    transform: rotate(90deg) scale(1.4);
+    transform-origin: center;
+    display: flex;
+    z-index: 1;
+  }
+
+  .app-mobile .splash-canvas {
+    width: 100vw;
+    height: 100vh;
+    aspect-ratio: auto;
+    overflow: hidden;
+  }
+
+  .app-mobile .design-quickstart {
+    transform: scale(0.75);
+    transform-origin: top right;
+    top: calc(10px + var(--mobile-safe-top));
+    right: 12px;
+    padding: 10px;
+    background: rgba(12, 16, 28, 0.4);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* ─── L-Shaped Unified Control Panel (Centered Dock) ─── */
+  /* Shared toolbar resets */
+  .app-mobile .design-toolbar {
+    top: auto !important;
+    right: auto !important;
+    height: auto !important;
+    transform: none !important;
+    margin: 0 !important;
+    background: rgba(12, 16, 28, 0.94) !important;
+    backdrop-filter: blur(20px);
+    border: 1.5px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
+    padding: 6px !important;
+    gap: 4px !important;
+    display: flex !important;
+    pointer-events: auto !important;
+  }
+
+  /* Horizontal Utilities Dock (Wide base for the L-shape) */
+  .app-mobile .design-toolbar-right {
+    position: fixed !important;
+    bottom: var(--mobile-l-base-bottom) !important;
+    left: 10px !important;
+    right: 10px !important;
+    width: calc(100vw - 20px) !important;
+    transform: none !important;
+    flex-direction: row !important;
+    justify-content: stretch !important; /* Let buttons fill the bar */
+    gap: 4px !important;
+    border-radius: 12px !important;
+    border-top-left-radius: 0 !important;
+    padding: 6px !important;
+    min-height: var(--mobile-l-base-height);
+    z-index: 100;
+  }
+
+  /* Vertical drawing arm: dock into the top-left seam of the utilities base. */
+  .app-mobile .design-toolbar-left {
+    position: fixed !important;
+    left: 10px !important;
+    bottom: calc(var(--mobile-l-base-bottom) + var(--mobile-l-base-height) - 1px) !important;
+    top: auto !important;
+    right: auto !important;
+    transform: none !important;
+    flex-direction: column !important;
+    width: 62px !important;
+    padding: 8px 0 !important;
+    border-radius: 12px 12px 0 0 !important;
+    border-bottom: none !important;
+    z-index: 105;
+    align-items: center;
+    height: auto !important;
+    background: rgba(12, 16, 28, 0.96) !important;
+    margin: 0 !important; /* Reset any desktop margins */
+  }
+
+  .app-mobile .btn-tool {
+    width: 48px;
+    height: 52px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Base utility buttons: Truly wide and reachable */
+  .app-mobile .design-toolbar-right .btn-tool {
+    flex: 1 !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    height: 52px !important; /* Matches vertical arm more closely */
+    border-radius: 8px;
+    margin: 0 !important;
+  }
+  /* Higher contrast active states for mobile readability */
+  .app-mobile .btn-tool.active {
+    background: rgba(0, 242, 255, 0.22) !important;
+    color: #fff !important;
+    border-color: rgba(0, 242, 255, 0.5) !important;
+    box-shadow: 0 0 20px rgba(0, 242, 255, 0.35) !important;
+  }
+
+  .app-mobile .btn-tool.active-muscle {
+    background: rgba(255, 0, 85, 0.22) !important;
+    color: #fff !important;
+    border-color: rgba(255, 0, 85, 0.5) !important;
+    box-shadow: 0 0 20px rgba(255, 0, 85, 0.35) !important;
+  }
+
+  /* ──── Tactical Feedback ──── */
+  .app-mobile .btn-tool:active {
+    transform: scale(0.88);
+  }
+
+  .app-mobile #btn-run {
+    position: fixed !important;
+    bottom: calc(10px + var(--mobile-safe-bottom));
+    left: 10px;
+    right: 10px;
+    width: auto !important;
+    height: 60px;
+    font-size: 22px;
+    font-weight: 800;
+    border-radius: 18px;
+    margin: 0;
+    pointer-events: auto;
+    z-index: 102;
+    transform: none !important;
+  }
+}
+
+.app-mobile .design-toolbar-sep {
+  width: 24px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 4px auto;
+}
+
+.app-mobile .btn-tool.app-mobile-only {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+}
+
+/* Mobile-only: per-tool colors for designer controls */
+.app-mobile .btn-tool#tool-node,
+.app-mobile .btn-tool#tool-joint,
+.app-mobile .btn-tool#tool-bone,
+.app-mobile .btn-tool#tool-muscle,
+.app-mobile .btn-tool#tool-select,
+.app-mobile .btn-tool#tool-move,
+.app-mobile .btn-tool#tool-erase,
+.app-mobile .btn-tool#btn-back-toolbar,
+.app-mobile .btn-tool#tool-undo,
+.app-mobile .btn-tool#tool-pan,
+.app-mobile .btn-tool#tool-reset-view,
+.app-mobile .btn-tool#tool-save,
+.app-mobile .btn-tool#tool-load,
+.app-mobile .btn-tool#tool-clear {
+  color: rgb(var(--tool-rgb));
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.app-mobile .btn-tool#tool-node { --tool-rgb: 148, 163, 184; }       /* Gray */
+.app-mobile .btn-tool#tool-joint { --tool-rgb: 249, 115, 22; }       /* Orange */
+.app-mobile .btn-tool#tool-bone { --tool-rgb: 226, 232, 240; }       /* Light gray */
+.app-mobile .btn-tool#tool-muscle { --tool-rgb: 239, 68, 68; }       /* Red */
+.app-mobile .btn-tool#tool-select { --tool-rgb: 245, 158, 11; }      /* Selection orange */
+.app-mobile .btn-tool#tool-move { --tool-rgb: 59, 130, 246; }        /* Blue */
+.app-mobile .btn-tool#tool-erase { --tool-rgb: 236, 72, 153; }       /* Pink */
+.app-mobile .btn-tool#btn-back-toolbar { --tool-rgb: 37, 99, 235; }  /* Home blue */
+.app-mobile .btn-tool#tool-undo { --tool-rgb: 234, 88, 12; }         /* Reddish-orange */
+.app-mobile .btn-tool#tool-pan { --tool-rgb: 20, 184, 166; }         /* Greenish-blue */
+.app-mobile .btn-tool#tool-reset-view { --tool-rgb: 147, 51, 234; }  /* Purple */
+.app-mobile .btn-tool#tool-save { --tool-rgb: 134, 239, 172; }       /* Light green */
+.app-mobile .btn-tool#tool-load { --tool-rgb: 14, 165, 233; }        /* Distinct blue */
+.app-mobile .btn-tool#tool-clear { --tool-rgb: 220, 38, 38; }        /* Obvious red */
+
+/* Keep clear as the only clearly red button surface */
+.app-mobile .btn-tool#tool-clear {
+  color: #fff !important;
+  border-color: rgba(220, 38, 38, 0.95) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(220, 38, 38, 0.72),
+    rgba(185, 28, 28, 0.72)
+  ) !important;
+}
+
+.app-mobile #screen-draw .btn-tool.active,
+.app-mobile #screen-draw .btn-tool.active-muscle,
+.app-mobile #screen-draw .btn-tool.active-warn {
+  color: #fff !important;
+  border-color: rgba(34, 197, 94, 0.92) !important;
+  background: linear-gradient(
+    180deg,
+    rgba(34, 197, 94, 0.86),
+    rgba(21, 128, 61, 0.86)
+  ) !important;
+  box-shadow: none !important;
+}
+
+@media (orientation: landscape) {
+  .app-mobile .design-toolbar-left {
+    left: calc(10px + var(--mobile-safe-left));
+    top: 50%;
+    transform: translateY(-50%);
+    gap: 6px;
+  }
+  
+  .app-mobile .design-toolbar-right {
+    right: calc(10px + var(--mobile-safe-right));
+    top: 50%;
+    transform: translateY(-50%);
+    gap: 6px;
+  }
+  
+}
+
+/* ─── Mobile Creature Catalog Layout ─── */
+.app-mobile .catalog-panel {
+  width: min(94vw, 760px);
+  height: min(84vh, 820px);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 18px;
+}
+
+.app-mobile .catalog-header {
+  padding: 12px 12px 10px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.app-mobile .catalog-title {
+  font-size: 12px;
+}
+
+.app-mobile .catalog-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.app-mobile .catalog-actions .catalog-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 8px;
+  font-size: 12px;
+}
+
+.app-mobile .catalog-grid {
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 12px;
+}
+
+@media (min-width: 620px) {
+  .app-mobile .catalog-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.app-mobile .catalog-item {
+  border-radius: 12px;
+}
+
+.app-mobile .catalog-thumb {
+  height: 170px;
+  object-fit: contain;
+  object-position: center;
+  padding: 10px;
+  background: #0b1220;
+}
+
+.app-mobile .catalog-meta {
+  padding: 10px;
+}
+
+.app-mobile .catalog-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.app-mobile .catalog-row .catalog-btn {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 6px;
+  font-size: 11px;
+  line-height: 1.1;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.app-mobile .catalog-row .catalog-btn i {
+  margin-right: 0 !important;
+}
+
+/* ─── Simulation Quick Controls ─── */
+/* Hide desktop-only elements */
+.app-mobile .panel-toggle-btn,
+.app-mobile .edge-tab-rail {
+  display: none !important;
+}
+
+body:not(.app-mobile) .sim-mobile-dock,
+body:not(.app-mobile) .app-mobile-only {
+  display: none !important;
+}
+
+/* ─── Mobile compact top HUD ─── */
+.app-mobile .sim-mobile-top-hud {
+  position: fixed;
+  top: calc(6px + var(--mobile-safe-top));
+  left: calc(8px + var(--mobile-safe-left));
+  right: calc(8px + var(--mobile-safe-right));
+  z-index: 1001;
+  pointer-events: none;
+}
+
+.app-mobile .sim-mobile-top-hud-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(12, 16, 28, 0.9);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.app-mobile .sim-mobile-top-hud-item {
+  min-width: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 4px 6px;
+}
+
+.app-mobile .sim-mobile-top-hud-label {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.app-mobile .sim-mobile-top-hud-value {
+  margin-top: 3px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Simulation Mobile Dock ─── */
+.app-mobile .sim-mobile-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  background: rgba(12, 16, 28, 0.98);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex !important;
+  flex-direction: column;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding-bottom: var(--mobile-safe-bottom);
+}
+
+.app-mobile .sim-mobile-dock.minimized {
+  transform: translateY(calc(100% - 40px - var(--mobile-safe-bottom)));
+}
+
+.app-mobile .mq-dock-toggle {
+  width: 100%;
+  height: 40px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.app-mobile .sim-mobile-dock.minimized .mq-dock-toggle i {
+  transform: rotate(0deg);
+}
+
+.app-mobile .sim-mobile-dock:not(.minimized) .mq-dock-toggle i {
+  transform: rotate(180deg);
+}
+
+.app-mobile .mq-dock-content {
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.app-mobile .mq-dock-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.app-mobile .mq-primary-row {
+  padding: 4px 0 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  overflow-x: auto;
+  justify-content: flex-start;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-mobile .mq-wide {
+  width: 100% !important;
+  height: 54px !important;
+  flex-direction: row !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  gap: 12px !important;
+}
+
+.app-mobile .mq-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 56px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e2e8f0;
+  font-size: 10px;
+  gap: 4px;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+@media (orientation: portrait) {
+  .app-mobile .mq-dock-content {
+      max-height: 40vh;
+  }
+}
+
+@media (orientation: landscape) {
+  .app-mobile .sim-mobile-top-hud {
+    right: calc(328px + var(--mobile-safe-right));
+  }
+
+  .app-mobile .sim-mobile-dock {
+    width: 320px;
+    left: auto;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    border-top: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  
+  .app-mobile .sim-mobile-dock.minimized {
+    transform: translateX(calc(100% - 40px));
+  }
+  
+  .app-mobile .mq-dock-toggle {
+    width: 40px;
+    height: 100%;
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+  
+  .app-mobile .sim-mobile-dock.minimized .mq-dock-toggle i {
+    transform: rotate(90deg);
+  }
+  
+  .app-mobile .sim-mobile-dock:not(.minimized) .mq-dock-toggle i {
+    transform: rotate(-90deg);
+  }
+  
+  .app-mobile .mq-dock-content {
+    margin-left: 40px;
+    padding-top: calc(20px + var(--mobile-safe-top));
+    height: 100%;
+    overflow-y: auto;
+  }
+  
+  .app-mobile .mq-primary-row {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+.app-mobile.mobile-panel-top .sim-mobile-top-hud,
+.app-mobile.mobile-panel-controls .sim-mobile-top-hud {
+  display: none !important;
+}
+
+.app-mobile .mq-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 48px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e2e8f0;
+  font-size: 9px;
+  gap: 4px;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.app-mobile .mq-btn i {
+  font-size: 16px;
+}
+
+.app-mobile .mq-btn.active {
+  background: rgba(0, 242, 255, 0.15);
+  border-color: rgba(0, 242, 255, 0.4);
+  color: #00f2ff;
+}
+
+.app-mobile .mq-start {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+.app-mobile .mq-danger {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.app-mobile .mq-info {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+}
+
+.app-mobile .mq-divider {
+  width: 1px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: auto 4px;
+}
+
+@media (orientation: portrait) {
+  .app-mobile .sim-quick-controls {
+    bottom: calc(10px + var(--mobile-safe-bottom));
+    left: 50%;
+    transform: translateX(-50%);
+    flex-direction: row;
+    height: auto;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+}
+
+@media (orientation: landscape) {
+  .app-mobile .sim-quick-controls {
+    right: calc(10px + var(--mobile-safe-right));
+    top: 50%;
+    transform: translateY(-50%);
+    flex-direction: column;
+    width: auto;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  
+  .app-mobile .mq-divider {
+    width: 36px;
+    height: 1px;
+    margin: 4px auto;
+  }
+}
+
+/* ─── Mobile Panel Overlays (Stats & More Controls) ─── */
+
+/* Base hide for desktop chrome panels in mobile mode */
+.app-mobile #panel-top-bar,
+.app-mobile #panel-progress-left,
+.app-mobile #panel-controls,
+.app-mobile #panel-scorecard {
+  display: none !important;
+}
+
+/* Common Overlay Wrapper Setup: When either is active, sim-chrome becomes a fullscreen scrollable container */
+.app-mobile.mobile-panel-top #sim-chrome,
+.app-mobile.mobile-panel-controls #sim-chrome {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 900 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: rgba(8, 12, 20, 0.95);
+  padding: calc(10px + var(--mobile-safe-top)) 10px calc(80px + var(--mobile-safe-bottom));
+  gap: 12px;
+  overflow-y: auto;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  pointer-events: auto;
+  grid-template: none !important;
+}
+
+/* Stats Mode */
+.app-mobile.mobile-panel-top #panel-top-bar,
+.app-mobile.mobile-panel-top #panel-progress-left,
+.app-mobile.mobile-panel-top #panel-scorecard {
+  display: flex !important;
+  position: relative !important;
+  width: 100% !important;
+  max-width: none !important;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.03);
+  height: auto !important;
+}
+
+.app-mobile.mobile-panel-top #panel-top-bar {
+  flex-direction: column !important; /* Stack HUD & Neural horizontally or vertically? Vertically makes more sense */
+}
+
+/* More Controls Mode */
+.app-mobile.mobile-panel-controls #panel-controls {
+  display: block !important;
+  position: relative !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: auto !important;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.03);
+}
+
+@media (orientation: landscape) {
+  .app-mobile.mobile-panel-top #sim-chrome,
+  .app-mobile.mobile-panel-controls #sim-chrome {
+    padding-right: calc(80px + var(--mobile-safe-right));
+    padding-bottom: calc(10px + var(--mobile-safe-bottom));
+  }
+  
+  .app-mobile.mobile-panel-controls #panel-controls {
+    column-count: 2;
+    column-gap: 20px;
+  }
+}
+
+/* ─── Mobile Dock Rework (3-row layout) ─── */
+.app-mobile .sim-mobile-dock .mq-dock-content {
+  padding: 0 12px 12px;
+  gap: 8px;
+}
+
+.app-mobile .sim-mobile-dock .mq-dock-row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+.app-mobile .sim-mobile-dock .mq-span-1 { grid-column: span 1; }
+.app-mobile .sim-mobile-dock .mq-span-2 { grid-column: span 2; }
+.app-mobile .sim-mobile-dock .mq-span-3 { grid-column: span 3; }
+.app-mobile .sim-mobile-dock .mq-span-4 { grid-column: span 4; }
+
+.app-mobile .sim-mobile-dock .mq-btn {
+  width: 100%;
+  height: 56px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  transition: transform 0.16s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.app-mobile .sim-mobile-dock .mq-btn i {
+  font-size: 15px;
+}
+
+.app-mobile .sim-mobile-dock .mq-btn span {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.app-mobile .sim-mobile-dock .mq-speed-slider {
+  --mq-speed-pct: 0%;
+  --mq-speed-radius: 12px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  touch-action: none;
+  user-select: none;
+  isolation: isolate;
+  border-radius: var(--mq-speed-radius);
+  overflow: hidden;
+}
+
+.app-mobile .sim-mobile-dock .mq-speed-slider::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    rgba(250, 204, 21, 0.94) 0%,
+    rgba(251, 146, 60, 0.95) 55%,
+    rgba(239, 68, 68, 0.98) 100%
+  );
+  box-shadow:
+    0 0 14px rgba(251, 146, 60, 0.42),
+    0 0 30px rgba(239, 68, 68, 0.28);
+  clip-path: inset(0 calc(100% - var(--mq-speed-pct)) 0 0 round var(--mq-speed-radius));
+  will-change: clip-path;
+  backface-visibility: hidden;
+  z-index: 0;
+}
+
+.app-mobile .sim-mobile-dock .mq-speed-slider::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0) 20%,
+    rgba(255, 247, 214, 0.35) 50%,
+    rgba(255, 255, 255, 0) 80%
+  );
+  background-size: 230% 100%;
+  animation: mqSpeedWipe 2.4s linear infinite;
+  mix-blend-mode: screen;
+  clip-path: inset(0 calc(100% - var(--mq-speed-pct)) 0 0 round var(--mq-speed-radius));
+  will-change: clip-path, background-position;
+  backface-visibility: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app-mobile .sim-mobile-dock .mq-speed-label,
+.app-mobile .sim-mobile-dock .mq-speed-value {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.app-mobile .sim-mobile-dock .mq-speed-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.9);
+}
+
+.app-mobile .sim-mobile-dock .mq-speed-value {
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: #ffffff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.28);
+}
+
+.app-mobile .sim-mobile-dock .mq-speed-range {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  pointer-events: none;
+  cursor: default;
+  z-index: 2;
+}
+
+.app-mobile .sim-mobile-dock .mq-speed-range::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+.app-mobile .sim-mobile-dock .mq-speed-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 30px;
+  height: 56px;
+  border: none;
+  background: transparent;
+}
+
+.app-mobile .sim-mobile-dock .mq-speed-range::-moz-range-track {
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
+.app-mobile .sim-mobile-dock .mq-speed-range::-moz-range-thumb {
+  width: 30px;
+  height: 56px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.app-mobile .sim-mobile-dock .mq-thin {
+  letter-spacing: 0.01em;
+}
+
+.app-mobile .sim-mobile-dock .mq-btn:active {
+  transform: scale(0.97);
+}
+
+.app-mobile .sim-mobile-dock .mq-btn:disabled {
+  opacity: 0.45;
+  filter: grayscale(0.2);
+}
+
+.app-mobile .sim-mobile-dock .mq-start-toggle.is-idle {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #5eead4;
+}
+
+.app-mobile .sim-mobile-dock .mq-start-toggle.is-running {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.45);
+  color: #93c5fd;
+}
+
+.app-mobile .sim-mobile-dock .mq-start-toggle.is-paused {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.45);
+  color: #fbbf24;
+}
+
+.app-mobile .sim-mobile-dock .mq-reset {
+  background: rgba(220, 38, 38, 0.15);
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fca5a5;
+}
+
+.app-mobile .sim-mobile-dock .mq-reset span {
+  font-size: 9px;
+}
+
+.app-mobile .sim-mobile-dock .mq-btn-icon {
+  font-size: 9px;
+}
+
+.app-mobile .sim-mobile-dock .mq-btn-icon i {
+  font-size: 14px;
+}
+
+.app-mobile .sim-mobile-dock .mq-end {
+  background: rgba(220, 38, 38, 0.18);
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fecaca;
+  box-shadow: 0 0 14px rgba(220, 38, 38, 0.2);
+}
+
+.app-mobile .sim-mobile-dock .mq-btn.active {
+  background: rgba(0, 242, 255, 0.16);
+  border-color: rgba(0, 242, 255, 0.38);
+  color: #67e8f9;
+}
+
+.app-mobile .sim-mobile-dock .mq-turbo.active {
+  color: #fff3c3;
+  border-color: rgba(251, 191, 36, 0.9);
+  background:
+    radial-gradient(120% 100% at 15% 0%, rgba(255, 201, 86, 0.44) 0%, rgba(255, 144, 66, 0.32) 35%, rgba(22, 22, 34, 0.55) 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 210, 120, 0.25) inset,
+    0 0 12px rgba(255, 157, 0, 0.35),
+    0 0 28px rgba(255, 109, 0, 0.25);
+  animation: mqTurboPulse 2s ease-in-out infinite;
+}
+
+.app-mobile .sim-mobile-dock .mq-turbo.mq-supercharged::after {
+  content: '';
+  position: absolute;
+  inset: -40% -20%;
+  background: linear-gradient(112deg, rgba(255, 255, 255, 0) 20%, rgba(255, 241, 182, 0.75) 50%, rgba(255, 255, 255, 0) 80%);
+  transform: translateX(-120%) rotate(8deg);
+  animation: mqTurboStreak 0.55s ease-out;
+  pointer-events: none;
+}
+
+.app-mobile .sim-mobile-dock .mq-turbo.mq-supercharged {
+  animation: mqTurboShock 0.55s ease-out;
+}
+
+@keyframes mqTurboPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(255, 210, 120, 0.25) inset,
+      0 0 10px rgba(255, 157, 0, 0.3),
+      0 0 20px rgba(255, 109, 0, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(255, 225, 160, 0.4) inset,
+      0 0 18px rgba(255, 183, 0, 0.45),
+      0 0 32px rgba(255, 123, 0, 0.35);
+  }
+}
+
+@keyframes mqTurboStreak {
+  to {
+    transform: translateX(120%) rotate(8deg);
+  }
+}
+
+@keyframes mqTurboShock {
+  0% {
+    transform: scale(1);
+    filter: saturate(1);
+  }
+  35% {
+    transform: scale(1.04);
+    filter: saturate(1.35);
+  }
+  100% {
+    transform: scale(1);
+    filter: saturate(1);
+  }
+}
+
+@keyframes mqSpeedWipe {
+  from {
+    background-position: -130% 0;
+  }
+  to {
+    background-position: 130% 0;
+  }
+}
+
+/* ─── Mobile Full-Screen Sheet (Controls + Stats) ─── */
+.app-mobile .mobile-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  background:
+    radial-gradient(120% 100% at 10% 0%, rgba(18, 30, 54, 0.88), rgba(7, 10, 18, 0.98) 60%),
+    rgba(8, 12, 20, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+.app-mobile .mobile-sheet.hidden {
+  display: none !important;
+}
+
+.app-mobile.mobile-sheet-open .sim-mobile-dock,
+.app-mobile.mobile-sheet-open .sim-mobile-top-hud {
+  display: none !important;
+}
+
+.app-mobile .mobile-sheet-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: calc(12px + var(--mobile-safe-top)) calc(12px + var(--mobile-safe-right)) 12px calc(12px + var(--mobile-safe-left));
+  background: linear-gradient(180deg, rgba(6, 10, 18, 0.98) 0%, rgba(6, 10, 18, 0.84) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.app-mobile .mobile-sheet-back-btn {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 14px;
+  border: 1px solid rgba(248, 113, 113, 0.75);
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.7), rgba(185, 28, 28, 0.82));
+  color: #fee2e2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  box-shadow: 0 0 20px rgba(220, 38, 38, 0.28);
+}
+
+.app-mobile .mobile-sheet-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.app-mobile .mobile-sheet-tab {
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.app-mobile .mobile-sheet-tab.active {
+  border-color: rgba(103, 232, 249, 0.5);
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.32), rgba(6, 182, 212, 0.18));
+  color: #cffafe;
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.2);
+}
+
+.app-mobile .mobile-sheet-scroll {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px calc(12px + var(--mobile-safe-right)) calc(18px + var(--mobile-safe-bottom)) calc(12px + var(--mobile-safe-left));
+}
+
+.app-mobile .mobile-sheet-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  align-items: stretch;
+}
+
+.app-mobile .mobile-sheet-pane.hidden {
+  display: none !important;
+}
+
+.app-mobile .mobile-sheet-pane > * {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.app-mobile .mobile-sheet-card-title {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(224, 242, 254, 0.92);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.app-mobile .mobile-stats-card,
+.app-mobile.mobile-sheet-open #mobile-pane-controls > #panel-controls {
+  border-radius: 14px !important;
+  border: 1px solid rgba(107, 201, 255, 0.18) !important;
+  background:
+    linear-gradient(180deg, rgba(12, 20, 34, 0.94), rgba(8, 14, 28, 0.9)) !important;
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  padding: 10px !important;
+  overflow: hidden !important;
+}
+
+.app-mobile.mobile-sheet-open #mobile-pane-controls #panel-controls {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  justify-self: stretch !important;
+  align-self: stretch !important;
+  margin: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  min-height: 0 !important;
+}
+
+.app-mobile.mobile-sheet-open #panel-controls {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  left: auto !important;
+  right: auto !important;
+  grid-area: auto !important;
+}
+
+.app-mobile .mobile-stats-category-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 2px;
+}
+
+.app-mobile .mobile-stats-category-pill {
+  flex: 0 0 auto;
+  border: 1px solid rgba(103, 232, 249, 0.35);
+  border-radius: 999px;
+  background: rgba(8, 145, 178, 0.18);
+  color: #a5f3fc;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+}
+
+.app-mobile #mobile-stats-live-body,
+.app-mobile #mobile-stats-neural-body,
+.app-mobile #mobile-stats-evolution-body,
+.app-mobile #mobile-stats-secondary-body {
+  min-width: 0;
+  width: 100% !important;
+  overflow: hidden;
+}
+
+.app-mobile #mobile-pane-stats,
+.app-mobile #mobile-pane-stats > .mobile-stats-card {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+}
+
+.app-mobile #mobile-stats-live-body #panel-hud {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  min-width: 0 !important;
+}
+
+.app-mobile #mobile-stats-live-body #panel-hud,
+.app-mobile #mobile-stats-neural-body #left-nn-container,
+.app-mobile #mobile-stats-evolution-body #left-neat-progress,
+.app-mobile #mobile-stats-evolution-body #evolution-feedback,
+.app-mobile #mobile-stats-secondary-body #training-details,
+.app-mobile #mobile-stats-secondary-body #sandbox-scorecard-wrap {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  position: relative !important;
+  left: auto !important;
+  right: auto !important;
+}
+
+.app-mobile #mobile-stats-live-body #panel-hud .sim-panel-title {
+  display: none;
+}
+
+.app-mobile #mobile-stats-live-body .stats-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0;
+}
+
+.app-mobile #mobile-stats-live-body .stat-item {
+  border: 1px solid rgba(103, 232, 249, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px 8px;
+}
+
+.app-mobile #mobile-stats-live-body .stat-divider {
+  display: none;
+}
+
+.app-mobile #mobile-stats-live-body .stat-value {
+  font-size: 20px;
+  line-height: 1;
+  color: #ffffff !important;
+}
+
+.app-mobile #mobile-stats-live-body .stat-label {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.88) !important;
+}
+
+.app-mobile #mobile-stats-neural-body #left-nn-container {
+  border: 1px solid rgba(236, 72, 153, 0.22);
+  border-radius: 12px;
+  background: rgba(4, 8, 18, 0.84);
+  min-height: 250px !important;
+}
+
+.app-mobile #mobile-stats-neural-body #nn-canvas {
+  width: 100%;
+  height: 250px !important;
+}
+
+.app-mobile #mobile-stats-evolution-body {
+  display: grid;
+  gap: 10px;
+}
+
+.app-mobile #mobile-stats-evolution-body #left-neat-progress,
+.app-mobile #mobile-stats-evolution-body #evolution-feedback {
+  padding: 10px !important;
+  border: 1px solid rgba(103, 232, 249, 0.16);
+  border-radius: 12px;
+  background: rgba(6, 10, 20, 0.82);
+}
+
+.app-mobile #mobile-stats-secondary-body #training-details,
+.app-mobile #mobile-stats-secondary-body #sandbox-scorecard-wrap {
+  border: 1px solid rgba(253, 224, 71, 0.2);
+  border-radius: 12px;
+  background: rgba(10, 14, 26, 0.82);
+  padding: 10px;
+}
+
+.app-mobile #mobile-stats-secondary-body #bottom-metrics-container {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 10px !important;
+  padding: 2px 0 0 !important;
+}
+
+.app-mobile .mobile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-mobile #top-metrics-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  white-space: normal !important;
+}
+
+.app-mobile .mobile-training-module-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.app-mobile .mobile-control-module {
+  border: 1px solid rgba(103, 232, 249, 0.22);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(13, 24, 40, 0.95), rgba(8, 16, 30, 0.9));
+  box-shadow:
+    0 0 0 1px rgba(125, 211, 252, 0.06) inset,
+    0 16px 28px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.app-mobile .mobile-control-module-toggle {
+  width: 100%;
+  border: 0;
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.2), rgba(8, 145, 178, 0.12));
+  color: #e0f2fe;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 13px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.app-mobile .mobile-control-module-chevron {
+  color: rgba(148, 163, 184, 0.9);
+  transition: transform 0.18s ease;
+}
+
+.app-mobile .mobile-control-module.collapsed .mobile-control-module-chevron {
+  transform: rotate(-90deg);
+}
+
+.app-mobile .mobile-control-module-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  padding: 10px;
+}
+
+.app-mobile .mobile-control-module.collapsed .mobile-control-module-body {
+  display: none;
+}
+
+.app-mobile .mobile-control-module-body .control-group,
+.app-mobile #mobile-pane-controls #sandbox-panel-section > .control-group {
+  margin: 0;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 11px;
+}
+
+.app-mobile .mobile-control-module-body .section-divider,
+.app-mobile .mobile-control-module-body .section-title {
+  display: none !important;
+}
+
+.app-mobile #panel-controls .toggle-btn,
+.app-mobile #panel-controls .cam-btn {
+  min-height: 52px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.08));
+  color: #dbeafe;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  text-transform: none;
+}
+
+.app-mobile .mobile-range-card .control-label,
+.app-mobile .mobile-range-card .control-val {
+  color: #ffffff !important;
+}
+
+.app-mobile .mobile-range-card .control-units {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+.app-mobile #panel-controls .toggle-btn.active {
+  border-color: rgba(34, 197, 94, 0.65);
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.34), rgba(16, 185, 129, 0.24));
+  color: #86efac;
+}
+
+.app-mobile #panel-controls .cam-btn.active,
+.app-mobile #panel-controls #cam-free.active {
+  border-color: rgba(34, 211, 238, 0.62);
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.34), rgba(6, 182, 212, 0.24));
+  color: #67e8f9;
+}
+
+.app-mobile #panel-controls #btn-start-sim {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.32), rgba(5, 150, 105, 0.22));
+  border-color: rgba(16, 185, 129, 0.58);
+  color: #99f6e4;
+}
+
+.app-mobile #panel-controls #btn-edit {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.92), rgba(6, 182, 212, 0.76));
+  color: #02131a;
+  border: 1px solid rgba(165, 243, 252, 0.95);
+}
+
+.app-mobile #mobile-pane-controls #sandbox-panel-section {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.app-mobile.mobile-sheet-open .mobile-range-card {
+  --mobile-range-scale: 0;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-color: rgba(125, 211, 252, 0.42) !important;
+  background: linear-gradient(135deg, rgba(6, 12, 25, 0.92), rgba(8, 15, 30, 0.9)) !important;
+}
+
+.app-mobile.mobile-sheet-open .mobile-range-card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  background: linear-gradient(
+    90deg,
+    rgba(34, 211, 238, 0.5) 0%,
+    rgba(59, 130, 246, 0.42) 42%,
+    rgba(168, 85, 247, 0.35) 100%
+  );
+  transform-origin: left center;
+  transform: scaleX(var(--mobile-range-scale));
+  z-index: 0;
+  pointer-events: none;
+}
+
+.app-mobile.mobile-sheet-open .mobile-range-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.app-mobile.mobile-sheet-open .mobile-range-card .mobile-range-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  margin: 0;
+}
+
+@media (min-width: 780px) and (orientation: landscape) {
+  .app-mobile .mobile-sheet-pane { gap: 14px; }
+
+  .app-mobile .mobile-training-module-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-mobile #mobile-pane-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .app-mobile #mobile-pane-stats > #mobile-stats-core-card,
+  .app-mobile #mobile-pane-stats > #mobile-stats-live-card,
+  .app-mobile #mobile-pane-stats > #mobile-stats-secondary-card {
+    grid-column: 1 / -1;
+  }
+
+  .app-mobile .mobile-stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 430px) {
+  .app-mobile .mobile-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app-mobile #mobile-stats-live-body .stats-board {
+    grid-template-columns: 1fr 1fr;
+  }
+}

@@ -1,7 +1,7 @@
 # AGENTS.md - PolyEvolve Lab
 
 ## Overview
-PolyEvolve Lab is a browser + Electron creature-evolution simulator.
+PolyEvolve Lab is a browser-based creature-evolution simulator.
 
 Current runtime is based on **Planck.js** physics plus a custom neuroevolution stack:
 - Dense feed-forward controller (legacy mode)
@@ -18,14 +18,11 @@ The project favors iteration speed over framework-heavy tooling.
 ### Development
 ```bash
 npm run dev          # Vite dev server (http://localhost:5173)
-npm run app          # Electron desktop app
 ```
 
 ### Production build
 ```bash
 npm run build        # Web build to dist/
-npm run build:win    # Windows portable build
-npm run build:mac    # macOS DMG build
 ```
 
 ### Tests (standalone scripts)
@@ -188,4 +185,3 @@ The repo may be intentionally dirty. Do not revert unrelated user changes.
 - Turbo worker: `src/sim/TurboWorker.js`
 - Scoring: `src/sim/fitnessScore.js`
 - Config index: `src/utils/config/index.js`
-

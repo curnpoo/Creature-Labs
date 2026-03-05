@@ -1,0 +1,208 @@
+{
+  "version": 2,
+  "createdAt": "2026-03-03T18:19:16.419Z",
+  "nodes": [
+    {
+      "id": 0,
+      "x": 630,
+      "y": 324,
+      "fixed": false,
+      "attachedToPolygon": null
+    },
+    {
+      "id": 1,
+      "x": 677,
+      "y": 324,
+      "fixed": false,
+      "attachedToPolygon": null
+    },
+    {
+      "id": 2,
+      "x": 651,
+      "y": 398,
+      "fixed": false,
+      "attachedToPolygon": null
+    },
+    {
+      "id": 3,
+      "x": 916,
+      "y": 319,
+      "fixed": false,
+      "attachedToPolygon": null
+    },
+    {
+      "id": 4,
+      "x": 960,
+      "y": 320,
+      "fixed": false,
+      "attachedToPolygon": null
+    },
+    {
+      "id": 5,
+      "x": 939,
+      "y": 404,
+      "fixed": false,
+      "attachedToPolygon": null
+    },
+    {
+      "id": 6,
+      "x": 723,
+      "y": 272,
+      "fixed": false,
+      "attachedToPolygon": null
+    },
+    {
+      "id": 7,
+      "x": 880,
+      "y": 276,
+      "fixed": false,
+      "attachedToPolygon": null
+    },
+    {
+      "id": 8,
+      "x": 881,
+      "y": 224,
+      "fixed": false,
+      "attachedToPolygon": null
+    },
+    {
+      "id": 9,
+      "x": 729,
+      "y": 219,
+      "fixed": false,
+      "attachedToPolygon": null
+    },
+    {
+      "id": 10,
+      "x": 798.9675392853393,
+      "y": 321.44837783921884,
+      "fixed": false,
+      "attachedToPolygon": null
+    }
+  ],
+  "constraints": [
+    {
+      "type": "bone",
+      "n1": 7,
+      "n2": 9
+    },
+    {
+      "type": "bone",
+      "n1": 7,
+      "n2": 8
+    },
+    {
+      "type": "bone",
+      "n1": 6,
+      "n2": 8
+    },
+    {
+      "type": "bone",
+      "n1": 6,
+      "n2": 9
+    },
+    {
+      "type": "bone",
+      "n1": 8,
+      "n2": 9
+    },
+    {
+      "type": "bone",
+      "n1": 6,
+      "n2": 7
+    },
+    {
+      "type": "bone",
+      "n1": 0,
+      "n2": 1
+    },
+    {
+      "type": "bone",
+      "n1": 1,
+      "n2": 2
+    },
+    {
+      "type": "bone",
+      "n1": 0,
+      "n2": 2
+    },
+    {
+      "type": "bone",
+      "n1": 3,
+      "n2": 4
+    },
+    {
+      "type": "bone",
+      "n1": 3,
+      "n2": 5
+    },
+    {
+      "type": "bone",
+      "n1": 4,
+      "n2": 5
+    },
+    {
+      "type": "bone",
+      "n1": 1,
+      "n2": 6
+    },
+    {
+      "type": "bone",
+      "n1": 3,
+      "n2": 7
+    },
+    {
+      "type": "bone",
+      "n1": 3,
+      "n2": 6
+    },
+    {
+      "type": "bone",
+      "n1": 1,
+      "n2": 7
+    },
+    {
+      "type": "muscle",
+      "n1": 4,
+      "n2": 8
+    },
+    {
+      "type": "muscle",
+      "n1": 0,
+      "n2": 9
+    },
+    {
+      "type": "bone",
+      "n1": 3,
+      "n2": 10
+    },
+    {
+      "type": "bone",
+      "n1": 1,
+      "n2": 10
+    },
+    {
+      "type": "muscle",
+      "n1": 5,
+      "n2": 10
+    },
+    {
+      "type": "muscle",
+      "n1": 2,
+      "n2": 10
+    },
+    {
+      "type": "bone",
+      "n1": 6,
+      "n2": 10
+    },
+    {
+      "type": "bone",
+      "n1": 7,
+      "n2": 10
+    }
+  ],
+  "polygons": [],
+  "nextId": 11,
+  "nextPolygonId": 0
+}

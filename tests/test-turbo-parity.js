@@ -6,6 +6,7 @@ import { creatureScoreFromFitness } from '../src/sim/fitnessScore.js';
 const FIXED_DT = 1 / CONFIG.fixedStepHz;
 const GROUND_Y = 720;
 const SPAWN_X = 60;
+const SHARED_SPAWN_SPACING_PX = 500;
 
 function seededRng(seed = 123456789) {
   let state = seed >>> 0;
@@ -13,6 +14,16 @@ function seededRng(seed = 123456789) {
     state = (state * 1664525 + 1013904223) >>> 0;
     return state / 0x100000000;
   };
+}
+
+function withSeed(seed, fn) {
+  const previousRandom = Math.random;
+  Math.random = seededRng(seed);
+  try {
+    return fn();
+  } finally {
+    Math.random = previousRandom;
+  }
 }
 
 function buildToyDesign() {
@@ -144,18 +155,25 @@ function evaluateSharedWorld(pop, design, simConfig, spawnCenterX) {
   const bounds = getBounds(design.nodes);
   const relMaxY = bounds.maxY - bounds.minY;
   const startY = GROUND_Y - CONFIG.spawnClearance - CONFIG.nodeRadius - relMaxY;
-  const creatures = pop.map((dnaObj, idx) => new Creature(
-    world,
-    SPAWN_X,
-    startY,
-    design.nodes,
-    design.constraints,
-    dnaObj,
-    bounds.minX,
-    bounds.minY,
-    simConfig,
-    idx
-  ));
+  const spawnCenters = [];
+  const creatures = pop.map((dnaObj, idx) => {
+    // Keep shared-world stepping but avoid creature-vs-creature contact contamination.
+    const xOffset = idx * SHARED_SPAWN_SPACING_PX;
+    const creature = new Creature(
+      world,
+      SPAWN_X + xOffset,
+      startY,
+      design.nodes,
+      design.constraints,
+      dnaObj,
+      bounds.minX,
+      bounds.minY,
+      simConfig,
+      idx
+    );
+    spawnCenters[idx] = spawnCenterX + xOffset;
+    return creature;
+  });
 
   const steps = Math.floor(simConfig.simDuration / FIXED_DT);
   for (let step = 0; step < steps; step++) {
@@ -176,13 +194,13 @@ function evaluateSharedWorld(pop, design, simConfig, spawnCenterX) {
     const fitness = c.getFitnessSnapshot();
     return {
       idx,
-      score: creatureScoreFromFitness(fitness, c.getX(), spawnCenterX, scoreWeights)
+      score: creatureScoreFromFitness(fitness, c.getX(), spawnCenters[idx], scoreWeights)
     };
   }).sort((a, b) => b.score - a.score);
 
   creatures.forEach(c => c.destroy());
   cleanup(world);
-  return scores.map(s => s.idx);
+  return scores;
 }
 
 function evaluateIsolatedWorlds(pop, design, simConfig, spawnCenterX) {
@@ -222,58 +240,123 @@ function evaluateIsolatedWorlds(pop, design, simConfig, spawnCenterX) {
     return { idx, score };
   }).sort((a, b) => b.score - a.score);
 
-  return ranking.map(r => r.idx);
+  return ranking;
 }
 
 function topMismatchCount(a, b, topN = 8) {
   const n = Math.min(topN, a.length, b.length);
   let mismatch = 0;
   for (let i = 0; i < n; i++) {
-    if (a[i] !== b[i]) mismatch++;
+    if (a[i].idx !== b[i].idx) mismatch++;
   }
   return { mismatch, n };
 }
 
-function main() {
-  const rng = seededRng(42);
-  const design = buildToyDesign();
-  const bounds = getBounds(design.nodes);
-  const spawnCenterX = SPAWN_X + (bounds.maxX - bounds.minX) / 2;
-  const simConfig = buildSimConfig();
-
-  // Create one prototype creature to discover DNA length for this morphology.
-  const protoWorld = createEngine(simConfig.gravity);
-  createGround(protoWorld, GROUND_Y, { friction: simConfig.groundFriction, thickness: 16 });
-  const relMaxY = bounds.maxY - bounds.minY;
-  const startY = GROUND_Y - CONFIG.spawnClearance - CONFIG.nodeRadius - relMaxY;
-  const proto = new Creature(
-    protoWorld, SPAWN_X, startY, design.nodes, design.constraints,
-    null, bounds.minX, bounds.minY, simConfig, 0
-  );
-  const baseDNA = Array.from(proto.dna);
-  const baseArch = proto.architecture;
-  proto.destroy();
-  cleanup(protoWorld);
-
-  const popSize = 16;
-  const pop = Array.from({ length: popSize }, () => {
-    const dna = baseDNA.map(w => w + (rng() - 0.5) * 0.4);
-    return { dna: new Float32Array(dna), architecture: baseArch };
+function topSetOverlapRatio(a, b, topN = 8) {
+  const n = Math.min(topN, a.length, b.length);
+  const setA = new Set(a.slice(0, n).map(item => item.idx));
+  const setB = new Set(b.slice(0, n).map(item => item.idx));
+  let overlap = 0;
+  setA.forEach(idx => {
+    if (setB.has(idx)) overlap++;
   });
+  return n > 0 ? overlap / n : 0;
+}
 
-  const sharedRank = evaluateSharedWorld(pop, design, simConfig, spawnCenterX);
-  const isolatedRank = evaluateIsolatedWorlds(pop, design, simConfig, spawnCenterX);
-  const { mismatch, n } = topMismatchCount(sharedRank, isolatedRank, 8);
-  const pct = n ? (mismatch / n) : 0;
-  console.log('Shared top rank:', sharedRank.slice(0, 8).join(', '));
-  console.log('Isolated top rank:', isolatedRank.slice(0, 8).join(', '));
-  console.log(`Top-${n} mismatch: ${mismatch}/${n} (${(pct * 100).toFixed(1)}%)`);
+function spearmanRank(a, b) {
+  const n = Math.min(a.length, b.length);
+  if (n <= 1) return 1;
+  const rankA = new Map();
+  const rankB = new Map();
+  a.slice(0, n).forEach((item, i) => rankA.set(item.idx, i + 1));
+  b.slice(0, n).forEach((item, i) => rankB.set(item.idx, i + 1));
+  let sumD2 = 0;
+  rankA.forEach((ra, idx) => {
+    const rb = rankB.get(idx);
+    if (!Number.isFinite(rb)) return;
+    const d = ra - rb;
+    sumD2 += d * d;
+  });
+  return 1 - ((6 * sumD2) / (n * (n * n - 1)));
+}
 
-  if (pct > 0.5) {
-    console.error('Turbo parity test failed: mismatch threshold exceeded.');
-    process.exit(1);
-  }
-  console.log('Turbo parity test passed.');
+function median(values) {
+  if (!values.length) return 0;
+  const sorted = values.slice().sort((x, y) => x - y);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) return (sorted[mid - 1] + sorted[mid]) / 2;
+  return sorted[mid];
+}
+
+function dnaChecksum(pop) {
+  let sum = 0;
+  pop.forEach((entry, idx) => {
+    const dna = entry?.dna;
+    if (!(dna instanceof Float32Array)) return;
+    for (let i = 0; i < dna.length; i++) {
+      sum += dna[i] * (idx + 1) * (i + 1);
+    }
+  });
+  return Number(sum.toFixed(6));
+}
+
+function main() {
+  withSeed(42, () => {
+    const rng = seededRng(42);
+    const design = buildToyDesign();
+    const bounds = getBounds(design.nodes);
+    const spawnCenterX = SPAWN_X + (bounds.maxX - bounds.minX) / 2;
+    const simConfig = buildSimConfig();
+
+    // Create one prototype creature to discover DNA length for this morphology.
+    const protoWorld = createEngine(simConfig.gravity);
+    createGround(protoWorld, GROUND_Y, { friction: simConfig.groundFriction, thickness: 16 });
+    const relMaxY = bounds.maxY - bounds.minY;
+    const startY = GROUND_Y - CONFIG.spawnClearance - CONFIG.nodeRadius - relMaxY;
+    const proto = new Creature(
+      protoWorld, SPAWN_X, startY, design.nodes, design.constraints,
+      null, bounds.minX, bounds.minY, simConfig, 0
+    );
+    const baseDNA = Array.from(proto.dna);
+    const baseArch = proto.architecture;
+    proto.destroy();
+    cleanup(protoWorld);
+
+    const popSize = 16;
+    const pop = Array.from({ length: popSize }, () => {
+      const dna = baseDNA.map(w => w + (rng() - 0.5) * 0.4);
+      return { dna: new Float32Array(dna), architecture: baseArch };
+    });
+
+    const checksumBefore = dnaChecksum(pop);
+    const sharedRank = evaluateSharedWorld(pop, design, simConfig, spawnCenterX);
+    const checksumAfterShared = dnaChecksum(pop);
+    const isolatedRank = evaluateIsolatedWorlds(pop, design, simConfig, spawnCenterX);
+    const checksumAfterIsolated = dnaChecksum(pop);
+    const { mismatch, n } = topMismatchCount(sharedRank, isolatedRank, 8);
+    const pct = n ? (mismatch / n) : 0;
+    const overlapRatio = topSetOverlapRatio(sharedRank, isolatedRank, 8);
+    const rankSpearman = spearmanRank(sharedRank, isolatedRank);
+    const sharedMedian = median(sharedRank.map(r => r.score));
+    const isolatedMedian = median(isolatedRank.map(r => r.score));
+    const medianDeltaPct = Math.abs(sharedMedian - isolatedMedian) / Math.max(1e-6, Math.abs(isolatedMedian)) * 100;
+    console.log('Shared top rank:', sharedRank.slice(0, 8).map(r => r.idx).join(', '));
+    console.log('Isolated top rank:', isolatedRank.slice(0, 8).map(r => r.idx).join(', '));
+    console.log(`Top-${n} mismatch: ${mismatch}/${n} (${(pct * 100).toFixed(1)}%)`);
+    console.log(`Top-${n} set overlap: ${(overlapRatio * 100).toFixed(1)}%`);
+    console.log(`Rank Spearman: ${rankSpearman.toFixed(3)}`);
+    console.log(`Median scores: shared=${sharedMedian.toFixed(4)} isolated=${isolatedMedian.toFixed(4)}`);
+    console.log(`Median score delta: ${medianDeltaPct.toFixed(2)}%`);
+    console.log(`DNA checksum: before=${checksumBefore} afterShared=${checksumAfterShared} afterIsolated=${checksumAfterIsolated}`);
+
+    const dnaStable = Math.abs(checksumBefore - checksumAfterShared) < 1e-6
+      && Math.abs(checksumAfterShared - checksumAfterIsolated) < 1e-6;
+    if (!dnaStable || overlapRatio < 0.5 || rankSpearman < 0.5 || medianDeltaPct > 20) {
+      console.error('Turbo parity test failed: mismatch threshold exceeded.');
+      process.exit(1);
+    }
+    console.log('Turbo parity test passed.');
+  });
 }
 
 main();

@@ -127,6 +127,8 @@ export const CONFIG = {
   ghostMaxAge: VISUAL_CONFIG.ghostMaxAge,
   replayMax: VISUAL_CONFIG.replayMax,
   defaultZoom: VISUAL_CONFIG.defaultZoom,
+  minZoom: VISUAL_CONFIG.minZoom,
+  maxZoom: VISUAL_CONFIG.maxZoom,
 };
 
 export const STORAGE_KEYS = {

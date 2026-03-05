@@ -17,6 +17,13 @@ export class Designer {
     this.dragStart = null;
     this.dragNode = null;
     this.mousePos = { x: 0, y: 0 };
+    this.selectedNodeIds = new Set();
+    this.selectionBox = null;
+    this.selectionMode = null;
+    this.selectionStartPoint = null;
+    this.selectionStartBounds = null;
+    this.selectionStartNodes = null;
+    this.selectionBaseIds = null;
 
     // Zoom and pan
     this.zoom = 1.0;
@@ -25,6 +32,13 @@ export class Designer {
     this.isPanning = false;
     this.lastPanPos = null;
     this.needsInitialCenter = true;
+    this.isTouchPinching = false;
+    this.pinchStartDistance = 0;
+    this.pinchStartZoom = 1;
+    this.pinchStartPanX = 0;
+    this.pinchStartPanY = 0;
+    this.pinchStartCenter = { x: 0, y: 0 };
+    this.touchAutoNodeId = null;
 
     this._setup();
   }
@@ -42,16 +56,64 @@ export class Designer {
     this.canvas.addEventListener('wheel', e => this._onWheel(e), { passive: false });
 
     this.canvas.addEventListener('touchstart', e => {
+      if (!e.touches || e.touches.length === 0) return;
       e.preventDefault();
-      this._onDown(e.touches[0]);
+
+      if (e.touches.length >= 2) {
+        this._startPinchGesture(e.touches[0], e.touches[1]);
+        return;
+      }
+
+      if (!this.isTouchPinching) {
+        const nodeCountBeforeDown = this.nodes.length;
+        this._onDown(e.touches[0]);
+        if (this.tool === 'node' && this.nodes.length === nodeCountBeforeDown + 1) {
+          const created = this.nodes[this.nodes.length - 1];
+          this.touchAutoNodeId = created ? created.id : null;
+        } else {
+          this.touchAutoNodeId = null;
+        }
+      }
     }, { passive: false });
     this.canvas.addEventListener('touchmove', e => {
+      if (!e.touches || e.touches.length === 0) return;
       e.preventDefault();
+
+      if (this.isTouchPinching || e.touches.length >= 2) {
+        if (!this.isTouchPinching && e.touches.length >= 2) {
+          this._startPinchGesture(e.touches[0], e.touches[1]);
+        } else if (e.touches.length >= 2) {
+          this._updatePinchGesture(e.touches[0], e.touches[1]);
+        }
+        return;
+      }
+
       this._onMove(e.touches[0]);
     }, { passive: false });
     this.canvas.addEventListener('touchend', e => {
       e.preventDefault();
+
+      if (this.isTouchPinching) {
+        if (e.touches && e.touches.length >= 2) {
+          this._startPinchGesture(e.touches[0], e.touches[1]);
+        } else {
+          this._endPinchGesture();
+        }
+        return;
+      }
+
       this._onUp(e.changedTouches[0]);
+      this.touchAutoNodeId = null;
+    }, { passive: false });
+    this.canvas.addEventListener('touchcancel', e => {
+      e.preventDefault();
+      this._endPinchGesture();
+      this.dragStart = null;
+      this.dragNode = null;
+      this.selectionMode = null;
+      this.selectionBox = null;
+      this.touchAutoNodeId = null;
+      this.render();
     }, { passive: false });
   }
 
@@ -64,12 +126,19 @@ export class Designer {
 
   setTool(tool) {
     this.tool = tool;
-    this.canvas.style.cursor = tool === 'pan' ? 'grab' : 'crosshair';
+    if (tool === 'pan') {
+      this.canvas.style.cursor = 'grab';
+      return;
+    }
+    if (tool === 'select') {
+      this.canvas.style.cursor = 'crosshair';
+      return;
+    }
+    this.canvas.style.cursor = 'crosshair';
   }
 
   resetView() {
-    this.zoom = 1.0;
-    this._centerOnCreature();
+    this._fitCreatureToVisibleViewport();
     this.render();
   }
 
@@ -126,6 +195,7 @@ export class Designer {
     this.nextId = Math.max(0, ...nodes.map(n => n.id)) + 1;
     this.dragNode = null;
     this.dragStart = null;
+    this._clearSelection();
     this._centerOnCreature();
     this.render();
     this._checkValid();
@@ -138,6 +208,7 @@ export class Designer {
     this.nextId = 0;
     this.dragStart = null;
     this.dragNode = null;
+    this._clearSelection();
     this.render();
     this._checkValid();
   }
@@ -150,6 +221,7 @@ export class Designer {
     this.nextId = state.nextId;
     this.dragStart = null;
     this.dragNode = null;
+    this._clearSelection();
     this.render();
     this._checkValid();
   }
@@ -259,6 +331,70 @@ export class Designer {
     };
   }
 
+  _touchDistance(a, b) {
+    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  }
+
+  _touchCenter(a, b) {
+    return {
+      x: (a.clientX + b.clientX) * 0.5,
+      y: (a.clientY + b.clientY) * 0.5
+    };
+  }
+
+  _startPinchGesture(a, b) {
+    if (!a || !b) return;
+    this.isTouchPinching = true;
+    this.pinchStartDistance = Math.max(1, this._touchDistance(a, b));
+    this.pinchStartCenter = this._touchCenter(a, b);
+    this.pinchStartZoom = this.zoom;
+    this.pinchStartPanX = this.panX;
+    this.pinchStartPanY = this.panY;
+
+    // Cancel any active edit drag so two-finger gestures never move/create nodes.
+    this.dragStart = null;
+    this.dragNode = null;
+    this.selectionMode = null;
+    this.selectionBox = null;
+    this._rollbackTouchAutoNode();
+  }
+
+  _updatePinchGesture(a, b) {
+    if (!this.isTouchPinching || !a || !b) return;
+    const distance = Math.max(1, this._touchDistance(a, b));
+    const center = this._touchCenter(a, b);
+    const scale = distance / this.pinchStartDistance;
+    const nextZoom = Math.max(0.25, Math.min(3.0, this.pinchStartZoom * scale));
+
+    // Preserve the world point under the initial pinch center while allowing center translation.
+    const anchorWorldX = (this.pinchStartCenter.x - this.pinchStartPanX) / this.pinchStartZoom;
+    const anchorWorldY = (this.pinchStartCenter.y - this.pinchStartPanY) / this.pinchStartZoom;
+
+    this.zoom = nextZoom;
+    this.panX = center.x - anchorWorldX * nextZoom;
+    this.panY = center.y - anchorWorldY * nextZoom;
+    this.render();
+  }
+
+  _endPinchGesture() {
+    this.isTouchPinching = false;
+    this.pinchStartDistance = 0;
+    this.touchAutoNodeId = null;
+  }
+
+  _rollbackTouchAutoNode() {
+    if (this.touchAutoNodeId == null) return;
+    const hasNode = this.nodes.some(n => n.id === this.touchAutoNodeId);
+    if (!hasNode) {
+      this.touchAutoNodeId = null;
+      return;
+    }
+    this.nodes = this.nodes.filter(n => n.id !== this.touchAutoNodeId);
+    this.constraints = this.constraints.filter(c => c.n1 !== this.touchAutoNodeId && c.n2 !== this.touchAutoNodeId);
+    this.touchAutoNodeId = null;
+    this._checkValid();
+  }
+
   _onWheel(event) {
     event.preventDefault();
     const delta = -event.deltaY * 0.001;
@@ -300,6 +436,182 @@ export class Designer {
     return -1;
   }
 
+  _clearSelection() {
+    this.selectedNodeIds.clear();
+    this.selectionBox = null;
+    this.selectionMode = null;
+    this.selectionStartPoint = null;
+    this.selectionStartBounds = null;
+    this.selectionStartNodes = null;
+    this.selectionBaseIds = null;
+  }
+
+  _selectionHandleSizeWorld() {
+    return 12 / Math.max(0.25, this.zoom);
+  }
+
+  _selectionMoveHandleSizeWorld() {
+    return 16 / Math.max(0.25, this.zoom);
+  }
+
+  _selectionMoveHandleOffsetWorld() {
+    return 18 / Math.max(0.25, this.zoom);
+  }
+
+  _normalizeRect(rect) {
+    const minX = Math.min(rect.x1, rect.x2);
+    const maxX = Math.max(rect.x1, rect.x2);
+    const minY = Math.min(rect.y1, rect.y2);
+    const maxY = Math.max(rect.y1, rect.y2);
+    return {
+      minX,
+      maxX,
+      minY,
+      maxY,
+      width: maxX - minX,
+      height: maxY - minY
+    };
+  }
+
+  _getSelectionBounds() {
+    if (!this.selectedNodeIds.size) return null;
+    const selected = this.nodes.filter(n => this.selectedNodeIds.has(n.id));
+    if (!selected.length) return null;
+    const xs = selected.map(n => n.x);
+    const ys = selected.map(n => n.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    return {
+      minX,
+      maxX,
+      minY,
+      maxY,
+      width: maxX - minX,
+      height: maxY - minY,
+      centerX: (minX + maxX) * 0.5,
+      centerY: (minY + maxY) * 0.5
+    };
+  }
+
+  _isPointInsideSelectionBounds(x, y, bounds) {
+    if (!bounds) return false;
+    const pad = 8 / Math.max(0.25, this.zoom);
+    return (
+      x >= bounds.minX - pad &&
+      x <= bounds.maxX + pad &&
+      y >= bounds.minY - pad &&
+      y <= bounds.maxY + pad
+    );
+  }
+
+  _getMoveHandleRect(bounds) {
+    const size = this._selectionMoveHandleSizeWorld();
+    const offset = this._selectionMoveHandleOffsetWorld();
+    return {
+      x: bounds.centerX - size * 0.5,
+      y: bounds.minY - offset - size,
+      w: size,
+      h: size
+    };
+  }
+
+  _getResizeHandleRect(bounds) {
+    const size = this._selectionHandleSizeWorld();
+    return {
+      x: bounds.maxX - size * 0.5,
+      y: bounds.maxY - size * 0.5,
+      w: size,
+      h: size
+    };
+  }
+
+  _isPointInRect(x, y, rect) {
+    if (!rect) return false;
+    return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
+  }
+
+  _setSelectionFromRect(rect, addToExisting = false) {
+    const normalized = this._normalizeRect(rect);
+    const selectedIds = this.nodes
+      .filter(n =>
+        n.x >= normalized.minX &&
+        n.x <= normalized.maxX &&
+        n.y >= normalized.minY &&
+        n.y <= normalized.maxY
+      )
+      .map(n => n.id);
+    if (addToExisting && this.selectionBaseIds) {
+      this.selectedNodeIds = new Set([...this.selectionBaseIds, ...selectedIds]);
+      return;
+    }
+    this.selectedNodeIds = new Set(selectedIds);
+  }
+
+  _snapshotSelectedNodes() {
+    const snapshot = new Map();
+    this.nodes.forEach(n => {
+      if (this.selectedNodeIds.has(n.id)) snapshot.set(n.id, { x: n.x, y: n.y });
+    });
+    return snapshot;
+  }
+
+  _pruneSelection() {
+    if (!this.selectedNodeIds.size) return;
+    const existingIds = new Set(this.nodes.map(n => n.id));
+    this.selectedNodeIds = new Set([...this.selectedNodeIds].filter(id => existingIds.has(id)));
+  }
+
+  _applySelectedNodeTranslation(dx, dy) {
+    this.nodes.forEach(n => {
+      const start = this.selectionStartNodes.get(n.id);
+      if (!start) return;
+      n.x = start.x + dx;
+      n.y = start.y + dy;
+    });
+  }
+
+  _applySelectedNodeScale(scaleX, scaleY, anchorX, anchorY) {
+    this.nodes.forEach(n => {
+      const start = this.selectionStartNodes.get(n.id);
+      if (!start) return;
+      n.x = anchorX + (start.x - anchorX) * scaleX;
+      n.y = anchorY + (start.y - anchorY) * scaleY;
+    });
+  }
+
+  _updateSelectCursor(p) {
+    if (this.selectionMode === 'moving') {
+      this.canvas.style.cursor = 'move';
+      return;
+    }
+    if (this.selectionMode === 'resizing') {
+      this.canvas.style.cursor = 'nwse-resize';
+      return;
+    }
+    if (this.selectionMode === 'selecting') {
+      this.canvas.style.cursor = 'crosshair';
+      return;
+    }
+    const bounds = this._getSelectionBounds();
+    if (!bounds) {
+      this.canvas.style.cursor = 'crosshair';
+      return;
+    }
+    const moveHandle = this._getMoveHandleRect(bounds);
+    const resizeHandle = this._getResizeHandleRect(bounds);
+    if (this._isPointInRect(p.x, p.y, resizeHandle)) {
+      this.canvas.style.cursor = 'nwse-resize';
+      return;
+    }
+    if (this._isPointInRect(p.x, p.y, moveHandle) || this._isPointInsideSelectionBounds(p.x, p.y, bounds)) {
+      this.canvas.style.cursor = 'move';
+      return;
+    }
+    this.canvas.style.cursor = 'crosshair';
+  }
+
   _onDown(event) {
     // Middle mouse button or pan tool pans
     if (event.button === 1 || this.tool === 'pan') {
@@ -312,6 +624,38 @@ export class Designer {
 
     const p = this._relPoint(event);
     this.mousePos = p;
+
+    if (this.tool === 'select') {
+      const bounds = this._getSelectionBounds();
+      const moveHandle = bounds ? this._getMoveHandleRect(bounds) : null;
+      const resizeHandle = bounds ? this._getResizeHandleRect(bounds) : null;
+
+      if (bounds && this._isPointInRect(p.x, p.y, resizeHandle) && this.selectedNodeIds.size) {
+        this._pushUndo();
+        this.selectionMode = 'resizing';
+        this.selectionStartPoint = { ...p };
+        this.selectionStartBounds = { ...bounds };
+        this.selectionStartNodes = this._snapshotSelectedNodes();
+        this.render();
+        return;
+      }
+
+      if (bounds && (this._isPointInRect(p.x, p.y, moveHandle) || this._isPointInsideSelectionBounds(p.x, p.y, bounds)) && this.selectedNodeIds.size) {
+        this._pushUndo();
+        this.selectionMode = 'moving';
+        this.selectionStartPoint = { ...p };
+        this.selectionStartNodes = this._snapshotSelectedNodes();
+        this.render();
+        return;
+      }
+
+      this.selectionMode = 'selecting';
+      this.selectionBox = { x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+      this.selectionBaseIds = event.shiftKey ? new Set(this.selectedNodeIds) : null;
+      if (!event.shiftKey) this.selectedNodeIds.clear();
+      this.render();
+      return;
+    }
 
     const hitNode = this._findNodeAt(p.x, p.y);
 
@@ -404,6 +748,39 @@ export class Designer {
 
     const p = this._relPoint(event);
     this.mousePos = p;
+    if (this.tool === 'select') {
+      if (this.selectionMode === 'selecting' && this.selectionBox) {
+        this.selectionBox.x2 = p.x;
+        this.selectionBox.y2 = p.y;
+        this._setSelectionFromRect(this.selectionBox, !!this.selectionBaseIds);
+        this.render();
+        return;
+      }
+      if (this.selectionMode === 'moving' && this.selectionStartPoint && this.selectionStartNodes) {
+        const dx = p.x - this.selectionStartPoint.x;
+        const dy = p.y - this.selectionStartPoint.y;
+        this._applySelectedNodeTranslation(dx, dy);
+        this.render();
+        return;
+      }
+      if (this.selectionMode === 'resizing' && this.selectionStartBounds && this.selectionStartNodes) {
+        const anchorX = this.selectionStartBounds.minX;
+        const anchorY = this.selectionStartBounds.minY;
+        const minSize = 12 / Math.max(0.25, this.zoom);
+        const nextWidth = Math.max(minSize, p.x - anchorX);
+        const nextHeight = Math.max(minSize, p.y - anchorY);
+        const baseWidth = Math.max(minSize, this.selectionStartBounds.width || minSize);
+        const baseHeight = Math.max(minSize, this.selectionStartBounds.height || minSize);
+        const scaleX = nextWidth / baseWidth;
+        const scaleY = nextHeight / baseHeight;
+        this._applySelectedNodeScale(scaleX, scaleY, anchorX, anchorY);
+        this.render();
+        return;
+      }
+      this._updateSelectCursor(p);
+      return;
+    }
+
     if (this.dragNode) {
       this.dragNode.x = p.x;
       this.dragNode.y = p.y;
@@ -423,6 +800,38 @@ export class Designer {
 
     const p = event.clientX ? this._relPoint(event) : this.mousePos;
     this.mousePos = p;
+
+    if (this.tool === 'select') {
+      if (this.selectionMode === 'selecting' && this.selectionBox) {
+        this.selectionBox.x2 = p.x;
+        this.selectionBox.y2 = p.y;
+        const normalized = this._normalizeRect(this.selectionBox);
+        const isClick = normalized.width < 4 / Math.max(0.25, this.zoom) && normalized.height < 4 / Math.max(0.25, this.zoom);
+        if (isClick) {
+          const hitNode = this._findNodeAt(p.x, p.y, 12 / Math.max(0.25, this.zoom));
+          if (hitNode) {
+            if (this.selectionBaseIds) this.selectedNodeIds = new Set([...this.selectionBaseIds, hitNode.id]);
+            else this.selectedNodeIds = new Set([hitNode.id]);
+          } else if (this.selectionBaseIds) {
+            this.selectedNodeIds = new Set(this.selectionBaseIds);
+          } else {
+            this.selectedNodeIds.clear();
+          }
+        } else {
+          this._setSelectionFromRect(this.selectionBox, !!this.selectionBaseIds);
+        }
+      }
+      this.selectionMode = null;
+      this.selectionStartPoint = null;
+      this.selectionStartBounds = null;
+      this.selectionStartNodes = null;
+      this.selectionBaseIds = null;
+      this.selectionBox = null;
+      this._updateSelectCursor(p);
+      this.render();
+      this._checkValid();
+      return;
+    }
 
     if (this.dragNode) {
       this.dragNode = null;
@@ -452,18 +861,111 @@ export class Designer {
     this._checkValid();
   }
 
+  _getVisibleViewportInsets() {
+    if (!this.canvas) return { left: 0, right: 0, top: 0, bottom: 0 };
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const insets = { left: 0, right: 0, top: 0, bottom: 0 };
+    const selectors = [
+      '#btn-run',
+      '#btn-back',
+      '#btn-back-toolbar',
+      '.design-toolbar-left',
+      '.design-toolbar-right',
+      '.design-quickstart'
+    ];
+
+    const applyInset = (el) => {
+      if (!el) return;
+      const style = window.getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return;
+      const r = el.getBoundingClientRect();
+      const overlapW = Math.min(r.right, canvasRect.right) - Math.max(r.left, canvasRect.left);
+      const overlapH = Math.min(r.bottom, canvasRect.bottom) - Math.max(r.top, canvasRect.top);
+      if (overlapW <= 0 || overlapH <= 0) return;
+
+      const w = Math.max(1, overlapW);
+      const h = Math.max(1, overlapH);
+      const isHorizontal = w >= h * 1.2;
+      const isVertical = h >= w * 1.2;
+
+      if (isVertical || !isHorizontal) {
+        if (r.left <= canvasRect.left + canvasRect.width * 0.5) {
+          const occupied = Math.max(0, Math.min(r.right, canvasRect.right) - canvasRect.left);
+          insets.left = Math.max(insets.left, occupied);
+        } else {
+          const occupied = Math.max(0, canvasRect.right - Math.max(r.left, canvasRect.left));
+          insets.right = Math.max(insets.right, occupied);
+        }
+      }
+
+      if (isHorizontal || !isVertical) {
+        if (r.top <= canvasRect.top + canvasRect.height * 0.5) {
+          const occupied = Math.max(0, Math.min(r.bottom, canvasRect.bottom) - canvasRect.top);
+          insets.top = Math.max(insets.top, occupied);
+        } else {
+          const occupied = Math.max(0, canvasRect.bottom - Math.max(r.top, canvasRect.top));
+          insets.bottom = Math.max(insets.bottom, occupied);
+        }
+      }
+    };
+
+    selectors.forEach(selector => {
+      document.querySelectorAll(selector).forEach(applyInset);
+    });
+
+    const pad = 8;
+    return {
+      left: insets.left > 0 ? insets.left + pad : 0,
+      right: insets.right > 0 ? insets.right + pad : 0,
+      top: insets.top > 0 ? insets.top + pad : 0,
+      bottom: insets.bottom > 0 ? insets.bottom + pad : 0
+    };
+  }
+
+  _fitCreatureToVisibleViewport() {
+    if (this.nodes.length === 0 || !this.canvas) return;
+    const xs = this.nodes.map(n => n.x);
+    const ys = this.nodes.map(n => n.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    const insets = this._getVisibleViewportInsets();
+    const usableW = Math.max(120, this.canvas.width - insets.left - insets.right);
+    const usableH = Math.max(120, this.canvas.height - insets.top - insets.bottom);
+
+    // Add world padding + slight extra zoom-out for safer framing under mobile overlays.
+    const worldPad = 22;
+    const creatureW = Math.max(20, (maxX - minX) + worldPad * 2);
+    const creatureH = Math.max(20, (maxY - minY) + worldPad * 2);
+    const fitZoom = Math.min(3.0, Math.max(0.25, Math.min(usableW / creatureW, usableH / creatureH) * 0.94));
+    this.zoom = fitZoom;
+
+    const cx = (minX + maxX) * 0.5;
+    const cy = (minY + maxY) * 0.5;
+    const viewportCenterX = insets.left + usableW * 0.5;
+    const viewportCenterY = insets.top + usableH * 0.5;
+    this.panX = viewportCenterX - cx * this.zoom;
+    this.panY = viewportCenterY - cy * this.zoom;
+  }
+
   _centerOnCreature() {
-    if (this.nodes.length === 0) return;
+    if (this.nodes.length === 0 || !this.canvas) return;
     const xs = this.nodes.map(n => n.x);
     const ys = this.nodes.map(n => n.y);
     const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
     const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-    this.panX = this.canvas.width / 2 - cx * this.zoom;
-    this.panY = this.canvas.height / 2 - cy * this.zoom;
+    const insets = this._getVisibleViewportInsets();
+    const usableW = Math.max(120, this.canvas.width - insets.left - insets.right);
+    const usableH = Math.max(120, this.canvas.height - insets.top - insets.bottom);
+    this.panX = (insets.left + usableW * 0.5) - cx * this.zoom;
+    this.panY = (insets.top + usableH * 0.5) - cy * this.zoom;
   }
 
   render() {
     if (!this.ctx) return;
+    this._pruneSelection();
     // Center the view once on first render
     if (this.needsInitialCenter) {
       this.needsInitialCenter = false;
@@ -602,8 +1104,62 @@ export class Designer {
       ctx.setLineDash([]);
     }
 
+    // Selection box and handles (select tool)
+    if (this.selectionMode === 'selecting' && this.selectionBox) {
+      const box = this._normalizeRect(this.selectionBox);
+      ctx.fillStyle = 'rgba(0, 242, 255, 0.14)';
+      ctx.strokeStyle = 'rgba(0, 242, 255, 0.9)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6 / Math.max(0.25, this.zoom), 6 / Math.max(0.25, this.zoom)]);
+      ctx.fillRect(box.minX, box.minY, box.width, box.height);
+      ctx.strokeRect(box.minX, box.minY, box.width, box.height);
+      ctx.setLineDash([]);
+    }
+
+    const selectionBounds = this._getSelectionBounds();
+    if (selectionBounds && this.selectedNodeIds.size) {
+      const pad = 10 / Math.max(0.25, this.zoom);
+      const x = selectionBounds.minX - pad;
+      const y = selectionBounds.minY - pad;
+      const w = Math.max(1, selectionBounds.width + pad * 2);
+      const h = Math.max(1, selectionBounds.height + pad * 2);
+      ctx.strokeStyle = 'rgba(125, 255, 125, 0.95)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([8 / Math.max(0.25, this.zoom), 5 / Math.max(0.25, this.zoom)]);
+      ctx.strokeRect(x, y, w, h);
+      ctx.setLineDash([]);
+
+      const moveHandle = this._getMoveHandleRect(selectionBounds);
+      const resizeHandle = this._getResizeHandleRect(selectionBounds);
+
+      ctx.fillStyle = 'rgba(125, 255, 125, 0.95)';
+      ctx.fillRect(moveHandle.x, moveHandle.y, moveHandle.w, moveHandle.h);
+      ctx.fillStyle = 'rgba(11, 15, 26, 0.95)';
+      const mx = moveHandle.x + moveHandle.w * 0.5;
+      const my = moveHandle.y + moveHandle.h * 0.5;
+      const mLen = moveHandle.w * 0.28;
+      ctx.lineWidth = 1.5 / Math.max(0.25, this.zoom);
+      ctx.strokeStyle = 'rgba(11, 15, 26, 0.95)';
+      ctx.beginPath();
+      ctx.moveTo(mx - mLen, my);
+      ctx.lineTo(mx + mLen, my);
+      ctx.moveTo(mx, my - mLen);
+      ctx.lineTo(mx, my + mLen);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(125, 255, 125, 0.95)';
+      ctx.fillRect(resizeHandle.x, resizeHandle.y, resizeHandle.w, resizeHandle.h);
+      ctx.strokeStyle = 'rgba(11, 15, 26, 0.95)';
+      ctx.lineWidth = 1 / Math.max(0.25, this.zoom);
+      ctx.beginPath();
+      ctx.moveTo(resizeHandle.x + resizeHandle.w * 0.2, resizeHandle.y + resizeHandle.h * 0.8);
+      ctx.lineTo(resizeHandle.x + resizeHandle.w * 0.8, resizeHandle.y + resizeHandle.h * 0.2);
+      ctx.stroke();
+    }
+
     // Nodes
     this.nodes.forEach(n => {
+      const isSelected = this.selectedNodeIds.has(n.id);
       ctx.beginPath();
       if (n.fixed) {
         const sz = 10;
@@ -614,7 +1170,9 @@ export class Designer {
       ctx.fillStyle = '#222';
       ctx.fill();
       ctx.lineWidth = 2;
-      ctx.strokeStyle = this.dragNode === n ? '#ffff00' : (n.fixed ? '#ffaa00' : '#00f2ff');
+      ctx.strokeStyle = this.dragNode === n
+        ? '#ffff00'
+        : (isSelected ? '#7dff7d' : (n.fixed ? '#ffaa00' : '#00f2ff'));
       ctx.stroke();
 
       ctx.beginPath();
@@ -631,40 +1189,5 @@ export class Designer {
     // Restore transform for UI elements drawn in screen space
     ctx.restore();
 
-    // INFO PANEL - drawn in screen space so it stays fixed on screen
-    ctx.fillStyle = 'rgba(10, 14, 24, 0.85)';
-    ctx.fillRect(10, 10, 360, 110);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(10, 10, 360, 110);
-
-    ctx.fillStyle = 'rgba(0, 242, 255, 0.9)';
-    ctx.font = 'bold 14px "JetBrains Mono", monospace';
-    ctx.fillText('CREATURE DESIGNER', 15, 28);
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.font = '12px "JetBrains Mono", monospace';
-    ctx.fillText(`Nodes: ${this.nodes.length} | Constraints: ${this.constraints.length}`, 15, 46);
-
-    const fixedCount = this.nodes.filter(n => n.fixed).length;
-    const muscleCount = this.constraints.filter(c => c.type === 'muscle').length;
-    const boneCount = this.constraints.filter(c => c.type === 'bone').length;
-
-    ctx.fillStyle = 'rgba(255, 170, 0, 0.8)';
-    ctx.font = '12px "JetBrains Mono", monospace';
-    ctx.fillText(`⬛ Fixed: ${fixedCount}`, 15, 64);
-    ctx.fillStyle = 'rgba(192, 199, 205, 0.8)';
-    ctx.fillText(`▬ Bones: ${boneCount}`, 120, 64);
-    ctx.fillStyle = 'rgba(255, 0, 85, 0.8)';
-    ctx.fillText(`▬ Muscles: ${muscleCount}`, 220, 64);
-
-    const isValid = this.isValid();
-    ctx.fillStyle = isValid ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)';
-    ctx.font = '12px "JetBrains Mono", monospace';
-    ctx.fillText(isValid ? '✓ Ready to evolve!' : '✗ Need 2+ nodes, 1 bone, 1 muscle', 15, 82);
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.font = '12px "JetBrains Mono", monospace';
-    ctx.fillText('TIP: Keep feet near ground line for best results', 15, 100);
   }
 }

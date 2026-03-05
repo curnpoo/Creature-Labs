@@ -28,6 +28,7 @@ export class Simulation {
     this.lastFrame = 0;
     this.fpsSmoothed = 60;
     this.simTimeElapsed = 0;
+    this.runElapsedSec = 0;
 
     // Evolution state
     this.genBestDist = 0;
@@ -548,6 +549,7 @@ export class Simulation {
     this.championFitness = -Infinity;
     this.championAwards = 0;
     this.simTimeElapsed = 0;
+    this.runElapsedSec = 0;
     this.sandboxRuns = 0;
     this.lastFrame = performance.now();
     this.fpsSmoothed = 60;
@@ -634,6 +636,7 @@ this._turboRunning = false;
 this.turboStatus = this.turboEnabled ? 'warming' : 'idle';
 this.neatStatus = null;
 this._sandboxGraphData = null;
+this.runElapsedSec = 0;
 
 if (this.world) {
 cleanup(this.world);
@@ -1768,7 +1771,7 @@ this.world = null;
 
     this.generation++;
     this.timer = this.simDuration;
-    this.simTimeElapsed += this.simDuration;
+    this.runElapsedSec += this.simDuration;
     if (this.onGenerationEnd) {
       this.onGenerationEnd({
         generation: this.generation - 1,
@@ -2037,6 +2040,7 @@ this.world = null;
         generation: this.generation,
         timer: this.timer,
         simTimeElapsed: this.simTimeElapsed,
+        runElapsedSec: this.runElapsedSec,
         paused: this.paused,
         sandboxMode: this.sandboxMode,
         viewMode: this.viewMode,
@@ -2299,6 +2303,7 @@ this.world = null;
       }
     simulatedSec = stepsToRun * fixedDtSec;
     this.simTimeElapsed += simulatedSec;
+    this.runElapsedSec += simulatedSec;
     this.timer -= simulatedSec;
 
     if (this.creatures.length > 0 && this.getAliveCreatureCount() === 0) {
@@ -2507,6 +2512,7 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
         generation: this.generation,
         timer: this.timer,
         simTimeElapsed: this.simTimeElapsed,
+        runElapsedSec: this.runElapsedSec,
         paused: this.paused,
         trainingMode: this.trainingMode,
         turboEnabled: this.turboEnabled,
@@ -2742,6 +2748,9 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
 
     this.timer = Number.isFinite(runtime.timer) ? runtime.timer : this.simDuration;
     this.simTimeElapsed = Number.isFinite(runtime.simTimeElapsed) ? runtime.simTimeElapsed : 0;
+    this.runElapsedSec = Number.isFinite(runtime.runElapsedSec)
+      ? runtime.runElapsedSec
+      : this.simTimeElapsed;
     this.paused = !!runtime.paused;
     this.deathWallX = Number.isFinite(runtime.deathWallX) ? runtime.deathWallX : this.deathWallX;
     this.deathWallKillsThisGen = Number.isFinite(runtime.deathWallKillsThisGen) ? runtime.deathWallKillsThisGen : 0;
@@ -2824,6 +2833,7 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
     if (!this.sandboxBrainDNA && !this.sandboxBrainEntry) return;
     this.sandboxRuns += 1;
     this.timer = Infinity; // Unlimited time in sandbox mode
+    this.runElapsedSec = 0;
     this.sandboxPaused = false; // Reset pause state
     this.visualLeader = null;
     this.currentGhostPath = [];

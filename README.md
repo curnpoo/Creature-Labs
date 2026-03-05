@@ -135,7 +135,6 @@ tests/
 
 - JavaScript (ES modules)
 - Vite
-- Electron
 - Planck.js
 - Tailwind CSS
 
@@ -153,18 +152,10 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-Desktop mode:
-
-```bash
-npm run app
-```
-
 ## Build
 
 ```bash
 npm run build
-npm run build:win
-npm run build:mac
 ```
 
 ## Tests / Validation Scripts

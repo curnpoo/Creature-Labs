@@ -73,7 +73,11 @@ export class HUD {
     }
     if (this.els.stagnant) this.els.stagnant.textContent = `${sim.stagnantGens}g`;
     if (this.els.time) this.els.time.textContent = `${Math.max(0, safe(sim.timer)).toFixed(2)}s`;
-    if (this.els.elapsed) this.els.elapsed.textContent = this._formatElapsed(safe(sim.simTimeElapsed));
+    if (this.els.elapsed) {
+      this.els.elapsed.textContent = this._formatElapsed(
+        safe(sim.runElapsedSec, safe(sim.simTimeElapsed))
+      );
+    }
     if (this.els.fps) this.els.fps.textContent = String(Math.round(safe(sim.fpsSmoothed, 0)));
 
     // Active creatures count

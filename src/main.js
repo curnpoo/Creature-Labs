@@ -8,7 +8,37 @@ import { ProgressChart } from './ui/ProgressChart.js';
 import { EvolutionMonitor } from './utils/EvolutionMonitor.js';
 import { EvolutionFeedback } from './ui/EvolutionFeedback.js';
 import { Vec2, SCALE } from './sim/Physics.js';
+import { buildDefaultCreatureCatalogEntries } from './data/defaultCreatureCatalog.js';
+import { resolveUIPlatform } from './ui/platformPolicy.js';
+import { mountDesktopUI } from './ui/UISurface.js';
+import { registerPWA } from './pwa/registerPWA.js';
+import { THEME_TOKENS_SCHEMA_VERSION } from './theme/tokens.js';
 
+registerPWA();
+const uiPlatform = resolveUIPlatform();
+document.body.classList.add(uiPlatform === 'mobile' ? 'app-mobile' : 'app-desktop');
+document.body.dataset.uiPlatform = uiPlatform;
+document.body.dataset.themeTokenSchema = THEME_TOKENS_SCHEMA_VERSION;
+
+const appStateListeners = new Set();
+let uiSurface = null;
+const MOBILE_SHEET_STATE_CLASSES = ['mobile-sheet-open', 'mobile-sheet-controls', 'mobile-sheet-stats'];
+const MOBILE_MODULE_STORAGE_PREFIX = 'polyevolve.mobileModule.';
+let mobileSheetReady = false;
+
+// Orientation binding
+function updateOrientationClasses() {
+  const isPortrait = window.innerHeight > window.innerWidth;
+  if (isPortrait) {
+    document.body.classList.add('portrait');
+    document.body.classList.remove('landscape');
+  } else {
+    document.body.classList.add('landscape');
+    document.body.classList.remove('portrait');
+  }
+}
+window.addEventListener('resize', updateOrientationClasses);
+updateOrientationClasses();
 
 // --- State ---
 let currentScreen = 'splash';
@@ -31,6 +61,32 @@ const BRAIN_MIGRATION_NOTICE_KEY = 'polyevolve.brainMigrationNoticeVersion';
 let brainLibrary = [];
 let creatureCatalog = [];
 
+function getCurrentAppState() {
+  return {
+    screen: currentScreen,
+    platform: uiPlatform,
+    simSessionStarted,
+    sandboxMode: !!sim?.sandboxMode
+  };
+}
+
+function subscribeAppState(listener) {
+  if (typeof listener !== 'function') return () => {};
+  appStateListeners.add(listener);
+  return () => appStateListeners.delete(listener);
+}
+
+function emitAppState() {
+  const state = getCurrentAppState();
+  appStateListeners.forEach(listener => {
+    try {
+      listener(state);
+    } catch (error) {
+      console.warn('App state listener error:', error);
+    }
+  });
+}
+
 function formatTwoDecimals(value) {
   return Number.isFinite(value) ? value.toFixed(2) : '0.00';
 }
@@ -43,6 +99,12 @@ let frameCount = 0;
 // --- Modules ---
 const sim = new Simulation();
 sim.trainingAlgorithm = 'neat';
+const SIM_MIN_ZOOM = Number.isFinite(CONFIG.minZoom) ? CONFIG.minZoom : 0.15;
+const SIM_MAX_ZOOM = Number.isFinite(CONFIG.maxZoom) ? CONFIG.maxZoom : 2.5;
+const SIM_START_PREVIEW_ZOOM = 0.8;
+const SIM_START_PREVIEW_X_METERS = 10;
+const SIM_START_GROUND_VIEW_RATIO = 0.58;
+const SIM_START_GROUND_LOWER_METERS = 6;
 
 function migrateBrainStorageIfNeeded() {
   try {
@@ -105,11 +167,134 @@ const evolutionFeedback = new EvolutionFeedback(evolutionMonitor);
 // Make evolutionFeedback globally accessible for dismissSuggestions callback
 window.evolutionFeedback = evolutionFeedback;
 
+function getSimViewportOffsets() {
+  if (document.body.classList.contains('mobile-sheet-open')) {
+    return { left: 0, right: 0, top: 0, bottom: 0 };
+  }
+
+  const panelVisible = panel => (
+    !!panel &&
+    panel.style.display !== 'none' &&
+    !panel.classList.contains('module-hidden')
+  );
+
+  let left = 0;
+  let right = 0;
+  let top = 0;
+  let bottom = 0;
+
+  const leftPanel = document.getElementById('panel-progress-left');
+  const rightPanel = document.getElementById('panel-controls');
+  const topPanel = document.getElementById('panel-top-bar');
+  const bottomPanel = document.getElementById('panel-scorecard');
+
+  if (panelVisible(leftPanel)) left = leftPanel.offsetWidth || 0;
+  if (panelVisible(rightPanel)) right = rightPanel.offsetWidth || 0;
+  if (panelVisible(topPanel)) top = topPanel.offsetHeight || 0;
+  if (panelVisible(bottomPanel)) bottom = bottomPanel.offsetHeight || 0;
+
+  if (document.body.classList.contains('app-mobile')) {
+    const mobileDock = document.getElementById('mobile-quick-controls');
+    if (mobileDock && !mobileDock.classList.contains('minimized') && !document.body.classList.contains('mobile-sheet-open')) {
+      const isPortrait = window.innerHeight > window.innerWidth;
+      if (isPortrait) bottom = Math.max(bottom, mobileDock.offsetHeight || 0);
+      else right = Math.max(right, mobileDock.offsetWidth || 0);
+    }
+  }
+
+  return { left, right, top, bottom };
+}
+
+function fitSimCameraToDesign(design) {
+  const nodes = Array.isArray(design?.nodes) ? design.nodes : [];
+  if (!nodes.length || !worldCanvas.width || !worldCanvas.height) return false;
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  nodes.forEach(n => {
+    if (!Number.isFinite(n?.x) || !Number.isFinite(n?.y)) return;
+    minX = Math.min(minX, n.x);
+    minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x);
+    maxY = Math.max(maxY, n.y);
+  });
+  if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+    return false;
+  }
+
+  const boundsW = Math.max(60, maxX - minX);
+  const boundsH = Math.max(60, maxY - minY);
+  const padPx = 90;
+  const framedW = boundsW + padPx * 2;
+  const framedH = boundsH + padPx * 2;
+
+  const { left, right, top, bottom } = getSimViewportOffsets();
+  const usableW = Math.max(220, worldCanvas.width - left - right);
+  const usableH = Math.max(200, worldCanvas.height - top - bottom);
+  const fitZoom = Math.min(SIM_MAX_ZOOM, Math.max(SIM_MIN_ZOOM, Math.min(usableW / framedW, usableH / framedH)));
+
+  const centerX = (minX + maxX) * 0.5;
+  const centerY = (minY + maxY) * 0.5;
+  const visibleCenterX = (left + usableW * 0.5) / fitZoom;
+  const visibleCenterY = (top + usableH * 0.5) / fitZoom;
+
+  sim.zoom = fitZoom;
+  sim.cameraX = centerX - visibleCenterX;
+  sim.cameraY = Math.max(0, centerY - visibleCenterY);
+
+  const zoomSlider = document.getElementById('inp-zoom');
+  if (zoomSlider) zoomSlider.value = String(Math.round(sim.zoom * 100));
+  controls.updateLabels();
+  return true;
+}
+
+function resetSimCameraFallback() {
+  sim.zoom = Math.min(SIM_MAX_ZOOM, Math.max(SIM_MIN_ZOOM, 1));
+  sim.cameraX = 0;
+  sim.cameraY = Math.max(0, sim.getGroundY() - (worldCanvas.height / sim.zoom) * 0.78);
+  const zoomSlider = document.getElementById('inp-zoom');
+  if (zoomSlider) zoomSlider.value = String(Math.round(sim.zoom * 100));
+  controls.updateLabels();
+}
+
+function centerSimCameraAtOriginGround() {
+  sim.zoom = Math.min(SIM_MAX_ZOOM, Math.max(SIM_MIN_ZOOM, SIM_START_PREVIEW_ZOOM));
+  const { left, right, top, bottom } = getSimViewportOffsets();
+  const usableW = Math.max(220, worldCanvas.width - left - right);
+  const usableH = Math.max(200, worldCanvas.height - top - bottom);
+  const visibleCenterX = (left + usableW * 0.5) / sim.zoom;
+  const startX = SIM_START_PREVIEW_X_METERS * SCALE;
+  const groundTargetY =
+    ((top + usableH * SIM_START_GROUND_VIEW_RATIO) / sim.zoom) +
+    (SIM_START_GROUND_LOWER_METERS * SCALE);
+
+  // Pre-start framing: slight forward X offset and ground a bit lower in view for clarity.
+  sim.cameraX = startX - visibleCenterX;
+  sim.cameraY = Math.max(0, sim.getGroundY() - groundTargetY);
+
+  const zoomSlider = document.getElementById('inp-zoom');
+  if (zoomSlider) zoomSlider.value = String(Math.round(sim.zoom * 100));
+  controls.updateLabels();
+}
+
+function fitCurrentSimCameraToCreature(forceLock = false) {
+  const fitted = fitSimCameraToDesign({ nodes: sim.nodes });
+  if (!fitted) resetSimCameraFallback();
+  if (forceLock) controls.setCameraMode('lock');
+  return fitted;
+}
+
 // --- Screen management ---
 function setScreen(name) {
   Object.values(screens).forEach(s => s.classList.remove('active'));
   screens[name].classList.add('active');
   currentScreen = name;
+
+  if (name !== 'sim') {
+    closeMobileSheet();
+  }
 
   if (name === 'draw') {
     sim.stopLoop();
@@ -117,6 +302,10 @@ function setScreen(name) {
     toggleCreatureCatalog(false);
     designer.render();
   } else if (name === 'sim') {
+    if (document.body.classList.contains('app-mobile')) {
+      const mobileDock = document.getElementById('mobile-quick-controls');
+      if (mobileDock) mobileDock.classList.remove('minimized');
+    }
     // Transfer design to simulation; wait for explicit Start Sim.
     const design = designer.getDesign();
     sim.nodes = design.nodes;
@@ -124,19 +313,20 @@ function setScreen(name) {
     resizeCanvases();
     worldCtx = worldCanvas.getContext('2d');
     simSessionStarted = false;
-    sim.zoom = 1;
-    sim.cameraX = 0;
-    sim.cameraY = Math.max(0, sim.getGroundY() - (worldCanvas.height / sim.zoom) * 0.78);
     controls.setCameraMode('free');
-    const zoomSlider = document.getElementById('inp-zoom');
-    if (zoomSlider) zoomSlider.value = '100';
-    controls.updateLabels();
+    centerSimCameraAtOriginGround();
     const icon = document.getElementById('icon-pause');
     if (icon) icon.className = 'fas fa-pause';
     updateStartSimUI();
     updateSandboxUI();
     renderWorld(null);
   }
+
+  if (uiSurface && typeof uiSurface.sync === 'function') {
+    uiSurface.sync(getCurrentAppState());
+  }
+  updateMobileSimTopHud();
+  emitAppState();
 }
 
 function resizeCanvases() {
@@ -169,25 +359,462 @@ function triggerTrainingStatAnimation() {
 function updateStartSimUI() {
   const btn = document.getElementById('btn-start-sim');
   const label = document.getElementById('start-sim-label');
-  if (!btn || !label) return;
+  
+  const mqStart = document.getElementById('btn-mq-start');
+  const mqStartIcon = document.getElementById('icon-mq-start');
+  const mqStartLabel = document.getElementById('label-mq-start');
+  const mqReset = document.getElementById('btn-mq-reset');
 
   if (currentScreen !== 'sim') {
-    btn.classList.remove('start-ready', 'training');
-    label.textContent = 'Start Sim';
+    if (btn) btn.classList.remove('start-ready', 'training');
+    if (label) label.textContent = 'Start Sim';
+    syncMobileQuickControlState();
     return;
   }
 
   if (!simSessionStarted) {
-    btn.classList.add('start-ready');
-    btn.classList.remove('training');
-    label.textContent = 'Start Sim';
-    btn.title = 'Start Simulation';
+    if (btn) {
+      btn.classList.add('start-ready');
+      btn.classList.remove('training');
+      btn.title = 'Start Simulation';
+    }
+    if (label) label.textContent = 'Start Sim';
+    if (mqStartIcon) mqStartIcon.className = 'fas fa-play';
+    if (mqStartLabel) mqStartLabel.textContent = 'Start';
+    if (mqStart) {
+      mqStart.classList.add('is-idle');
+      mqStart.classList.remove('is-running', 'is-paused');
+    }
+    if (mqReset) mqReset.disabled = true;
   } else {
-    btn.classList.remove('start-ready');
-    btn.classList.add('training');
-    label.textContent = 'Training...';
-    btn.title = 'Simulation Running';
+    if (btn) {
+      btn.classList.remove('start-ready');
+      btn.classList.add('training');
+      btn.title = 'Simulation Running';
+    }
+    if (label) label.textContent = 'Training...';
+    const isPaused = sim.sandboxMode ? sim.sandboxPaused : sim.paused;
+    if (mqStartIcon) mqStartIcon.className = isPaused ? 'fas fa-play' : 'fas fa-pause';
+    if (mqStartLabel) mqStartLabel.textContent = isPaused ? 'Play' : 'Pause';
+    if (mqStart) {
+      mqStart.classList.remove('is-idle');
+      mqStart.classList.toggle('is-paused', isPaused);
+      mqStart.classList.toggle('is-running', !isPaused);
+    }
+    if (mqReset) mqReset.disabled = false;
   }
+
+  syncMobileQuickControlState();
+}
+
+function syncMobileQuickControlState() {
+  const MOBILE_SIM_SPEED_MAX = 20;
+  const mqTurbo = document.getElementById('btn-mq-turbo');
+  const mqCam = document.getElementById('btn-mq-cam');
+  const mqGroundDraw = document.getElementById('btn-mq-ground-draw');
+  const desktopGroundDraw = document.getElementById('btn-ground-draw');
+  const desktopSpeed = document.getElementById('inp-speed');
+  const isMobile = document.body.classList.contains('app-mobile');
+
+  if (isMobile && Number(sim.simSpeed) > MOBILE_SIM_SPEED_MAX && desktopSpeed) {
+    sim.simSpeed = MOBILE_SIM_SPEED_MAX;
+    desktopSpeed.value = String(MOBILE_SIM_SPEED_MAX);
+  }
+
+  if (mqTurbo) mqTurbo.classList.toggle('active', sim.trainingMode === 'turbo');
+  if (mqCam) mqCam.classList.toggle('active', sim.cameraMode === 'lock');
+  setMobileSpeedVisual(sim.simSpeed);
+
+  if (mqGroundDraw && desktopGroundDraw) {
+    mqGroundDraw.classList.toggle('active', desktopGroundDraw.classList.contains('active'));
+  }
+}
+
+function setMobileSpeedVisual(speedValue) {
+  const MOBILE_SIM_SPEED_MAX = 20;
+  const mqSpeedSlider = document.getElementById('mq-speed-slider');
+  const mqSpeedInput = document.getElementById('inp-mq-speed');
+  const mqSpeedVal = document.getElementById('mq-speed-val');
+  const clampedSpeed = Math.max(1, Math.min(MOBILE_SIM_SPEED_MAX, Math.round(Number(speedValue) || 1)));
+  const pct = ((clampedSpeed - 1) / (MOBILE_SIM_SPEED_MAX - 1)) * 100;
+  const scale = (clampedSpeed - 1) / (MOBILE_SIM_SPEED_MAX - 1);
+
+  if (mqSpeedVal) mqSpeedVal.textContent = `${clampedSpeed}x`;
+  if (mqSpeedInput && Number(mqSpeedInput.value) !== clampedSpeed) {
+    mqSpeedInput.value = String(clampedSpeed);
+  }
+  if (mqSpeedSlider) {
+    mqSpeedSlider.style.setProperty('--mq-speed-pct', `${pct.toFixed(2)}%`);
+    mqSpeedSlider.style.setProperty('--mq-speed-scale', scale.toFixed(4));
+  }
+}
+
+function updateMobileSimTopHud() {
+  const wrap = document.getElementById('mobile-sim-top-hud');
+  if (!wrap) return;
+
+  const isMobile = document.body.classList.contains('app-mobile');
+  const show = isMobile && currentScreen === 'sim';
+  wrap.classList.toggle('hidden', !show);
+  if (!show) return;
+
+  const safe = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
+  const latestProgress = Array.isArray(sim.progressHistory) && sim.progressHistory.length
+    ? sim.progressHistory[sim.progressHistory.length - 1]
+    : null;
+  const latestGenBest = Number.isFinite(Number(latestProgress?.genBest))
+    ? Number(latestProgress.genBest)
+    : 0;
+  const liveGenBest = safe(sim.genBestDist, 0);
+  const genBestDisplay = Math.max(liveGenBest, latestGenBest);
+  const allBest = safe(sim.allTimeBest, 0);
+  const timeLeft = Math.max(0, safe(sim.timer, 0));
+  const elapsed = Math.max(0, safe(sim.runElapsedSec, safe(sim.simTimeElapsed, 0)));
+
+  const setText = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+
+  setText('mobile-hud-gen', String(safe(sim.generation, 1)));
+  setText('mobile-hud-genbest', `${genBestDisplay.toFixed(1)}m`);
+  setText('mobile-hud-allbest', `${allBest.toFixed(1)}m`);
+  setText('mobile-hud-time', `${timeLeft.toFixed(1)}s`);
+  setText('mobile-hud-elapsed', `${elapsed.toFixed(1)}s`);
+}
+
+function isMobileRuntime() {
+  return document.body.classList.contains('app-mobile');
+}
+
+function setMobileSheetTab(tab = 'controls') {
+  if (!isMobileRuntime()) return;
+
+  const safeTab = tab === 'stats' ? 'stats' : 'controls';
+  const shell = document.getElementById('mobile-panel-shell');
+  const controlsPane = document.getElementById('mobile-pane-controls');
+  const statsPane = document.getElementById('mobile-pane-stats');
+  const controlsTab = document.getElementById('btn-mobile-tab-controls');
+  const statsTab = document.getElementById('btn-mobile-tab-stats');
+  if (!shell || !controlsPane || !statsPane || !controlsTab || !statsTab) return;
+
+  document.body.classList.remove('mobile-sheet-controls', 'mobile-sheet-stats');
+  document.body.classList.add(`mobile-sheet-${safeTab}`);
+
+  const controlsActive = safeTab === 'controls';
+  controlsPane.classList.toggle('hidden', !controlsActive);
+  statsPane.classList.toggle('hidden', controlsActive);
+
+  controlsTab.classList.toggle('active', controlsActive);
+  controlsTab.setAttribute('aria-selected', controlsActive ? 'true' : 'false');
+  statsTab.classList.toggle('active', !controlsActive);
+  statsTab.setAttribute('aria-selected', controlsActive ? 'false' : 'true');
+}
+
+function openMobileSheet(tab = 'controls') {
+  if (!isMobileRuntime()) return;
+  ensureMobileSheetMounted();
+
+  const shell = document.getElementById('mobile-panel-shell');
+  if (!shell) return;
+
+  document.body.classList.remove('mobile-panel-controls', 'mobile-panel-top');
+  document.body.classList.add('mobile-sheet-open');
+  shell.classList.remove('hidden');
+  shell.setAttribute('aria-hidden', 'false');
+  setMobileSheetTab(tab);
+}
+
+function closeMobileSheet() {
+  const shell = document.getElementById('mobile-panel-shell');
+  document.body.classList.remove(...MOBILE_SHEET_STATE_CLASSES);
+  document.body.classList.remove('mobile-panel-controls', 'mobile-panel-top');
+  if (shell) {
+    shell.classList.add('hidden');
+    shell.setAttribute('aria-hidden', 'true');
+  }
+}
+
+function createMobileControlModule(config) {
+  const { id, title, advanced = false } = config;
+  const root = document.createElement('section');
+  root.className = 'mobile-control-module';
+  root.dataset.moduleId = id;
+  if (advanced) root.classList.add('is-advanced');
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'mobile-control-module-toggle';
+  toggle.innerHTML = `
+    <span class="mobile-control-module-title">${title}</span>
+    <span class="mobile-control-module-chevron" aria-hidden="true"><i class="fas fa-chevron-down"></i></span>
+  `;
+
+  const body = document.createElement('div');
+  body.className = 'mobile-control-module-body';
+
+  const storageKey = `${MOBILE_MODULE_STORAGE_PREFIX}${id}.collapsed`;
+  let collapsed = !!advanced;
+  try {
+    const saved = localStorage.getItem(storageKey);
+    if (saved === '1') collapsed = true;
+    else if (saved === '0') collapsed = false;
+  } catch {
+    // Ignore localStorage access issues.
+  }
+
+  const setCollapsed = next => {
+    root.classList.toggle('collapsed', next);
+    toggle.setAttribute('aria-expanded', next ? 'false' : 'true');
+    try {
+      localStorage.setItem(storageKey, next ? '1' : '0');
+    } catch {
+      // Ignore localStorage access issues.
+    }
+  };
+
+  toggle.addEventListener('click', () => {
+    const next = !root.classList.contains('collapsed');
+    setCollapsed(next);
+  });
+
+  setCollapsed(collapsed);
+  root.appendChild(toggle);
+  root.appendChild(body);
+  return { root, body };
+}
+
+function setupMobileTrainingModules() {
+  const trainingSections = document.getElementById('training-sections');
+  if (!trainingSections || trainingSections.dataset.mobileModulesReady === '1') return;
+
+  const moduleGrid = document.createElement('div');
+  moduleGrid.id = 'mobile-training-module-grid';
+  moduleGrid.className = 'mobile-training-module-grid';
+  trainingSections.insertBefore(moduleGrid, trainingSections.firstChild);
+
+  const configs = [
+    { id: 'simulation', title: 'Simulation' },
+    { id: 'camera', title: 'Camera & Environment' },
+    { id: 'evolution', title: 'Evolution' },
+    { id: 'turbo', title: 'Turbo' },
+    { id: 'physics', title: 'Physics (Advanced)', advanced: true },
+    { id: 'debug', title: 'Neural & Debug (Advanced)', advanced: true }
+  ];
+
+  const moduleBodies = new Map();
+  configs.forEach(config => {
+    const module = createMobileControlModule(config);
+    moduleGrid.appendChild(module.root);
+    moduleBodies.set(config.id, module.body);
+  });
+
+  const appendToModule = (moduleId, node) => {
+    const body = moduleBodies.get(moduleId);
+    if (!body || !node || node.dataset.mobileModuleMoved === '1') return;
+    node.dataset.mobileModuleMoved = '1';
+    body.appendChild(node);
+  };
+
+  const groupFor = id => document.getElementById(id)?.closest('.control-group') || null;
+  const actionRow = document.getElementById('btn-start-sim')?.closest('.flex.justify-between.gap-2') || null;
+  const resetSettings = document.getElementById('btn-reset-settings') || null;
+  const mutationInfo = groupFor('inp-mutsize')?.nextElementSibling || null;
+
+  appendToModule('simulation', groupFor('ghosts-on'));
+  appendToModule('simulation', actionRow);
+  appendToModule('simulation', resetSettings);
+  appendToModule('simulation', groupFor('view-training'));
+  appendToModule('simulation', groupFor('inp-speed'));
+
+  appendToModule('camera', groupFor('cam-lock'));
+  appendToModule('camera', groupFor('btn-ground-draw'));
+  appendToModule('camera', groupFor('btn-brain-save'));
+  appendToModule('camera', groupFor('inp-zoom'));
+
+  appendToModule('evolution', groupFor('fitness-tag'));
+  appendToModule('evolution', groupFor('inp-duration'));
+  appendToModule('evolution', groupFor('inp-pop'));
+  appendToModule('evolution', groupFor('inp-mut'));
+  appendToModule('evolution', groupFor('inp-mutsize'));
+  appendToModule('evolution', mutationInfo);
+  appendToModule('evolution', groupFor('testing-off'));
+
+  appendToModule('turbo', groupFor('engine-normal'));
+  appendToModule('turbo', groupFor('turbo-wall-off'));
+  appendToModule('turbo', groupFor('inp-turbo-poles'));
+  appendToModule('turbo', groupFor('inp-wall-speed'));
+  appendToModule('turbo', groupFor('inp-wall-start'));
+
+  appendToModule('physics', groupFor('inp-musbudget'));
+  appendToModule('physics', groupFor('inp-strength'));
+  appendToModule('physics', groupFor('inp-gravity'));
+  appendToModule('physics', groupFor('inp-groundfric'));
+  appendToModule('physics', groupFor('inp-musminlen'));
+  appendToModule('physics', groupFor('inp-musmaxlen'));
+  appendToModule('physics', groupFor('inp-musmooth'));
+
+  appendToModule('debug', groupFor('val-nn-arch'));
+  appendToModule('debug', groupFor('neat-mode-badge'));
+  appendToModule('debug', document.getElementById('legacy-nn-controls'));
+  appendToModule('debug', groupFor('dbg-intent-hz'));
+
+  const leftovers = Array.from(trainingSections.children).filter(child => child !== moduleGrid);
+  leftovers.forEach(node => appendToModule('debug', node));
+
+  trainingSections.dataset.mobileModulesReady = '1';
+}
+
+function bindMobileRangeCard(rangeInput) {
+  if (!rangeInput || rangeInput.dataset.mobileRangeBound === '1') return;
+  const card = rangeInput.closest('.control-group');
+  if (!card) return;
+
+  const min = Number.parseFloat(rangeInput.min);
+  const max = Number.parseFloat(rangeInput.max);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return;
+
+  const step = Math.max(0, Number.parseFloat(rangeInput.step || '1'));
+
+  rangeInput.dataset.mobileRangeBound = '1';
+  card.classList.add('mobile-range-card');
+  rangeInput.classList.add('mobile-range-input');
+
+  const clampToStep = value => {
+    const clamped = Math.max(min, Math.min(max, value));
+    if (!Number.isFinite(step) || step <= 0) return clamped;
+    const snapped = min + Math.round((clamped - min) / step) * step;
+    const decimals = step.toString().includes('.') ? step.toString().split('.')[1].length : 0;
+    return Number(snapped.toFixed(Math.min(6, Math.max(0, decimals))));
+  };
+
+  const renderFill = () => {
+    const current = Number.parseFloat(rangeInput.value);
+    const normalized = Number.isFinite(current) ? (current - min) / (max - min) : 0;
+    const scale = Math.max(0, Math.min(1, normalized));
+    card.style.setProperty('--mobile-range-scale', scale.toFixed(4));
+  };
+  renderFill();
+  rangeInput.addEventListener('input', renderFill);
+
+  let pointerActive = false;
+  let pointerId = null;
+  let sliderRect = null;
+
+  const emitValueFromClientX = clientX => {
+    if (!sliderRect?.width) return;
+    const normalized = Math.max(0, Math.min(1, (clientX - sliderRect.left) / sliderRect.width));
+    const next = clampToStep(min + normalized * (max - min));
+    if (String(next) === String(rangeInput.value)) return;
+    rangeInput.value = String(next);
+    rangeInput.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  const onPointerDown = e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.target && (e.target.tagName === 'BUTTON' || e.target.tagName === 'SELECT')) return;
+    pointerActive = true;
+    pointerId = e.pointerId;
+    sliderRect = rangeInput.getBoundingClientRect();
+    card.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+    emitValueFromClientX(e.clientX);
+  };
+
+  const onPointerMove = e => {
+    if (!pointerActive) return;
+    if (pointerId !== null && e.pointerId !== pointerId) return;
+    e.preventDefault();
+    emitValueFromClientX(e.clientX);
+  };
+
+  const onPointerStop = e => {
+    if (pointerId !== null && e.pointerId !== pointerId) return;
+    if (Number.isFinite(e.clientX)) emitValueFromClientX(e.clientX);
+    pointerActive = false;
+    pointerId = null;
+    if (card.hasPointerCapture?.(e.pointerId)) {
+      card.releasePointerCapture(e.pointerId);
+    }
+    sliderRect = null;
+  };
+
+  card.addEventListener('pointerdown', onPointerDown);
+  card.addEventListener('pointermove', onPointerMove);
+  card.addEventListener('pointerrawupdate', onPointerMove);
+  card.addEventListener('pointerup', onPointerStop);
+  card.addEventListener('pointercancel', onPointerStop);
+  card.addEventListener('lostpointercapture', onPointerStop);
+}
+
+function setupMobileSliderCards() {
+  const panelControls = document.getElementById('panel-controls');
+  if (!panelControls) return;
+  panelControls.querySelectorAll('input[type="range"]').forEach(input => bindMobileRangeCard(input));
+}
+
+function ensureMobileSheetMounted() {
+  if (!isMobileRuntime() || mobileSheetReady) return;
+
+  const shell = document.getElementById('mobile-panel-shell');
+  const controlsPane = document.getElementById('mobile-pane-controls');
+  const statsPane = document.getElementById('mobile-pane-stats');
+  const statsLiveBody = document.getElementById('mobile-stats-live-body');
+  const statsNeuralBody = document.getElementById('mobile-stats-neural-body');
+  const statsEvolutionBody = document.getElementById('mobile-stats-evolution-body');
+  const statsSecondaryBody = document.getElementById('mobile-stats-secondary-body');
+  if (!shell || !controlsPane || !statsPane || !statsLiveBody || !statsNeuralBody || !statsEvolutionBody || !statsSecondaryBody) return;
+
+  const controlsPanel = document.getElementById('panel-controls');
+  const panelHud = document.getElementById('panel-hud');
+  const leftNnContainer = document.getElementById('left-nn-container');
+  const leftNeatProgress = document.getElementById('left-neat-progress');
+  const evolutionFeedback = document.getElementById('evolution-feedback');
+  const trainingDetails = document.getElementById('training-details');
+  const sandboxScorecardWrap = document.getElementById('sandbox-scorecard-wrap');
+  const topPanel = document.getElementById('panel-top-bar');
+  const leftPanel = document.getElementById('panel-progress-left');
+  const bottomPanel = document.getElementById('panel-scorecard');
+  if (controlsPanel && controlsPanel.parentElement !== controlsPane) controlsPane.appendChild(controlsPanel);
+
+  const moveNode = (node, parent) => {
+    if (!node || !parent || node.parentElement === parent) return;
+    parent.appendChild(node);
+  };
+
+  moveNode(panelHud, statsLiveBody);
+  moveNode(leftNnContainer, statsNeuralBody);
+  moveNode(leftNeatProgress, statsEvolutionBody);
+  moveNode(evolutionFeedback, statsEvolutionBody);
+  moveNode(trainingDetails, statsSecondaryBody);
+  moveNode(sandboxScorecardWrap, statsSecondaryBody);
+
+  // Keep desktop panel wrappers hidden/empty while mobile command center uses extracted content.
+  if (topPanel) topPanel.style.display = 'none';
+  if (leftPanel) leftPanel.style.display = 'none';
+  if (bottomPanel) bottomPanel.style.display = 'none';
+
+  setupMobileTrainingModules();
+  setupMobileSliderCards();
+
+  const backBtn = document.getElementById('btn-mobile-panel-back');
+  const tabControls = document.getElementById('btn-mobile-tab-controls');
+  const tabStats = document.getElementById('btn-mobile-tab-stats');
+
+  if (backBtn && backBtn.dataset.bound !== '1') {
+    backBtn.dataset.bound = '1';
+    backBtn.addEventListener('click', () => closeMobileSheet());
+  }
+  if (tabControls && tabControls.dataset.bound !== '1') {
+    tabControls.dataset.bound = '1';
+    tabControls.addEventListener('click', () => setMobileSheetTab('controls'));
+  }
+  if (tabStats && tabStats.dataset.bound !== '1') {
+    tabStats.dataset.bound = '1';
+    tabStats.addEventListener('click', () => setMobileSheetTab('stats'));
+  }
+
+  mobileSheetReady = true;
 }
 
 function updateSandboxUI() {
@@ -246,6 +873,12 @@ function updateSandboxUI() {
       }
     });
   }
+
+  if (uiSurface && typeof uiSurface.sync === 'function') {
+    uiSurface.sync(getCurrentAppState());
+  }
+  updateMobileSimTopHud();
+  emitAppState();
 }
 
 function syncSandboxPauseButtons() {
@@ -440,9 +1073,7 @@ function initSandboxPanelControls() {
   }
   if (sandboxCamReset) {
     sandboxCamReset.onclick = () => {
-      sim.cameraX = 0;
-      sim.cameraY = Math.max(0, sim.getGroundY() - (worldCanvas.height / sim.zoom) * 0.78);
-      controls.setCameraMode('lock');
+      fitCurrentSimCameraToCreature(true);
       refreshSandboxCamButtons();
     };
   }
@@ -833,7 +1464,7 @@ function renderBrainLibrary(preferredId = null) {
 function loadCreatureCatalog() {
   try {
     const raw = localStorage.getItem(CREATURE_CATALOG_KEY);
-    if (!raw) return [];
+    if (!raw) return buildDefaultCreatureCatalogEntries();
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(item =>
@@ -898,7 +1529,7 @@ function generateDesignThumbnail(design, width = 220, height = 140) {
   const bounds = computeDesignBounds(design);
   if (!bounds) return canvas.toDataURL('image/jpeg', 0.82);
 
-  const pad = 14;
+  const pad = 20;
   const contentW = Math.max(10, bounds.maxX - bounds.minX);
   const contentH = Math.max(10, bounds.maxY - bounds.minY);
   const scale = Math.max(0.2, Math.min((width - pad * 2) / contentW, (height - pad * 2) / contentH));
@@ -948,6 +1579,30 @@ function saveCurrentCreatureToCatalog(name = null) {
   if (creatureCatalog.length > 120) creatureCatalog = creatureCatalog.slice(0, 120);
   persistCreatureCatalog();
   renderCreatureCatalog();
+
+  // Show a temporary toast notification instead of opening the catalog
+  const toast = document.createElement('div');
+  toast.textContent = 'Save successful';
+  toast.style.cssText = `
+    position: absolute;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(16, 185, 129, 0.9);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    z-index: 200;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  `;
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 2000);
 }
 
 function renderCreatureCatalog() {
@@ -965,9 +1620,9 @@ function renderCreatureCatalog() {
       <img class="catalog-thumb" src="${item.thumbnail || ''}" alt="Creature thumbnail">
       <div class="catalog-meta">
         <div class="catalog-row">
-          <button class="catalog-btn flex-1" data-action="load" data-id="${item.id}"><i class="fas fa-folder-open mr-1"></i>Load</button>
-          <button class="catalog-btn flex-1" data-action="download" data-id="${item.id}"><i class="fas fa-download mr-1"></i>Export</button>
-          <button class="catalog-btn flex-1" data-action="delete" data-id="${item.id}"><i class="fas fa-trash mr-1"></i>Delete</button>
+          <button class="catalog-btn flex-1" data-action="load" data-id="${item.id}" title="Load Design: replace the current canvas with this saved creature."><i class="fas fa-folder-open mr-1"></i>Load</button>
+          <button class="catalog-btn flex-1" data-action="download" data-id="${item.id}" title="Export JSON: download this saved creature as a JSON file."><i class="fas fa-download mr-1"></i>Export</button>
+          <button class="catalog-btn flex-1" data-action="delete" data-id="${item.id}" title="Delete Design: remove this creature from your local catalog."><i class="fas fa-trash mr-1"></i>Delete</button>
         </div>
       </div>
     </div>
@@ -979,7 +1634,38 @@ function toggleCreatureCatalog(forceOpen = null) {
   if (!panel) return;
   const open = forceOpen === null ? panel.classList.contains('hidden') : !!forceOpen;
   panel.classList.toggle('hidden', !open);
-  if (open) renderCreatureCatalog();
+  
+  let backdrop = document.getElementById('catalog-backdrop');
+  if (open) {
+    renderCreatureCatalog();
+    if (!backdrop) {
+      backdrop = document.createElement('div');
+      backdrop.id = 'catalog-backdrop';
+      // Ensure backdrop is inside the same container as the panel to fix stacking context issues
+      panel.parentNode.insertBefore(backdrop, panel);
+      backdrop.style.cssText = 'position:fixed;inset:0;z-index:150;background:rgba(0,0,0,0.5);pointer-events:auto;';
+      panel.style.zIndex = '151';
+      
+      const closeHandler = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleCreatureCatalog(false);
+      };
+      backdrop.addEventListener('mousedown', closeHandler);
+      backdrop.addEventListener('touchstart', closeHandler);
+      backdrop.addEventListener('click', closeHandler);
+      // Stop wheel propagation on backdrop to prevent canvas zoom, but allow it to hit the backdrop if needed
+      backdrop.addEventListener('wheel', e => e.stopPropagation(), { passive: true });
+    }
+    
+    // Stop wheel from bleeding into the designer background, but ALLOW scrolling inside the panel
+    const stopWheelBleed = (e) => e.stopPropagation();
+    panel.removeEventListener('wheel', stopWheelBleed);
+    panel.addEventListener('wheel', stopWheelBleed, { passive: true });
+    
+  } else {
+    if (backdrop) backdrop.remove();
+  }
 }
 
 // --- Tool binding ---
@@ -993,10 +1679,11 @@ function setTool(tool, btn) {
   else btn.classList.add('active');
 
   const hints = {
-    node: 'Click to add joints. Click on bone to split.',
+    node: 'Click to add nodes. Click on a bone to split it. Drag node to node to connect a bone.',
     joint: 'Click joint to toggle Fixed/Hinge. Fixed = lock bone angle at this node (bone links only).',
     bone: 'Drag joint to joint to add rigid bones.',
     muscle: 'Drag joint to joint to add muscles.',
+    select: 'Drag to box-select nodes. Drag top handle to move selection; drag bottom-right handle to resize.',
     move: 'Drag joints to reposition.',
     erase: 'Click node or link to delete.',
     pan: 'Click and drag to pan the canvas.'
@@ -1010,6 +1697,7 @@ document.getElementById('tool-node').onclick = e => setTool('node', e.currentTar
 document.getElementById('tool-joint').onclick = e => setTool('joint', e.currentTarget);
 document.getElementById('tool-bone').onclick = e => setTool('bone', e.currentTarget);
 document.getElementById('tool-muscle').onclick = e => setTool('muscle', e.currentTarget);
+document.getElementById('tool-select').onclick = e => setTool('select', e.currentTarget);
 document.getElementById('tool-move').onclick = e => setTool('move', e.currentTarget);
 document.getElementById('tool-erase').onclick = e => setTool('erase', e.currentTarget);
 document.getElementById('tool-pan').onclick = e => setTool('pan', e.currentTarget);
@@ -1017,7 +1705,6 @@ document.getElementById('tool-undo').onclick = () => designer.undo();
 document.getElementById('tool-reset-view').onclick = () => designer.resetView();
 document.getElementById('tool-save').onclick = () => {
   saveCurrentCreatureToCatalog();
-  toggleCreatureCatalog(true);
 };
 document.getElementById('tool-load').onclick = () => toggleCreatureCatalog();
 
@@ -1134,12 +1821,35 @@ const startTrainingNow = ({ startPaused = false } = {}) => {
   updateSandboxUI();
   syncSandboxPauseButtons();
   triggerTrainingStatAnimation();
+  if (uiSurface && typeof uiSurface.sync === 'function') {
+    uiSurface.sync(getCurrentAppState());
+  }
+  emitAppState();
   return true;
 };
 
 function resetControlSettingsForNewCreature() {
   controls.resetToDefaults();
   controls.updateLabels();
+}
+
+const showEndSimConfirmation = () => {
+  const modal = document.getElementById('modal-end-sim');
+  if (modal) modal.classList.remove('hidden');
+};
+
+const showResetSimConfirmation = () => {
+  const modal = document.getElementById('modal-reset-sim');
+  if (modal) modal.classList.remove('hidden');
+};
+
+function performSimulationReset() {
+  preSandboxSession = null;
+  const design = designer.getDesign();
+  sim.nodes = design.nodes;
+  sim.constraints = design.constraints;
+  fitCurrentSimCameraToCreature(true);
+  startTrainingNow();
 }
 
 controls.bind({
@@ -1152,11 +1862,11 @@ controls.bind({
     const design = designer.getDesign();
     sim.nodes = design.nodes;
     sim.constraints = design.constraints;
+    fitCurrentSimCameraToCreature(true);
     sim.exitSandboxMode();
-    controls.setCameraMode('lock');
     startTrainingNow();
   },
-  onEdit: () => setScreen('draw'),
+  onEdit: showEndSimConfirmation,
   onPause: () => {
     if (sim.sandboxMode) {
       sim.sandboxPaused = !sim.sandboxPaused;
@@ -1167,15 +1877,9 @@ controls.bind({
     const isPaused = sim.sandboxMode ? sim.sandboxPaused : sim.paused;
     const icon = document.getElementById('icon-pause');
     if (icon) icon.className = isPaused ? 'fas fa-play' : 'fas fa-pause';
+    updateStartSimUI();
   },
-  onReset: () => {
-    preSandboxSession = null;
-    const design = designer.getDesign();
-    sim.nodes = design.nodes;
-    sim.constraints = design.constraints;
-    controls.setCameraMode('lock');
-    startTrainingNow();
-  },
+  onReset: showResetSimConfirmation,
   onResetSettings: () => {
     if (sim.world) {
       sim.world.setGravity(Vec2(0, sim.gravity));
@@ -1185,8 +1889,388 @@ controls.bind({
   onCameraChanged: () => {
     if (currentScreen === 'sim' && !simSessionStarted) renderWorld(null);
   },
+  onFitCameraToCreature: () => {
+    fitCurrentSimCameraToCreature(true);
+    if (currentScreen === 'sim' && !simSessionStarted) renderWorld(null);
+  },
   isSimScreen: () => currentScreen === 'sim'
 });
+
+// Bind End Sim modal
+const endSimCancel = document.getElementById('btn-end-sim-cancel');
+if (endSimCancel) endSimCancel.onclick = () => document.getElementById('modal-end-sim').classList.add('hidden');
+const endSimConfirm = document.getElementById('btn-end-sim-confirm');
+if (endSimConfirm) {
+  endSimConfirm.onclick = () => {
+    document.getElementById('modal-end-sim').classList.add('hidden');
+    setScreen('draw');
+  };
+}
+
+// Bind Reset modal
+const resetSimCancel = document.getElementById('btn-reset-sim-cancel');
+if (resetSimCancel) resetSimCancel.onclick = () => document.getElementById('modal-reset-sim').classList.add('hidden');
+const resetSimConfirm = document.getElementById('btn-reset-sim-confirm');
+if (resetSimConfirm) {
+  resetSimConfirm.onclick = () => {
+    document.getElementById('modal-reset-sim').classList.add('hidden');
+    performSimulationReset();
+  };
+}
+
+// Bind Splash Settings modal
+const splashSettingsModal = document.getElementById('modal-splash-settings');
+const openSplashSettings = () => {
+  if (splashSettingsModal) splashSettingsModal.classList.remove('hidden');
+};
+const closeSplashSettings = () => {
+  if (splashSettingsModal) splashSettingsModal.classList.add('hidden');
+};
+const initSplashSettingsTestUi = () => {
+  if (!splashSettingsModal) return;
+
+  splashSettingsModal.querySelectorAll('[data-setting-toggle-group]').forEach(group => {
+    const options = group.querySelectorAll('[data-setting-option]');
+    options.forEach(optionBtn => {
+      optionBtn.addEventListener('click', () => {
+        options.forEach(el => el.classList.remove('active'));
+        optionBtn.classList.add('active');
+      });
+    });
+  });
+
+  splashSettingsModal.querySelectorAll('[data-setting-slider]').forEach(slider => {
+    const outputId = slider.dataset.outputId;
+    const outputEl = outputId ? document.getElementById(outputId) : null;
+    const mirrorId = slider.dataset.mirrorId;
+    const mirrorEl = mirrorId ? document.getElementById(mirrorId) : null;
+    const update = () => {
+      if (outputEl) outputEl.textContent = 'test';
+      if (mirrorEl) mirrorEl.textContent = 'test';
+    };
+    slider.addEventListener('input', update);
+    update();
+  });
+
+  splashSettingsModal.querySelectorAll('[data-speed-slider]').forEach(speedShell => {
+    const slider = speedShell.querySelector('input[type="range"]');
+    if (!slider) return;
+    const updateSpeedFill = () => {
+      const min = Number(slider.min || 0);
+      const max = Number(slider.max || 100);
+      const val = Number(slider.value || min);
+      const denom = max - min || 1;
+      const pct = Math.max(0, Math.min(100, ((val - min) / denom) * 100));
+      speedShell.style.setProperty('--splash-speed-pct', `${pct}%`);
+    };
+    slider.addEventListener('input', updateSpeedFill);
+    updateSpeedFill();
+
+    let pointerActive = false;
+    let pointerId = null;
+    let sliderRect = null;
+    let pendingClientX = null;
+    let sliderRaf = 0;
+
+    const clampToStep = raw => {
+      const min = Number(slider.min || 0);
+      const max = Number(slider.max || 100);
+      const step = Number(slider.step || 1);
+      const clamped = Math.max(min, Math.min(max, raw));
+      if (!Number.isFinite(step) || step <= 0) return clamped;
+      const snapped = Math.round((clamped - min) / step) * step + min;
+      return Math.max(min, Math.min(max, snapped));
+    };
+
+    const valueFromClientX = clientX => {
+      if (!sliderRect?.width || !Number.isFinite(clientX)) return Number(slider.value || slider.min || 0);
+      const min = Number(slider.min || 0);
+      const max = Number(slider.max || 100);
+      const normalized = Math.max(0, Math.min(1, (clientX - sliderRect.left) / sliderRect.width));
+      return clampToStep(min + normalized * (max - min));
+    };
+
+    const applyPendingPosition = () => {
+      sliderRaf = 0;
+      if (pendingClientX == null) return;
+      const next = valueFromClientX(pendingClientX);
+      const nextStr = String(next);
+      if (slider.value !== nextStr) {
+        slider.value = nextStr;
+      }
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+      if (pointerActive) sliderRaf = requestAnimationFrame(applyPendingPosition);
+    };
+
+    const queueClientX = clientX => {
+      pendingClientX = clientX;
+      if (!sliderRaf) sliderRaf = requestAnimationFrame(applyPendingPosition);
+    };
+
+    const onPointerDown = e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      pointerActive = true;
+      pointerId = e.pointerId;
+      sliderRect = speedShell.getBoundingClientRect();
+      speedShell.setPointerCapture?.(e.pointerId);
+      e.preventDefault();
+      queueClientX(e.clientX);
+    };
+
+    const onPointerMove = e => {
+      if (!pointerActive || (pointerId !== null && e.pointerId !== pointerId)) return;
+      e.preventDefault();
+      queueClientX(e.clientX);
+    };
+
+    const stopPointer = e => {
+      if (pointerId !== null && e.pointerId !== pointerId) return;
+      if (Number.isFinite(e.clientX)) queueClientX(e.clientX);
+      pointerActive = false;
+      if (speedShell.hasPointerCapture?.(e.pointerId)) {
+        speedShell.releasePointerCapture(e.pointerId);
+      }
+      pointerId = null;
+      sliderRect = null;
+      if (sliderRaf) {
+        cancelAnimationFrame(sliderRaf);
+        sliderRaf = 0;
+      }
+      if (pendingClientX != null) {
+        const next = valueFromClientX(pendingClientX);
+        const nextStr = String(next);
+        if (slider.value !== nextStr) slider.value = nextStr;
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      pendingClientX = null;
+    };
+
+    speedShell.addEventListener('pointerdown', onPointerDown);
+    speedShell.addEventListener('pointermove', onPointerMove);
+    speedShell.addEventListener('pointerrawupdate', onPointerMove);
+    speedShell.addEventListener('pointerup', stopPointer);
+    speedShell.addEventListener('pointercancel', stopPointer);
+    speedShell.addEventListener('lostpointercapture', stopPointer);
+  });
+};
+const splashSettingsBtn = document.getElementById('btn-settings-splash');
+if (splashSettingsBtn) splashSettingsBtn.onclick = openSplashSettings;
+const splashSettingsCloseBtn = document.getElementById('btn-splash-settings-close');
+if (splashSettingsCloseBtn) splashSettingsCloseBtn.onclick = closeSplashSettings;
+if (splashSettingsModal) {
+  splashSettingsModal.onclick = e => {
+    if (e.target === splashSettingsModal) closeSplashSettings();
+  };
+}
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && splashSettingsModal && !splashSettingsModal.classList.contains('hidden')) {
+    closeSplashSettings();
+  }
+});
+initSplashSettingsTestUi();
+
+// Bind Mobile Quick Controls
+const mqEndSim = document.getElementById('btn-mq-end-sim');
+if (mqEndSim) mqEndSim.onclick = showEndSimConfirmation;
+
+const btnBackToolbar = document.getElementById('btn-back-toolbar');
+if (btnBackToolbar) btnBackToolbar.onclick = () => setScreen('splash');
+
+const mqToggle = document.getElementById('btn-mq-toggle');
+if (mqToggle) mqToggle.onclick = () => {
+    const dock = document.getElementById('mobile-quick-controls');
+    if (dock) dock.classList.toggle('minimized');
+};
+
+const mqStats = document.getElementById('btn-mq-stats');
+if (mqStats) mqStats.onclick = () => {
+  openMobileSheet('stats');
+};
+
+const mqStart = document.getElementById('btn-mq-start');
+if (mqStart) {
+  mqStart.onclick = () => {
+    if (!simSessionStarted) {
+      document.getElementById('btn-start-sim')?.click();
+      return;
+    }
+    document.getElementById('btn-pause')?.click();
+  };
+}
+
+const mqReset = document.getElementById('btn-mq-reset');
+if (mqReset) mqReset.onclick = () => document.getElementById('btn-reset').click();
+
+const ensureSimulationLoopRunning = () => {
+  if (sim.frameId || sim.sandboxMode) return;
+  sim.lastFrame = performance.now();
+  sim.frameId = requestAnimationFrame(ts => sim.gameLoop(ts));
+};
+
+const mqTurbo = document.getElementById('btn-mq-turbo');
+if (mqTurbo) {
+  mqTurbo.onclick = () => {
+    const isTurbo = sim.trainingMode === 'turbo';
+    controls.setTrainingMode(isTurbo ? 'normal' : 'turbo');
+    if (simSessionStarted && !sim.sandboxMode) {
+      sim.paused = false;
+      sim.sandboxPaused = false;
+      ensureSimulationLoopRunning();
+      if (sim.trainingMode === 'turbo' && typeof sim._startTurboLoop === 'function' && !sim._turboRunning) {
+        sim._startTurboLoop();
+      }
+      updateStartSimUI();
+    }
+    mqTurbo.classList.remove('mq-supercharged');
+    void mqTurbo.offsetWidth;
+    mqTurbo.classList.add('mq-supercharged');
+    syncMobileQuickControlState();
+  };
+  mqTurbo.addEventListener('animationend', () => mqTurbo.classList.remove('mq-supercharged'));
+}
+
+const mqCam = document.getElementById('btn-mq-cam');
+if (mqCam) {
+  mqCam.onclick = () => {
+    const isFree = sim.cameraMode === 'free';
+    controls.setCameraMode(isFree ? 'lock' : 'free');
+    syncMobileQuickControlState();
+  };
+}
+
+const mqSpeedInput = document.getElementById('inp-mq-speed');
+const mqSpeedSlider = document.getElementById('mq-speed-slider');
+
+const applyMobileSpeedValue = (next, options = {}) => {
+  const { commit = false } = options;
+  const numericNext = Number(next);
+  const fallback = Number.isFinite(Number(sim.simSpeed)) ? Number(sim.simSpeed) : 1;
+  const clamped = Math.max(1, Math.min(20, Number.isFinite(numericNext) ? Math.round(numericNext) : Math.round(fallback)));
+  if (sim.simSpeed !== clamped) sim.simSpeed = clamped;
+
+  const range = document.getElementById('inp-speed');
+  if (range && range.value !== String(clamped)) {
+    range.value = String(clamped);
+  }
+  setMobileSpeedVisual(clamped);
+
+  if (commit && range) {
+    range.dispatchEvent(new Event('input'));
+  }
+};
+
+if (mqSpeedInput) {
+  mqSpeedInput.addEventListener('input', () => {
+    const next = parseInt(mqSpeedInput.value, 10) || 1;
+    applyMobileSpeedValue(next, { commit: true });
+  });
+}
+
+if (mqSpeedSlider) {
+  let speedPointerActive = false;
+  let speedPointerId = null;
+  let speedRect = null;
+  let pendingClientX = null;
+  let speedRaf = 0;
+
+  const speedFromClientX = clientX => {
+    if (!Number.isFinite(clientX)) return Number(sim.simSpeed) || 1;
+    if (!speedRect?.width) return sim.simSpeed || 1;
+    const normalized = Math.max(0, Math.min(1, (clientX - speedRect.left) / speedRect.width));
+    return 1 + normalized * 19;
+  };
+
+  const flushSpeed = () => {
+    speedRaf = 0;
+    if (pendingClientX == null) return;
+    const next = speedFromClientX(pendingClientX);
+    applyMobileSpeedValue(next, { commit: false });
+    if (speedPointerActive) {
+      speedRaf = requestAnimationFrame(flushSpeed);
+    }
+  };
+
+  const queueSpeedClientX = clientX => {
+    pendingClientX = clientX;
+    if (!speedRaf) speedRaf = requestAnimationFrame(flushSpeed);
+  };
+
+  const onSpeedPointerDown = e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    speedPointerActive = true;
+    speedPointerId = e.pointerId;
+    speedRect = mqSpeedSlider.getBoundingClientRect();
+    mqSpeedSlider.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+    queueSpeedClientX(e.clientX);
+  };
+
+  const onSpeedPointerMove = e => {
+    if (speedPointerId !== null && e.pointerId !== speedPointerId) return;
+    if (!speedPointerActive) return;
+    e.preventDefault();
+    queueSpeedClientX(e.clientX);
+  };
+
+  const stopSpeedPointer = e => {
+    if (speedPointerId !== null && e.pointerId !== speedPointerId) return;
+    if (Number.isFinite(e.clientX)) queueSpeedClientX(e.clientX);
+    speedPointerActive = false;
+    speedPointerId = null;
+    if (mqSpeedSlider.hasPointerCapture?.(e.pointerId)) {
+      mqSpeedSlider.releasePointerCapture(e.pointerId);
+    }
+    if (speedRaf) {
+      cancelAnimationFrame(speedRaf);
+      speedRaf = 0;
+    }
+    if (pendingClientX != null) {
+      const next = speedFromClientX(pendingClientX);
+      applyMobileSpeedValue(next, { commit: true });
+    } else {
+      applyMobileSpeedValue(sim.simSpeed, { commit: true });
+    }
+    pendingClientX = null;
+    speedRect = null;
+  };
+
+  mqSpeedSlider.addEventListener('pointerdown', onSpeedPointerDown);
+  mqSpeedSlider.addEventListener('pointermove', onSpeedPointerMove);
+  mqSpeedSlider.addEventListener('pointerrawupdate', onSpeedPointerMove);
+  mqSpeedSlider.addEventListener('pointerup', stopSpeedPointer);
+  mqSpeedSlider.addEventListener('pointercancel', stopSpeedPointer);
+  mqSpeedSlider.addEventListener('lostpointercapture', stopSpeedPointer);
+}
+
+const speedRange = document.getElementById('inp-speed');
+if (speedRange) {
+  speedRange.addEventListener('input', () => {
+    if (document.body.classList.contains('app-mobile')) {
+      const next = Math.max(1, Math.min(20, parseInt(speedRange.value, 10) || 1));
+      if (next !== parseInt(speedRange.value, 10)) {
+        speedRange.value = String(next);
+        sim.simSpeed = next;
+      }
+    }
+    syncMobileQuickControlState();
+  });
+}
+
+const mqMore = document.getElementById('btn-mq-more');
+if (mqMore) mqMore.onclick = () => {
+  openMobileSheet('controls');
+};
+
+const mqCamReset = document.getElementById('btn-mq-cam-reset');
+if (mqCamReset) mqCamReset.onclick = () => document.getElementById('cam-reset')?.click();
+
+const mqGroundDraw = document.getElementById('btn-mq-ground-draw');
+if (mqGroundDraw) mqGroundDraw.onclick = () => document.getElementById('btn-ground-draw')?.click();
+
+const mqGroundClear = document.getElementById('btn-mq-ground-clear');
+if (mqGroundClear) mqGroundClear.onclick = () => document.getElementById('btn-ground-clear')?.click();
+
+ensureMobileSheetMounted();
 updateStartSimUI();
 const brainMigration = migrateBrainStorageIfNeeded();
 showBrainMigrationNoticeOnce(brainMigration);
@@ -1206,6 +2290,7 @@ const setChallengeTool = tool => {
   const obstacleBtn = document.getElementById('btn-obstacle-add');
   if (groundBtn) groundBtn.classList.toggle('active', challengeTool === 'ground');
   if (obstacleBtn) obstacleBtn.classList.toggle('active', challengeTool === 'obstacle');
+  syncMobileQuickControlState();
   if (currentScreen === 'sim' && !simSessionStarted) renderWorld(null);
 };
 
@@ -1217,6 +2302,8 @@ const groundClearBtn = document.getElementById('btn-ground-clear');
 if (groundClearBtn) {
   groundClearBtn.onclick = () => {
     sim.clearGroundProfile();
+    challengeTool = 'none';
+    syncMobileQuickControlState();
     if (currentScreen === 'sim' && !simSessionStarted) renderWorld(null);
   };
 }
@@ -1458,8 +2545,9 @@ function drawTurboGenerationPoles(ctx, groundY) {
 function drawBestRunSpotlight(ctx, sample = null) {
   const runSample = sample || (sim.getBestRunSample ? sim.getBestRunSample() : null);
   const highlightGold = !!runSample?.isAllTimeBest;
+  const isMobile = document.body.classList.contains('app-mobile');
   if (!runSample) {
-    if (sim.viewMode === 'bestRun') {
+    if (sim.viewMode === 'bestRun' && !isMobile) {
       ctx.fillStyle = 'rgba(220, 252, 231, 0.85)';
       ctx.font = 'bold 14px "JetBrains Mono", monospace';
       ctx.fillText('Waiting for qualifying best run...', sim.cameraX + 24, sim.cameraY + 42);
@@ -1482,15 +2570,18 @@ function drawBestRunSpotlight(ctx, sample = null) {
     ctx.fillStyle = highlightGold ? 'rgba(250, 204, 21, 1)' : 'rgba(52, 211, 153, 1)';
     ctx.fill();
   }
-  ctx.fillStyle = 'rgba(245, 245, 255, 0.92)';
-  ctx.font = 'bold 12px "JetBrains Mono", monospace';
-  ctx.fillText(`Spotlight G${runSample.generation} • ${runSample.distance.toFixed(2)}m`, sim.cameraX + 24, sim.cameraY + 24);
+  if (!isMobile) {
+    ctx.fillStyle = 'rgba(245, 245, 255, 0.92)';
+    ctx.font = 'bold 12px "JetBrains Mono", monospace';
+    ctx.fillText(`Spotlight G${runSample.generation} • ${runSample.distance.toFixed(2)}m`, sim.cameraX + 24, sim.cameraY + 24);
+  }
 
   const showBackgroundTrainingHint = (
     sim.viewMode === 'bestRun'
     && runSample.playbackFinished
     && !sim.sandboxMode
     && !sim.paused
+    && !isMobile
   );
   if (showBackgroundTrainingHint) {
     const hintX = sim.cameraX + 24;
@@ -1658,12 +2749,26 @@ const leftPanel = document.getElementById('panel-progress-left');
 const rightPanel = document.getElementById('panel-controls');
 const topPanel = document.getElementById('panel-top-bar');
 const bottomPanel = document.getElementById('panel-scorecard');
-leftW = (leftPanel && !leftPanel.classList.contains('module-hidden')) ? leftPanel.offsetWidth : 0;
-rightW = (rightPanel && !rightPanel.classList.contains('module-hidden')) ? rightPanel.offsetWidth : 0;
-topH = (topPanel && !topPanel.classList.contains('module-hidden')) ? topPanel.offsetHeight : 0;
-bottomH = (bottomPanel && !bottomPanel.classList.contains('module-hidden')) ? bottomPanel.offsetHeight : 0;
-cachedPanelDims = { leftW, rightW, topH, bottomH };
-lastPanelUpdateFrame = frameCount;
+    leftW = (leftPanel && !leftPanel.classList.contains('module-hidden')) ? leftPanel.offsetWidth : 0;
+    rightW = (rightPanel && !rightPanel.classList.contains('module-hidden')) ? rightPanel.offsetWidth : 0;
+    topH = (topPanel && !topPanel.classList.contains('module-hidden')) ? topPanel.offsetHeight : 0;
+    bottomH = (bottomPanel && !bottomPanel.classList.contains('module-hidden')) ? bottomPanel.offsetHeight : 0;
+
+    // Mobile Dock adjustment
+    if (document.body.classList.contains('app-mobile')) {
+      const mobileDock = document.getElementById('mobile-quick-controls');
+      if (mobileDock && !mobileDock.classList.contains('minimized')) {
+        const isPortrait = window.innerHeight > window.innerWidth;
+        if (isPortrait) {
+          bottomH = Math.max(bottomH, mobileDock.offsetHeight);
+        } else {
+          rightW = Math.max(rightW, mobileDock.offsetWidth);
+        }
+      }
+    }
+
+    cachedPanelDims = { leftW, rightW, topH, bottomH };
+    lastPanelUpdateFrame = frameCount;
 } else {
 // Use cached values
 ({ leftW, rightW, topH, bottomH } = cachedPanelDims);
@@ -1777,10 +2882,7 @@ lastPanelUpdateFrame = frameCount;
     }
   }
   
-  // DEBUG: Visual indicator of camera bounds
-  ctx.strokeStyle = 'rgba(255,0,0,0.3)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(sim.cameraX, sim.cameraY, viewW, viewH);
+  /* Red debug border removed */
 
   if (challengeTool !== 'none') {
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
@@ -1826,6 +2928,7 @@ sim.onFrame = (leader, simulatedSec) => {
   updateTestingDashboardUI();
   updateLeftNeatProgressPanel();
   hud.update(sim);
+  updateMobileSimTopHud();
   controls.updateFitnessPanel(leader ? leader.getFitnessSnapshot() : null, leader);
   updateSandboxScorecard(leader);
   updateSandboxStats(leader);
@@ -1928,3 +3031,10 @@ setTool('node', document.getElementById('tool-node'));
 resizeCanvases();
 designer.render();
 initSandboxPanelControls();
+
+uiSurface = mountDesktopUI();
+
+if (uiSurface && typeof uiSurface.sync === 'function') {
+  uiSurface.sync(getCurrentAppState());
+}
+emitAppState();

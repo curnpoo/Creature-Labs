@@ -3,14 +3,11 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
-  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "app": "electron .",
-    "build:win": "electron-builder --win portable",
-    "build:mac": "electron-builder --mac dmg"
+    "test:desktop-contract": "node tests/test-desktop-dom-contract.js"
   },
   "dependencies": {
     "earcut": "^3.0.2",
@@ -20,21 +17,8 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.18",
     "autoprefixer": "^10.4.24",
-    "electron": "^31.7.7",
-    "electron-builder": "^24.13.3",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
     "vite": "^7.3.1"
-  },
-  "build": {
-    "appId": "com.polyevolve.lab",
-    "productName": "PolyEvolve Lab",
-    "files": [
-      "dist/**/*",
-      "electron/**/*"
-    ],
-    "directories": {
-      "output": "release"
-    }
   }
 }

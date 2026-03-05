@@ -1,0 +1,59 @@
+:root {
+  /* ThemeTokens schema version for Figma/code sync */
+  --theme-token-schema-version: "1.0.0";
+
+  /* Semantic colors */
+  --color-bg-canvas: #06080e;
+  --color-bg-surface: #0c0f18;
+  --color-bg-surface-alt: #0e1220;
+  --color-bg-panel: rgba(10, 14, 24, 0.96);
+  --color-border-subtle: rgba(255, 255, 255, 0.08);
+  --color-border-panel: rgba(255, 255, 255, 0.07);
+  --color-text-primary: #e8ecf4;
+  --color-text-secondary: #8b95a8;
+  --color-text-muted: #5a6478;
+
+  --color-accent-cyan: #00f2ff;
+  --color-accent-cyan-dim: rgba(0, 242, 255, 0.15);
+  --color-accent-magenta: #ff0055;
+  --color-accent-magenta-dim: rgba(255, 0, 85, 0.12);
+  --color-accent-violet: #a855f7;
+  --color-accent-violet-dim: rgba(168, 85, 247, 0.12);
+  --color-glow-primary: rgba(0, 242, 255, 0.25);
+  --color-glow-secondary: rgba(255, 0, 85, 0.2);
+
+  /* Typography */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-display: "Anton", "Rajdhani", sans-serif;
+
+  --font-size-xs: 10px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  /* Elevation */
+  --shadow-surface: 0 4px 24px rgba(0, 0, 0, 0.5);
+  --shadow-panel: 0 4px 20px rgba(0, 0, 0, 0.4);
+
+  /* Motion */
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --motion-slow: 360ms;
+  --ease-standard: cubic-bezier(0.2, 0.0, 0.2, 1);
+}
