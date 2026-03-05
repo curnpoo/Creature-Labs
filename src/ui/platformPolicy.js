@@ -1,4 +1,11 @@
-const PLATFORM_STORAGE_KEY = 'polyevolve.uiPlatformOverride';
+function resolveStorageScopeId() {
+  const path = (window.location.pathname || '/').toLowerCase();
+  if (path.startsWith('/creaturelabs')) return 'creaturelabs';
+  if (window.top !== window.self) return 'embed';
+  return 'app';
+}
+
+const PLATFORM_STORAGE_KEY = `creaturelabs.${resolveStorageScopeId()}.uiPlatformOverride`;
 
 function parseUrlOverride() {
   try {

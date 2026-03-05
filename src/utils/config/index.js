@@ -131,8 +131,20 @@ export const CONFIG = {
   maxZoom: VISUAL_CONFIG.maxZoom,
 };
 
+function resolveStorageScopeId() {
+  if (typeof window === 'undefined') return 'app';
+  try {
+    const path = (window.location.pathname || '/').toLowerCase();
+    if (path.startsWith('/creaturelabs')) return 'creaturelabs';
+    if (window.top !== window.self) return 'embed';
+  } catch {
+    // Ignore frame access issues and use default scope.
+  }
+  return 'app';
+}
+
 export const STORAGE_KEYS = {
-  modulePrefix: 'polyevolve.module.'
+  modulePrefix: `creaturelabs.${resolveStorageScopeId()}.module.`
 };
 
 /**

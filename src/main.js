@@ -15,6 +15,37 @@ import { registerPWA } from './pwa/registerPWA.js';
 import { THEME_TOKENS_SCHEMA_VERSION } from './theme/tokens.js';
 
 registerPWA();
+const LEGACY_STORAGE_PREFIX = 'polyevolve.';
+
+function resolveStorageScopeId() {
+  const path = (window.location.pathname || '/').toLowerCase();
+  if (path.startsWith('/creaturelabs')) return 'creaturelabs';
+  if (window.top !== window.self) return 'embed';
+  return 'app';
+}
+
+function requestIframeStorageAccessOnFirstGesture() {
+  if (window.top === window.self) return;
+  const hasStorageAccess = document.hasStorageAccess?.bind(document);
+  const requestStorageAccess = document.requestStorageAccess?.bind(document);
+  if (typeof hasStorageAccess !== 'function' || typeof requestStorageAccess !== 'function') return;
+
+  const onFirstGesture = async () => {
+    try {
+      const hasAccess = await hasStorageAccess();
+      if (!hasAccess) await requestStorageAccess();
+    } catch {
+      // Ignore denial; we still keep best-effort durable storage fallbacks.
+    }
+  };
+
+  window.addEventListener('pointerdown', () => { void onFirstGesture(); }, { capture: true, once: true });
+  window.addEventListener('touchstart', () => { void onFirstGesture(); }, { capture: true, once: true });
+}
+
+requestIframeStorageAccessOnFirstGesture();
+const STORAGE_SCOPE_ID = resolveStorageScopeId();
+const STORAGE_SCOPE_PREFIX = `creaturelabs.${STORAGE_SCOPE_ID}.`;
 const uiPlatform = resolveUIPlatform();
 document.body.classList.add(uiPlatform === 'mobile' ? 'app-mobile' : 'app-desktop');
 document.body.dataset.uiPlatform = uiPlatform;
@@ -23,7 +54,7 @@ document.body.dataset.themeTokenSchema = THEME_TOKENS_SCHEMA_VERSION;
 const appStateListeners = new Set();
 let uiSurface = null;
 const MOBILE_SHEET_STATE_CLASSES = ['mobile-sheet-open', 'mobile-sheet-controls', 'mobile-sheet-stats'];
-const MOBILE_MODULE_STORAGE_PREFIX = 'polyevolve.mobileModule.';
+const MOBILE_MODULE_STORAGE_PREFIX = `${STORAGE_SCOPE_PREFIX}mobileModule.`;
 let mobileSheetReady = false;
 
 // Orientation binding
@@ -79,17 +110,21 @@ let challengeTool = 'none';
 let simSessionStarted = false;
 let preSandboxSession = null;
 let turboParityWarningTimeout = null;
-const BRAIN_LIBRARY_KEY = 'polyevolve.brainLibrary.v1';
-const CREATURE_CATALOG_KEY = 'polyevolve.creatureCatalog.v1';
-const CREATURE_CATALOG_DB_NAME = 'polyevolve-storage-v1';
+const BRAIN_LIBRARY_KEY = `${STORAGE_SCOPE_PREFIX}brainLibrary.v1`;
+const LEGACY_BRAIN_LIBRARY_KEY = `${LEGACY_STORAGE_PREFIX}brainLibrary.v1`;
+const CREATURE_CATALOG_KEY = `${STORAGE_SCOPE_PREFIX}creatureCatalog.v1`;
+const LEGACY_CREATURE_CATALOG_KEY = `${LEGACY_STORAGE_PREFIX}creatureCatalog.v1`;
+const CREATURE_CATALOG_DB_NAME = 'creaturelabs-storage-v1';
 const CREATURE_CATALOG_DB_VERSION = 1;
 const CREATURE_CATALOG_DB_STORE = 'kv';
-const CREATURE_CATALOG_IDB_KEY = 'creatureCatalog.v1';
-const CREATURE_CATALOG_CACHE_NAME = 'polyevolve-userdata-v1';
-const CREATURE_CATALOG_CACHE_URL = '/__polyevolve__/creature-catalog-v1.json';
+const CREATURE_CATALOG_IDB_KEY = `${STORAGE_SCOPE_PREFIX}creatureCatalog.v1`;
+const CREATURE_CATALOG_CACHE_NAME = 'creaturelabs-userdata-v1';
+const CREATURE_CATALOG_CACHE_URL = `/__creaturelabs__/${STORAGE_SCOPE_ID}-creature-catalog-v1.json`;
 const BRAIN_SCHEMA_VERSION = 'neat-v2-runtime';
-const BRAIN_SCHEMA_VERSION_KEY = 'polyevolve.brainSchemaVersion';
-const BRAIN_MIGRATION_NOTICE_KEY = 'polyevolve.brainMigrationNoticeVersion';
+const BRAIN_SCHEMA_VERSION_KEY = `${STORAGE_SCOPE_PREFIX}brainSchemaVersion`;
+const LEGACY_BRAIN_SCHEMA_VERSION_KEY = `${LEGACY_STORAGE_PREFIX}brainSchemaVersion`;
+const BRAIN_MIGRATION_NOTICE_KEY = `${STORAGE_SCOPE_PREFIX}brainMigrationNoticeVersion`;
+const LEGACY_BRAIN_MIGRATION_NOTICE_KEY = `${LEGACY_STORAGE_PREFIX}brainMigrationNoticeVersion`;
 let brainLibrary = [];
 let creatureCatalog = [];
 let creatureCatalogUpdatedAt = 0;
@@ -144,7 +179,10 @@ const SIM_START_GROUND_LOWER_METERS = 6;
 
 function migrateBrainStorageIfNeeded() {
   try {
-    const previousSchema = localStorage.getItem(BRAIN_SCHEMA_VERSION_KEY);
+    const previousSchema = (
+      localStorage.getItem(BRAIN_SCHEMA_VERSION_KEY)
+      || localStorage.getItem(LEGACY_BRAIN_SCHEMA_VERSION_KEY)
+    );
     if (previousSchema === BRAIN_SCHEMA_VERSION) {
       return { migrated: false, clearedKeys: [] };
     }
@@ -153,17 +191,28 @@ function migrateBrainStorageIfNeeded() {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const key = localStorage.key(i);
       if (!key) continue;
-      const isPolyEvolveKey = key.startsWith('polyevolve.');
+      const isScopedKey = key.startsWith(STORAGE_SCOPE_PREFIX);
+      const isLegacyBrainKey = (
+        key === LEGACY_BRAIN_LIBRARY_KEY
+        || key === LEGACY_BRAIN_SCHEMA_VERSION_KEY
+        || key === LEGACY_BRAIN_MIGRATION_NOTICE_KEY
+      );
       const isBrainKey = /brain/i.test(key);
-      const isCatalogKey = key === CREATURE_CATALOG_KEY;
-      const isMigrationKey = key === BRAIN_SCHEMA_VERSION_KEY || key === BRAIN_MIGRATION_NOTICE_KEY;
-      if (isPolyEvolveKey && isBrainKey && !isCatalogKey && !isMigrationKey) {
+      const isCatalogKey = key === CREATURE_CATALOG_KEY || key === LEGACY_CREATURE_CATALOG_KEY;
+      const isMigrationKey = (
+        key === BRAIN_SCHEMA_VERSION_KEY
+        || key === BRAIN_MIGRATION_NOTICE_KEY
+        || key === LEGACY_BRAIN_SCHEMA_VERSION_KEY
+        || key === LEGACY_BRAIN_MIGRATION_NOTICE_KEY
+      );
+      if ((isScopedKey || isLegacyBrainKey) && isBrainKey && !isCatalogKey && !isMigrationKey) {
         localStorage.removeItem(key);
         clearedKeys.push(key);
       }
     }
 
     localStorage.setItem(BRAIN_SCHEMA_VERSION_KEY, BRAIN_SCHEMA_VERSION);
+    localStorage.removeItem(LEGACY_BRAIN_SCHEMA_VERSION_KEY);
     return { migrated: true, clearedKeys };
   } catch {
     return { migrated: false, clearedKeys: [] };
@@ -173,9 +222,13 @@ function migrateBrainStorageIfNeeded() {
 function showBrainMigrationNoticeOnce(migration) {
   if (!migration?.migrated) return;
   try {
-    const shownVersion = localStorage.getItem(BRAIN_MIGRATION_NOTICE_KEY);
+    const shownVersion = (
+      localStorage.getItem(BRAIN_MIGRATION_NOTICE_KEY)
+      || localStorage.getItem(LEGACY_BRAIN_MIGRATION_NOTICE_KEY)
+    );
     if (shownVersion === BRAIN_SCHEMA_VERSION) return;
     localStorage.setItem(BRAIN_MIGRATION_NOTICE_KEY, BRAIN_SCHEMA_VERSION);
+    localStorage.removeItem(LEGACY_BRAIN_MIGRATION_NOTICE_KEY);
   } catch {
     // Ignore notice failures; migration already completed.
   }
@@ -1522,7 +1575,10 @@ function updateSandboxScorecard(leader) {
 
 function loadBrainLibrary() {
   try {
-    const raw = localStorage.getItem(BRAIN_LIBRARY_KEY);
+    const raw = (
+      localStorage.getItem(BRAIN_LIBRARY_KEY)
+      || localStorage.getItem(LEGACY_BRAIN_LIBRARY_KEY)
+    );
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -1716,7 +1772,10 @@ async function writeCreatureCatalogToCacheStorage(record) {
 
 function loadCreatureCatalog() {
   try {
-    const raw = localStorage.getItem(CREATURE_CATALOG_KEY);
+    const raw = (
+      localStorage.getItem(CREATURE_CATALOG_KEY)
+      || localStorage.getItem(LEGACY_CREATURE_CATALOG_KEY)
+    );
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return normalizeCatalogRecord(parsed);

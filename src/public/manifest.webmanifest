@@ -1,16 +1,16 @@
 {
-  "name": "PolyEvolve Lab",
-  "short_name": "PolyEvolve",
-  "description": "Design creatures and evolve neural locomotion.",
-  "start_url": "/",
-  "scope": "/",
+  "name": "Creature Labs",
+  "short_name": "Creature Labs",
+  "description": "Design creatures and evolve neural locomotion in Creature Labs.",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#06080e",
   "theme_color": "#06080e",
   "orientation": "any",
   "icons": [
     {
-      "src": "/assets/splash-screen.svg",
+      "src": "./assets/Creature-Labs.svg",
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any maskable"
