@@ -85,6 +85,8 @@ const CREATURE_CATALOG_DB_NAME = 'polyevolve-storage-v1';
 const CREATURE_CATALOG_DB_VERSION = 1;
 const CREATURE_CATALOG_DB_STORE = 'kv';
 const CREATURE_CATALOG_IDB_KEY = 'creatureCatalog.v1';
+const CREATURE_CATALOG_CACHE_NAME = 'polyevolve-userdata-v1';
+const CREATURE_CATALOG_CACHE_URL = '/__polyevolve__/creature-catalog-v1.json';
 const BRAIN_SCHEMA_VERSION = 'neat-v2-runtime';
 const BRAIN_SCHEMA_VERSION_KEY = 'polyevolve.brainSchemaVersion';
 const BRAIN_MIGRATION_NOTICE_KEY = 'polyevolve.brainMigrationNoticeVersion';
@@ -1678,6 +1680,39 @@ async function writeCreatureCatalogToIndexedDb(record) {
   });
 }
 
+async function readCreatureCatalogFromCacheStorage() {
+  if (!('caches' in window)) return null;
+  try {
+    const cache = await caches.open(CREATURE_CATALOG_CACHE_NAME);
+    const response = await cache.match(CREATURE_CATALOG_CACHE_URL, { ignoreSearch: true });
+    if (!response) return null;
+    const parsed = await response.json();
+    return normalizeCatalogRecord(parsed);
+  } catch {
+    return null;
+  }
+}
+
+async function writeCreatureCatalogToCacheStorage(record) {
+  if (!('caches' in window)) return false;
+  try {
+    const cache = await caches.open(CREATURE_CATALOG_CACHE_NAME);
+    const payload = JSON.stringify(record);
+    await cache.put(
+      CREATURE_CATALOG_CACHE_URL,
+      new Response(payload, {
+        headers: {
+          'content-type': 'application/json',
+          'cache-control': 'no-store'
+        }
+      })
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function loadCreatureCatalog() {
   try {
     const raw = localStorage.getItem(CREATURE_CATALOG_KEY);
@@ -1690,17 +1725,23 @@ function loadCreatureCatalog() {
 }
 
 async function hydrateCreatureCatalogFromIndexedDb() {
-  const indexedDbRecord = await readCreatureCatalogFromIndexedDb();
-  if (!indexedDbRecord || !indexedDbRecord.items.length) return;
+  const [indexedDbRecord, cacheRecord] = await Promise.all([
+    readCreatureCatalogFromIndexedDb(),
+    readCreatureCatalogFromCacheStorage()
+  ]);
+  const durableRecord = [indexedDbRecord, cacheRecord]
+    .filter(record => !!record && Array.isArray(record.items) && record.items.length > 0)
+    .sort((a, b) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0))[0] || null;
+  if (!durableRecord || !durableRecord.items.length) return;
   const shouldReplace =
     !creatureCatalog.length ||
-    indexedDbRecord.updatedAt > creatureCatalogUpdatedAt ||
-    (creatureCatalogUpdatedAt === 0 && indexedDbRecord.items.length > creatureCatalog.length);
+    durableRecord.updatedAt > creatureCatalogUpdatedAt ||
+    (creatureCatalogUpdatedAt === 0 && durableRecord.items.length > creatureCatalog.length);
   if (!shouldReplace) return;
-  creatureCatalog = buildCatalogRuntimeEntries(indexedDbRecord.items);
-  creatureCatalogUpdatedAt = indexedDbRecord.updatedAt;
+  creatureCatalog = buildCatalogRuntimeEntries(durableRecord.items);
+  creatureCatalogUpdatedAt = durableRecord.updatedAt;
   try {
-    localStorage.setItem(CREATURE_CATALOG_KEY, JSON.stringify(indexedDbRecord));
+    localStorage.setItem(CREATURE_CATALOG_KEY, JSON.stringify(durableRecord));
   } catch {
     // Keep in-memory + IndexedDB copy when localStorage is constrained.
   }
@@ -1719,13 +1760,29 @@ async function persistCreatureCatalog() {
     localStorageSaved = false;
   }
 
-  const indexedDbSaved = await writeCreatureCatalogToIndexedDb(record);
-  const persisted = localStorageSaved || indexedDbSaved;
+  const [indexedDbSaved, cacheStorageSaved] = await Promise.all([
+    writeCreatureCatalogToIndexedDb(record),
+    writeCreatureCatalogToCacheStorage(record)
+  ]);
+  const persisted = localStorageSaved || indexedDbSaved || cacheStorageSaved;
   if (!persisted && !hasShownCreatureCatalogStorageWarning) {
     hasShownCreatureCatalogStorageWarning = true;
     alert('Save failed on this device. Export JSON to keep a backup.');
   }
   return persisted;
+}
+
+async function wasCatalogEntryPersisted(entryId) {
+  if (!entryId) return false;
+  const localRecord = loadCreatureCatalog();
+  if (localRecord?.items?.some(item => item.id === entryId)) return true;
+  const [indexedDbRecord, cacheRecord] = await Promise.all([
+    readCreatureCatalogFromIndexedDb(),
+    readCreatureCatalogFromCacheStorage()
+  ]);
+  if (indexedDbRecord?.items?.some(item => item.id === entryId)) return true;
+  if (cacheRecord?.items?.some(item => item.id === entryId)) return true;
+  return false;
 }
 
 function makeCatalogName() {
@@ -1824,12 +1881,16 @@ async function saveCurrentCreatureToCatalog(name = null) {
   };
   creatureCatalog.unshift(entry);
   if (creatureCatalog.length > 120) creatureCatalog = creatureCatalog.slice(0, 120);
-  await persistCreatureCatalog();
+  const persisted = await persistCreatureCatalog();
+  const verified = persisted ? await wasCatalogEntryPersisted(entry.id) : false;
   renderCreatureCatalog();
+  if (!verified) {
+    alert('Saved for this session only. iOS storage blocked persistence; export JSON as backup.');
+  }
 
   // Show a temporary toast notification instead of opening the catalog
   const toast = document.createElement('div');
-  toast.textContent = 'Save successful';
+  toast.textContent = verified ? 'Save successful' : 'Saved (session only)';
   toast.style.cssText = `
     position: absolute;
     top: 24px;
