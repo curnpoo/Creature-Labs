@@ -138,6 +138,12 @@ tests/
 - Planck.js
 - Tailwind CSS
 
+## Embedding In An Iframe
+
+If you embed Creature Labs inside another site and need reliable saves on iOS/Safari, use the parent-page storage bridge in:
+
+- `docs/iframe-storage-bridge.md`
+
 ## Setup
 
 ```bash

@@ -16,6 +16,8 @@ import { THEME_TOKENS_SCHEMA_VERSION } from './theme/tokens.js';
 
 registerPWA();
 const LEGACY_STORAGE_PREFIX = 'polyevolve.';
+const STORAGE_BRIDGE_CHANNEL = 'creaturelabs.storageBridge.v1';
+const STORAGE_BRIDGE_TIMEOUT_MS = 250;
 
 function resolveStorageScopeId() {
   const path = (window.location.pathname || '/').toLowerCase();
@@ -131,6 +133,18 @@ let creatureCatalogUpdatedAt = 0;
 let creatureCatalogDbPromise = null;
 let hasShownCreatureCatalogStorageWarning = false;
 let hasHydratedCreatureCatalog = false;
+const storageBridgePendingRequests = new Map();
+let storageBridgeRequestId = 0;
+let storageBridgeListenerReady = false;
+let storageBridgeReachable = null;
+const storageBridgeTargetOrigin = (() => {
+  try {
+    if (!document.referrer) return '*';
+    return new URL(document.referrer).origin || '*';
+  } catch {
+    return '*';
+  }
+})();
 
 function getCurrentAppState() {
   return {
@@ -154,6 +168,63 @@ function emitAppState() {
       listener(state);
     } catch (error) {
       console.warn('App state listener error:', error);
+    }
+  });
+}
+
+function inEmbeddedContext() {
+  return window.top !== window.self;
+}
+
+function ensureStorageBridgeListener() {
+  if (storageBridgeListenerReady) return;
+  storageBridgeListenerReady = true;
+  window.addEventListener('message', event => {
+    const data = event?.data;
+    if (!data || data.channel !== STORAGE_BRIDGE_CHANNEL || data.type !== 'storage:response') return;
+    const handler = storageBridgePendingRequests.get(data.requestId);
+    if (!handler) return;
+    storageBridgePendingRequests.delete(data.requestId);
+    handler(data);
+  });
+}
+
+async function callParentStorageBridge(action, key, value = null) {
+  if (!inEmbeddedContext()) return { ok: false, reason: 'not-embedded' };
+  if (storageBridgeReachable === false) return { ok: false, reason: 'bridge-unavailable' };
+
+  ensureStorageBridgeListener();
+  return new Promise(resolve => {
+    const requestId = `bridge-${Date.now()}-${++storageBridgeRequestId}`;
+    const timeoutId = setTimeout(() => {
+      storageBridgePendingRequests.delete(requestId);
+      if (storageBridgeReachable === null) storageBridgeReachable = false;
+      resolve({ ok: false, reason: 'timeout' });
+    }, STORAGE_BRIDGE_TIMEOUT_MS);
+
+    storageBridgePendingRequests.set(requestId, response => {
+      clearTimeout(timeoutId);
+      storageBridgeReachable = true;
+      resolve(response && response.ok ? response : { ok: false, reason: response?.error || 'bridge-error' });
+    });
+
+    try {
+      window.parent.postMessage(
+        {
+          channel: STORAGE_BRIDGE_CHANNEL,
+          type: 'storage:request',
+          requestId,
+          action,
+          key,
+          value
+        },
+        storageBridgeTargetOrigin
+      );
+    } catch {
+      clearTimeout(timeoutId);
+      storageBridgePendingRequests.delete(requestId);
+      if (storageBridgeReachable === null) storageBridgeReachable = false;
+      resolve({ ok: false, reason: 'postmessage-failed' });
     }
   });
 }
@@ -1770,6 +1841,29 @@ async function writeCreatureCatalogToCacheStorage(record) {
   }
 }
 
+async function readCreatureCatalogFromParentBridge() {
+  if (!inEmbeddedContext()) return null;
+  const primary = await callParentStorageBridge('get', CREATURE_CATALOG_KEY);
+  const fallback = (!primary.ok || primary.value == null)
+    ? await callParentStorageBridge('get', LEGACY_CREATURE_CATALOG_KEY)
+    : null;
+  const raw = primary.ok && primary.value != null ? primary.value : fallback?.value;
+  if (raw == null) return null;
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return normalizeCatalogRecord(parsed);
+  } catch {
+    return null;
+  }
+}
+
+async function writeCreatureCatalogToParentBridge(record) {
+  if (!inEmbeddedContext()) return false;
+  const payload = JSON.stringify(record);
+  const result = await callParentStorageBridge('set', CREATURE_CATALOG_KEY, payload);
+  return !!result.ok;
+}
+
 function loadCreatureCatalog() {
   try {
     const raw = (
@@ -1787,11 +1881,12 @@ function loadCreatureCatalog() {
 async function hydrateCreatureCatalogFromIndexedDb() {
   if (hasHydratedCreatureCatalog) return;
   hasHydratedCreatureCatalog = true;
-  const [indexedDbRecord, cacheRecord] = await Promise.all([
+  const [indexedDbRecord, cacheRecord, bridgeRecord] = await Promise.all([
     readCreatureCatalogFromIndexedDb(),
-    readCreatureCatalogFromCacheStorage()
+    readCreatureCatalogFromCacheStorage(),
+    readCreatureCatalogFromParentBridge()
   ]);
-  const durableRecord = [indexedDbRecord, cacheRecord]
+  const durableRecord = [indexedDbRecord, cacheRecord, bridgeRecord]
     .filter(record => !!record && Array.isArray(record.items) && record.items.length > 0)
     .sort((a, b) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0))[0] || null;
   if (!durableRecord || !durableRecord.items.length) return;
@@ -1822,16 +1917,18 @@ async function persistCreatureCatalog() {
     localStorageSaved = false;
   }
 
-  const [indexedDbSaved, cacheStorageSaved] = await Promise.all([
+  const [indexedDbSaved, cacheStorageSaved, parentBridgeSaved] = await Promise.all([
     writeCreatureCatalogToIndexedDb(record),
-    writeCreatureCatalogToCacheStorage(record)
+    writeCreatureCatalogToCacheStorage(record),
+    writeCreatureCatalogToParentBridge(record)
   ]);
-  const persisted = localStorageSaved || indexedDbSaved || cacheStorageSaved;
+  const persisted = localStorageSaved || indexedDbSaved || cacheStorageSaved || parentBridgeSaved;
   const result = {
     persisted,
     localStorageSaved,
     indexedDbSaved,
-    cacheStorageSaved
+    cacheStorageSaved,
+    parentBridgeSaved
   };
   if (!persisted && !hasShownCreatureCatalogStorageWarning) {
     hasShownCreatureCatalogStorageWarning = true;
@@ -1844,12 +1941,14 @@ async function wasCatalogEntryPersisted(entryId) {
   if (!entryId) return false;
   const localRecord = loadCreatureCatalog();
   if (localRecord?.items?.some(item => item.id === entryId)) return true;
-  const [indexedDbRecord, cacheRecord] = await Promise.all([
+  const [indexedDbRecord, cacheRecord, bridgeRecord] = await Promise.all([
     readCreatureCatalogFromIndexedDb(),
-    readCreatureCatalogFromCacheStorage()
+    readCreatureCatalogFromCacheStorage(),
+    readCreatureCatalogFromParentBridge()
   ]);
   if (indexedDbRecord?.items?.some(item => item.id === entryId)) return true;
   if (cacheRecord?.items?.some(item => item.id === entryId)) return true;
+  if (bridgeRecord?.items?.some(item => item.id === entryId)) return true;
   return false;
 }
 
@@ -1959,7 +2058,8 @@ async function saveCurrentCreatureToCatalog(name = null) {
     const failures = [
       !persistStatus?.localStorageSaved ? 'localStorage' : null,
       !persistStatus?.indexedDbSaved ? 'IndexedDB' : null,
-      !persistStatus?.cacheStorageSaved ? 'CacheStorage' : null
+      !persistStatus?.cacheStorageSaved ? 'CacheStorage' : null,
+      !persistStatus?.parentBridgeSaved && inEmbeddedContext() ? 'ParentBridge' : null
     ].filter(Boolean).join(', ');
     alert(`Save did not persist on this device (${failures || 'unknown'} unavailable). Use Export JSON as backup.`);
   }
