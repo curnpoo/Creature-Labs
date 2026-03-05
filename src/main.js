@@ -48,6 +48,13 @@ function updateMobileViewportInsets() {
     const layoutHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
     browserBottomInset = Math.max(0, Math.round(layoutHeight - viewport.height - viewport.offsetTop));
   }
+  const isStandalone = (
+    window.matchMedia?.('(display-mode: standalone)')?.matches
+    || window.navigator?.standalone === true
+  );
+  const isPortrait = (window.innerHeight || 0) >= (window.innerWidth || 0);
+  const browserModeInsetFloor = !isStandalone ? (isPortrait ? 72 : 20) : 0;
+  browserBottomInset = Math.max(browserBottomInset, browserModeInsetFloor);
   document.documentElement.style.setProperty('--mobile-browser-ui-bottom', `${browserBottomInset}px`);
 }
 
