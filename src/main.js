@@ -81,11 +81,18 @@ let preSandboxSession = null;
 let turboParityWarningTimeout = null;
 const BRAIN_LIBRARY_KEY = 'polyevolve.brainLibrary.v1';
 const CREATURE_CATALOG_KEY = 'polyevolve.creatureCatalog.v1';
+const CREATURE_CATALOG_DB_NAME = 'polyevolve-storage-v1';
+const CREATURE_CATALOG_DB_VERSION = 1;
+const CREATURE_CATALOG_DB_STORE = 'kv';
+const CREATURE_CATALOG_IDB_KEY = 'creatureCatalog.v1';
 const BRAIN_SCHEMA_VERSION = 'neat-v2-runtime';
 const BRAIN_SCHEMA_VERSION_KEY = 'polyevolve.brainSchemaVersion';
 const BRAIN_MIGRATION_NOTICE_KEY = 'polyevolve.brainMigrationNoticeVersion';
 let brainLibrary = [];
 let creatureCatalog = [];
+let creatureCatalogUpdatedAt = 0;
+let creatureCatalogDbPromise = null;
+let hasShownCreatureCatalogStorageWarning = false;
 
 function getCurrentAppState() {
   return {
@@ -1567,24 +1574,158 @@ function renderBrainLibrary(preferredId = null) {
   updateBrainLibraryMeta(select.value);
 }
 
+function isValidCatalogDesign(design) {
+  return (
+    design &&
+    Array.isArray(design.nodes) &&
+    Array.isArray(design.constraints)
+  );
+}
+
+function normalizeCatalogEntries(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter(item => item && item.id && isValidCatalogDesign(item.design))
+    .map(item => ({
+      id: item.id,
+      name: item.name || 'Creature',
+      createdAt: item.createdAt || new Date(0).toISOString(),
+      design: {
+        nodes: item.design.nodes.map(node => ({ ...node })),
+        constraints: item.design.constraints.map(constraint => ({ ...constraint }))
+      }
+    }));
+}
+
+function normalizeCatalogRecord(raw) {
+  if (Array.isArray(raw)) {
+    return { version: 1, updatedAt: 0, items: normalizeCatalogEntries(raw) };
+  }
+  if (!raw || typeof raw !== 'object') return null;
+  return {
+    version: Number(raw.version) || 2,
+    updatedAt: Number.isFinite(raw.updatedAt) ? raw.updatedAt : 0,
+    items: normalizeCatalogEntries(raw.items)
+  };
+}
+
+function buildCatalogStorageRecord(updatedAt = Date.now()) {
+  return {
+    version: 2,
+    updatedAt,
+    // Thumbnails are derived at runtime to keep persisted storage small on iOS.
+    items: normalizeCatalogEntries(creatureCatalog)
+  };
+}
+
+function buildCatalogRuntimeEntries(items) {
+  return normalizeCatalogEntries(items).map(item => ({
+    ...item,
+    thumbnail: generateDesignThumbnail(item.design, 220, 140)
+  }));
+}
+
+function openCreatureCatalogDb() {
+  if (!('indexedDB' in window)) return Promise.resolve(null);
+  if (creatureCatalogDbPromise) return creatureCatalogDbPromise;
+  creatureCatalogDbPromise = new Promise(resolve => {
+    try {
+      const request = indexedDB.open(CREATURE_CATALOG_DB_NAME, CREATURE_CATALOG_DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(CREATURE_CATALOG_DB_STORE)) {
+          db.createObjectStore(CREATURE_CATALOG_DB_STORE);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+  return creatureCatalogDbPromise;
+}
+
+async function readCreatureCatalogFromIndexedDb() {
+  const db = await openCreatureCatalogDb();
+  if (!db) return null;
+  return new Promise(resolve => {
+    try {
+      const tx = db.transaction(CREATURE_CATALOG_DB_STORE, 'readonly');
+      const store = tx.objectStore(CREATURE_CATALOG_DB_STORE);
+      const request = store.get(CREATURE_CATALOG_IDB_KEY);
+      request.onsuccess = () => resolve(normalizeCatalogRecord(request.result));
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function writeCreatureCatalogToIndexedDb(record) {
+  const db = await openCreatureCatalogDb();
+  if (!db) return false;
+  return new Promise(resolve => {
+    try {
+      const tx = db.transaction(CREATURE_CATALOG_DB_STORE, 'readwrite');
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.onabort = () => resolve(false);
+      tx.objectStore(CREATURE_CATALOG_DB_STORE).put(record, CREATURE_CATALOG_IDB_KEY);
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
 function loadCreatureCatalog() {
   try {
     const raw = localStorage.getItem(CREATURE_CATALOG_KEY);
-    if (!raw) return buildDefaultCreatureCatalogEntries();
+    if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(item =>
-      item && item.id && item.design &&
-      Array.isArray(item.design.nodes) &&
-      Array.isArray(item.design.constraints)
-    );
+    return normalizeCatalogRecord(parsed);
   } catch {
-    return [];
+    return null;
   }
 }
 
-function persistCreatureCatalog() {
-  localStorage.setItem(CREATURE_CATALOG_KEY, JSON.stringify(creatureCatalog));
+async function hydrateCreatureCatalogFromIndexedDb() {
+  const indexedDbRecord = await readCreatureCatalogFromIndexedDb();
+  if (!indexedDbRecord || !indexedDbRecord.items.length) return;
+  const shouldReplace =
+    !creatureCatalog.length ||
+    indexedDbRecord.updatedAt > creatureCatalogUpdatedAt ||
+    (creatureCatalogUpdatedAt === 0 && indexedDbRecord.items.length > creatureCatalog.length);
+  if (!shouldReplace) return;
+  creatureCatalog = buildCatalogRuntimeEntries(indexedDbRecord.items);
+  creatureCatalogUpdatedAt = indexedDbRecord.updatedAt;
+  try {
+    localStorage.setItem(CREATURE_CATALOG_KEY, JSON.stringify(indexedDbRecord));
+  } catch {
+    // Keep in-memory + IndexedDB copy when localStorage is constrained.
+  }
+  renderCreatureCatalog();
+}
+
+async function persistCreatureCatalog() {
+  const record = buildCatalogStorageRecord(Date.now());
+  creatureCatalogUpdatedAt = record.updatedAt;
+
+  let localStorageSaved = false;
+  try {
+    localStorage.setItem(CREATURE_CATALOG_KEY, JSON.stringify(record));
+    localStorageSaved = true;
+  } catch {
+    localStorageSaved = false;
+  }
+
+  const indexedDbSaved = await writeCreatureCatalogToIndexedDb(record);
+  const persisted = localStorageSaved || indexedDbSaved;
+  if (!persisted && !hasShownCreatureCatalogStorageWarning) {
+    hasShownCreatureCatalogStorageWarning = true;
+    alert('Save failed on this device. Export JSON to keep a backup.');
+  }
+  return persisted;
 }
 
 function makeCatalogName() {
@@ -1668,7 +1809,7 @@ function generateDesignThumbnail(design, width = 220, height = 140) {
   return canvas.toDataURL('image/jpeg', 0.82);
 }
 
-function saveCurrentCreatureToCatalog(name = null) {
+async function saveCurrentCreatureToCatalog(name = null) {
   const payload = designer.serializeDesign();
   if (!payload.nodes.length) {
     alert('Draw a creature first.');
@@ -1683,7 +1824,7 @@ function saveCurrentCreatureToCatalog(name = null) {
   };
   creatureCatalog.unshift(entry);
   if (creatureCatalog.length > 120) creatureCatalog = creatureCatalog.slice(0, 120);
-  persistCreatureCatalog();
+  await persistCreatureCatalog();
   renderCreatureCatalog();
 
   // Show a temporary toast notification instead of opening the catalog
@@ -1810,7 +1951,7 @@ document.getElementById('tool-pan').onclick = e => setTool('pan', e.currentTarge
 document.getElementById('tool-undo').onclick = () => designer.undo();
 document.getElementById('tool-reset-view').onclick = () => designer.resetView();
 document.getElementById('tool-save').onclick = () => {
-  saveCurrentCreatureToCatalog();
+  void saveCurrentCreatureToCatalog();
 };
 document.getElementById('tool-load').onclick = () => toggleCreatureCatalog();
 
@@ -1836,7 +1977,7 @@ if (catalogFileInput) {
         const text = await file.text();
         const design = JSON.parse(text);
         designer.loadDesign(design);
-        saveCurrentCreatureToCatalog(file.name.replace(/\.json$/i, ''));
+        await saveCurrentCreatureToCatalog(file.name.replace(/\.json$/i, ''));
         imported += 1;
       } catch {
         // Skip invalid files but continue importing the rest.
@@ -1881,7 +2022,7 @@ if (catalogGrid) {
 
     if (action === 'delete') {
       creatureCatalog = creatureCatalog.filter(c => c.id !== id);
-      persistCreatureCatalog();
+      void persistCreatureCatalog();
       renderCreatureCatalog();
     }
   };
@@ -2395,12 +2536,15 @@ const brainMigration = migrateBrainStorageIfNeeded();
 showBrainMigrationNoticeOnce(brainMigration);
 brainLibrary = loadBrainLibrary();
 renderBrainLibrary();
-creatureCatalog = loadCreatureCatalog();
-creatureCatalog = creatureCatalog.map(item => ({
-  ...item,
-  thumbnail: generateDesignThumbnail(item.design, 220, 140)
-}));
-persistCreatureCatalog();
+const localCatalogRecord = loadCreatureCatalog();
+if (localCatalogRecord && localCatalogRecord.items.length) {
+  creatureCatalog = buildCatalogRuntimeEntries(localCatalogRecord.items);
+  creatureCatalogUpdatedAt = localCatalogRecord.updatedAt;
+} else {
+  creatureCatalog = buildCatalogRuntimeEntries(buildDefaultCreatureCatalogEntries());
+  creatureCatalogUpdatedAt = 0;
+}
+void hydrateCreatureCatalogFromIndexedDb();
 renderCreatureCatalog();
 
 const setChallengeTool = tool => {
