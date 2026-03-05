@@ -53,6 +53,7 @@ let worldCtx = null;
 let challengeTool = 'none';
 let simSessionStarted = false;
 let preSandboxSession = null;
+let turboParityWarningTimeout = null;
 const BRAIN_LIBRARY_KEY = 'polyevolve.brainLibrary.v1';
 const CREATURE_CATALOG_KEY = 'polyevolve.creatureCatalog.v1';
 const BRAIN_SCHEMA_VERSION = 'neat-v2-runtime';
@@ -199,6 +200,16 @@ function getSimViewportOffsets() {
       const isPortrait = window.innerHeight > window.innerWidth;
       if (isPortrait) bottom = Math.max(bottom, mobileDock.offsetHeight || 0);
       else right = Math.max(right, mobileDock.offsetWidth || 0);
+    }
+
+    const turboOverlay = document.getElementById('mobile-turbo-overlay');
+    const turboVisible = (
+      turboOverlay &&
+      !turboOverlay.classList.contains('hidden') &&
+      getComputedStyle(turboOverlay).display !== 'none'
+    );
+    if (turboVisible) {
+      top += (turboOverlay.offsetHeight || 0) + 6;
     }
   }
 
@@ -428,6 +439,8 @@ function syncMobileQuickControlState() {
   if (mqGroundDraw && desktopGroundDraw) {
     mqGroundDraw.classList.toggle('active', desktopGroundDraw.classList.contains('active'));
   }
+
+  updateMobileTurboOverlay();
 }
 
 function setMobileSpeedVisual(speedValue) {
@@ -449,6 +462,71 @@ function setMobileSpeedVisual(speedValue) {
   }
 }
 
+function updateMobileTurboOverlay() {
+  const wrap = document.getElementById('mobile-turbo-overlay');
+  if (!wrap) return;
+
+  const isMobile = document.body.classList.contains('app-mobile');
+  const turboMode = sim.trainingMode === 'turbo' && !sim.sandboxMode;
+  const show = isMobile && currentScreen === 'sim' && simSessionStarted && turboMode;
+  wrap.classList.toggle('hidden', !show);
+  if (!show) return;
+
+  const safe = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
+  const statusRaw = String(sim.turboStatus || 'running').toLowerCase();
+  const status = ['warming', 'running', 'fallback'].includes(statusRaw) ? statusRaw : 'running';
+  const summary = sim.lastTurboGenerationSummary || null;
+  const diagnostics = sim.lastTurboDiagnostics || null;
+
+  const workerMs = Math.max(0, safe(summary?.elapsedMs, safe(diagnostics?.workerElapsedMs, 0)));
+  let throughputX = safe(diagnostics?.throughputX, 0);
+  if (throughputX <= 0 && workerMs > 0) {
+    throughputX = ((safe(sim.simDuration, 0) * 1000) / workerMs);
+  }
+  throughputX = Math.max(0, throughputX);
+
+  const history = Array.isArray(sim.progressHistory) ? sim.progressHistory : [];
+  const latestProgress = history.length ? history[history.length - 1] : null;
+  const previousBest = history.length >= 2
+    ? Math.max(0, safe(history[history.length - 2]?.allBest, 0))
+    : Math.max(0, safe(sim.prevAllTimeBest, safe(latestProgress?.allBest, safe(sim.allTimeBest, 0))));
+  const liveGenBest = Math.max(0, safe(sim.genBestDist, 0));
+  const completedGenBest = Math.max(0, safe(latestProgress?.genBest, 0));
+  const hasLiveGeneration = liveGenBest > 1e-6;
+  const baselineBest = hasLiveGeneration
+    ? Math.max(0, safe(latestProgress?.allBest, safe(sim.allTimeBest, 0)))
+    : previousBest;
+  const generationDistance = hasLiveGeneration ? liveGenBest : completedGenBest;
+  const delta = generationDistance - baselineBest;
+
+  const setText = (id, text) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+
+  const title = status === 'warming'
+    ? 'Accelerating Simulation'
+    : status === 'fallback'
+      ? 'Turbo Fallback Active'
+      : 'Running Simulation';
+
+  wrap.classList.toggle('is-warming', status === 'warming');
+  wrap.classList.toggle('is-running', status === 'running');
+  wrap.classList.toggle('is-fallback', status === 'fallback');
+
+  setText('mobile-turbo-title', title);
+  setText('mobile-turbo-status', status.toUpperCase());
+  setText('mobile-turbo-throughput', `${throughputX.toFixed(1)}x`);
+  setText('mobile-turbo-delta', `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}m`);
+
+  const deltaEl = document.getElementById('mobile-turbo-delta');
+  if (deltaEl) {
+    deltaEl.classList.remove('delta-positive', 'delta-negative');
+    if (delta > 0.05) deltaEl.classList.add('delta-positive');
+    else if (delta < -0.05) deltaEl.classList.add('delta-negative');
+  }
+}
+
 function updateMobileSimTopHud() {
   const wrap = document.getElementById('mobile-sim-top-hud');
   if (!wrap) return;
@@ -456,6 +534,7 @@ function updateMobileSimTopHud() {
   const isMobile = document.body.classList.contains('app-mobile');
   const show = isMobile && currentScreen === 'sim';
   wrap.classList.toggle('hidden', !show);
+  updateMobileTurboOverlay();
   if (!show) return;
 
   const safe = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
@@ -1843,6 +1922,19 @@ const showResetSimConfirmation = () => {
   if (modal) modal.classList.remove('hidden');
 };
 
+const showTurboParityFallbackWarning = (message = 'Turbo parity drift detected. Continuing in normal mode.') => {
+  const modal = document.getElementById('modal-turbo-parity-warning');
+  if (!modal) return;
+  const msg = document.getElementById('modal-turbo-parity-warning-msg');
+  if (msg) msg.textContent = message;
+  modal.classList.remove('hidden');
+  if (turboParityWarningTimeout) clearTimeout(turboParityWarningTimeout);
+  turboParityWarningTimeout = window.setTimeout(() => {
+    modal.classList.add('hidden');
+    turboParityWarningTimeout = null;
+  }, 1000);
+};
+
 function performSimulationReset() {
   preSandboxSession = null;
   const design = designer.getDesign();
@@ -2445,6 +2537,16 @@ sim.onGenerationEnd = () => {
   }
 };
 
+sim.onTurboParityFallback = payload => {
+  showTurboParityFallbackWarning(payload?.message);
+  updateStartSimUI();
+  syncMobileQuickControlState();
+  if (uiSurface && typeof uiSurface.sync === 'function') {
+    uiSurface.sync(getCurrentAppState());
+  }
+  emitAppState();
+};
+
 // --- Rendering ---
 function drawGhosts(ctx) {
   sim.ghosts.forEach(ghost => {
@@ -2764,6 +2866,16 @@ const bottomPanel = document.getElementById('panel-scorecard');
         } else {
           rightW = Math.max(rightW, mobileDock.offsetWidth);
         }
+      }
+
+      const turboOverlay = document.getElementById('mobile-turbo-overlay');
+      const turboVisible = (
+        turboOverlay &&
+        !turboOverlay.classList.contains('hidden') &&
+        getComputedStyle(turboOverlay).display !== 'none'
+      );
+      if (turboVisible) {
+        topH += (turboOverlay.offsetHeight || 0) + 6;
       }
     }
 

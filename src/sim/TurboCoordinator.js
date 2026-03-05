@@ -30,15 +30,23 @@ export class TurboCoordinator {
       throw new Error('Turbo coordinator is not initialized.');
     }
     const batches = this._chunk(payload.dnaArray, this.workers.length);
+    // Large shared-world batches diverge more from isolated-world ranking on low-core devices.
+    // Keep effective world batch size bounded for better parity consistency.
+    const targetBatchSize = this.workerCount <= 2 ? 8 : 16;
     const tasks = batches.map((dnaBatch, idx) => this._runWorker(this.workers[idx], {
       ...payload,
       workerId: idx,
-      dnaBatch
+      dnaBatch,
+      subBatchCount: Math.max(1, Math.ceil(dnaBatch.length / targetBatchSize))
     }));
 
     const workerResults = await Promise.all(tasks);
     const combined = [];
     const diagnostics = {
+      workerCount: this.workerCount,
+      batchCount: batches.length,
+      maxBatchSize: 0,
+      maxSubBatchCount: 1,
       expectedSteps: 0,
       executedSteps: 0,
       fixedDtExpectedSec: 0,
@@ -94,6 +102,8 @@ export class TurboCoordinator {
     workerResults.forEach(res => {
       if (!res.ok) throw new Error(res.error || 'Turbo worker failed.');
       diagnostics.workerElapsedMs = Math.max(diagnostics.workerElapsedMs, Number(res.elapsedMs) || 0);
+      diagnostics.maxBatchSize = Math.max(diagnostics.maxBatchSize, Number(res.batchSize) || 0);
+      diagnostics.maxSubBatchCount = Math.max(diagnostics.maxSubBatchCount, Number(res.subBatchCount) || 1);
       combined.push(...res.results);
       const osc = summarizeMetric(res.results, 'commandOscillationHz');
       const delta = summarizeMetric(res.results, 'avgCommandDeltaPerSec');

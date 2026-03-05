@@ -38,7 +38,10 @@ export class Designer {
     this.pinchStartPanX = 0;
     this.pinchStartPanY = 0;
     this.pinchStartCenter = { x: 0, y: 0 };
-    this.touchAutoNodeId = null;
+    this.touchNodeGesture = null;
+    this.touchDragThresholdPx = 10;
+    this.touchNodeHitRadiusPx = 24;
+    this.touchNodeSnapRadiusPx = 64;
 
     this._setup();
   }
@@ -65,14 +68,23 @@ export class Designer {
       }
 
       if (!this.isTouchPinching) {
-        const nodeCountBeforeDown = this.nodes.length;
-        this._onDown(e.touches[0]);
-        if (this.tool === 'node' && this.nodes.length === nodeCountBeforeDown + 1) {
-          const created = this.nodes[this.nodes.length - 1];
-          this.touchAutoNodeId = created ? created.id : null;
-        } else {
-          this.touchAutoNodeId = null;
+        const touch = e.touches[0];
+        if (this.tool === 'node') {
+          const p = this._relPoint(touch);
+          this.mousePos = p;
+          const hitRadius = this._screenToWorldDistance(this.touchNodeHitRadiusPx);
+          const hitNode = this._findNodeAt(p.x, p.y, hitRadius);
+          this.touchNodeGesture = {
+            startClientX: touch.clientX,
+            startClientY: touch.clientY,
+            startPoint: p,
+            startNodeId: hitNode ? hitNode.id : null,
+            moved: false
+          };
+          this.dragStart = null;
+          return;
         }
+        this._onDown(touch);
       }
     }, { passive: false });
     this.canvas.addEventListener('touchmove', e => {
@@ -88,7 +100,25 @@ export class Designer {
         return;
       }
 
-      this._onMove(e.touches[0]);
+      const touch = e.touches[0];
+      if (this.tool === 'node' && this.touchNodeGesture) {
+        const p = this._relPoint(touch);
+        this.mousePos = p;
+        const movedPx = Math.hypot(
+          touch.clientX - this.touchNodeGesture.startClientX,
+          touch.clientY - this.touchNodeGesture.startClientY
+        );
+        if (movedPx >= this.touchDragThresholdPx) {
+          this.touchNodeGesture.moved = true;
+          if (!this.dragStart && this.touchNodeGesture.startNodeId != null) {
+            this.dragStart = this.nodes.find(n => n.id === this.touchNodeGesture.startNodeId) || null;
+          }
+        }
+        if (this.dragStart) this.render();
+        return;
+      }
+
+      this._onMove(touch);
     }, { passive: false });
     this.canvas.addEventListener('touchend', e => {
       e.preventDefault();
@@ -102,8 +132,28 @@ export class Designer {
         return;
       }
 
+      if (this.tool === 'node' && this.touchNodeGesture) {
+        const touch = e.changedTouches?.[0];
+        const p = touch ? this._relPoint(touch) : this.touchNodeGesture.startPoint;
+        this.mousePos = p;
+        const startNode = this.touchNodeGesture.startNodeId != null
+          ? this.nodes.find(n => n.id === this.touchNodeGesture.startNodeId) || null
+          : null;
+        const moved = this.touchNodeGesture.moved;
+
+        this.touchNodeGesture = null;
+        if (moved && startNode) {
+          this._finishNodeDrag(startNode, p, { snapRadiusPx: this.touchNodeSnapRadiusPx });
+        } else if (!moved) {
+          this._handleNodeTap(p);
+        } else {
+          this.dragStart = null;
+          this.render();
+        }
+        return;
+      }
+
       this._onUp(e.changedTouches[0]);
-      this.touchAutoNodeId = null;
     }, { passive: false });
     this.canvas.addEventListener('touchcancel', e => {
       e.preventDefault();
@@ -112,7 +162,7 @@ export class Designer {
       this.dragNode = null;
       this.selectionMode = null;
       this.selectionBox = null;
-      this.touchAutoNodeId = null;
+      this.touchNodeGesture = null;
       this.render();
     }, { passive: false });
   }
@@ -354,7 +404,7 @@ export class Designer {
     this.dragNode = null;
     this.selectionMode = null;
     this.selectionBox = null;
-    this._rollbackTouchAutoNode();
+    this.touchNodeGesture = null;
   }
 
   _updatePinchGesture(a, b) {
@@ -377,19 +427,91 @@ export class Designer {
   _endPinchGesture() {
     this.isTouchPinching = false;
     this.pinchStartDistance = 0;
-    this.touchAutoNodeId = null;
+    this.touchNodeGesture = null;
   }
 
-  _rollbackTouchAutoNode() {
-    if (this.touchAutoNodeId == null) return;
-    const hasNode = this.nodes.some(n => n.id === this.touchAutoNodeId);
-    if (!hasNode) {
-      this.touchAutoNodeId = null;
-      return;
+  _screenToWorldDistance(px) {
+    return px / Math.max(0.25, this.zoom);
+  }
+
+  _findNearestNodeWithin(x, y, maxDist, excludeId = null) {
+    let best = null;
+    let bestDist = maxDist;
+    this.nodes.forEach(n => {
+      if (excludeId != null && n.id === excludeId) return;
+      const d = Math.hypot(n.x - x, n.y - y);
+      if (d <= bestDist) {
+        best = n;
+        bestDist = d;
+      }
+    });
+    return best;
+  }
+
+  _addConstraintIfMissing(startNode, endNode, type) {
+    if (!startNode || !endNode || startNode.id === endNode.id) return false;
+    const exists = this.constraints.some(c =>
+      (c.n1 === startNode.id && c.n2 === endNode.id) ||
+      (c.n1 === endNode.id && c.n2 === startNode.id)
+    );
+    if (exists) return false;
+    this._pushUndo();
+    this.constraints.push({
+      type: type === 'muscle' ? 'muscle' : 'bone',
+      n1: startNode.id,
+      n2: endNode.id
+    });
+    return true;
+  }
+
+  _handleNodeTap(p) {
+    const hitRadius = this._screenToWorldDistance(10);
+    if (this._findNodeAt(p.x, p.y, hitRadius)) return;
+
+    const cIdx = this._findConstraintAt(p.x, p.y);
+    if (cIdx >= 0) {
+      const c = this.constraints[cIdx];
+      const n1 = this.nodes.find(n => n.id === c.n1);
+      const n2 = this.nodes.find(n => n.id === c.n2);
+      if (n1 && n2) {
+        const vx = n2.x - n1.x;
+        const vy = n2.y - n1.y;
+        const wx = p.x - n1.x;
+        const wy = p.y - n1.y;
+        const len2 = vx * vx + vy * vy;
+        const t = len2 > 0 ? Math.max(0, Math.min(1, (wx * vx + wy * vy) / len2)) : 0;
+
+        this._pushUndo();
+        const newNode = { id: this.nextId++, x: n1.x + t * vx, y: n1.y + t * vy, fixed: true };
+        this.nodes.push(newNode);
+
+        this.constraints.splice(cIdx, 1);
+        this.constraints.push({ type: c.type, n1: c.n1, n2: newNode.id });
+        this.constraints.push({ type: c.type, n1: newNode.id, n2: c.n2 });
+        this.render();
+        this._checkValid();
+        return;
+      }
     }
-    this.nodes = this.nodes.filter(n => n.id !== this.touchAutoNodeId);
-    this.constraints = this.constraints.filter(c => c.n1 !== this.touchAutoNodeId && c.n2 !== this.touchAutoNodeId);
-    this.touchAutoNodeId = null;
+
+    this._pushUndo();
+    this.nodes.push({ id: this.nextId++, x: p.x, y: p.y });
+    this.render();
+    this._checkValid();
+  }
+
+  _finishNodeDrag(startNode, p, { snapRadiusPx = 64 } = {}) {
+    if (!startNode) return;
+    const directRadius = this._screenToWorldDistance(20);
+    const snapRadius = this._screenToWorldDistance(snapRadiusPx);
+    let endNode = this._findNodeAt(p.x, p.y, directRadius);
+    if (!endNode || endNode.id === startNode.id) {
+      endNode = this._findNearestNodeWithin(p.x, p.y, snapRadius, startNode.id);
+    }
+
+    this._addConstraintIfMissing(startNode, endNode, 'bone');
+    this.dragStart = null;
+    this.render();
     this._checkValid();
   }
 
@@ -840,20 +962,7 @@ export class Designer {
     if (!this.dragStart) return;
 
     const endNode = this._findNodeAt(p.x, p.y, 20);
-    if (endNode && endNode.id !== this.dragStart.id) {
-      const exists = this.constraints.some(c =>
-        (c.n1 === this.dragStart.id && c.n2 === endNode.id) ||
-        (c.n1 === endNode.id && c.n2 === this.dragStart.id)
-      );
-      if (!exists) {
-        this._pushUndo();
-        this.constraints.push({
-          type: this.tool === 'muscle' ? 'muscle' : 'bone',
-          n1: this.dragStart.id,
-          n2: endNode.id
-        });
-      }
-    }
+    this._addConstraintIfMissing(this.dragStart, endNode, this.tool === 'muscle' ? 'muscle' : 'bone');
     this.dragStart = null;
     this.render();
     this._checkValid();

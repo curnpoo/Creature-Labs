@@ -345,6 +345,26 @@
                 </div>
             </div>
 
+            <div id="mobile-turbo-overlay" class="app-mobile-only sim-mobile-turbo-overlay hidden" aria-live="polite">
+                <div class="sim-mobile-turbo-head">
+                    <div class="sim-mobile-turbo-title-wrap">
+                        <i class="fas fa-bolt"></i>
+                        <span id="mobile-turbo-title">Accelerating Simulation</span>
+                    </div>
+                    <div id="mobile-turbo-status" class="sim-mobile-turbo-status">WARMING</div>
+                </div>
+                <div class="sim-mobile-turbo-metrics">
+                    <div class="sim-mobile-turbo-metric">
+                        <div class="sim-mobile-turbo-label">Throughput</div>
+                        <div id="mobile-turbo-throughput" class="sim-mobile-turbo-value">0.0x</div>
+                    </div>
+                    <div class="sim-mobile-turbo-metric">
+                        <div class="sim-mobile-turbo-label">Delta</div>
+                        <div id="mobile-turbo-delta" class="sim-mobile-turbo-value">+0.0m</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Mobile Simulation Dock -->
             <div id="mobile-quick-controls" class="sim-mobile-dock hidden">
                 <button id="btn-mq-toggle" class="mq-dock-toggle" title="Toggle Controls">
@@ -2001,6 +2021,16 @@
                     <button id="btn-reset-sim-cancel" class="px-6 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 text-white font-medium transition">Cancel</button>
                     <button id="btn-reset-sim-confirm" class="px-6 py-2 rounded-lg bg-red-500/80 hover:bg-red-500 border border-red-500 text-white font-medium shadow-[0_0_15px_rgba(239,68,68,0.4)] transition">Reset</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- Turbo Parity Fallback Warning -->
+        <div id="modal-turbo-parity-warning" class="mobile-overlay parity-warning-overlay hidden" aria-live="polite">
+            <div class="mobile-overlay-card parity-warning-card">
+                <h3 class="mb-2 text-base font-bold text-amber-300 uppercase tracking-wider">Turbo Fallback</h3>
+                <p id="modal-turbo-parity-warning-msg" class="text-sm text-slate-200">
+                    Turbo parity drift detected. Continuing in normal mode.
+                </p>
             </div>
         </div>
 

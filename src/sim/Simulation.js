@@ -108,6 +108,7 @@ export class Simulation {
     // Callbacks
     this.onGenerationEnd = null;
     this.onFrame = null;
+    this.onTurboParityFallback = null;
 
     // Settings
     this.simSpeed = CONFIG.defaultSimSpeed;
@@ -1410,6 +1411,25 @@ this.world = null;
       : 'idle';
   }
 
+  _fallbackTurboToNormalFromParity(cycle = null) {
+    if (this.trainingMode !== 'turbo' || !this.turboEnabled || this.sandboxMode) return;
+    const message = 'Turbo parity drift detected. Switched to normal mode.';
+    this.lastTurboError = message;
+    this.setTrainingMode('normal');
+    this.testingStatus = 'fail';
+    if (typeof this.onTurboParityFallback === 'function') {
+      try {
+        this.onTurboParityFallback({
+          message,
+          generation: Number(cycle?.generation) || this.generation,
+          reasons: Array.isArray(cycle?.reasons) ? [...cycle.reasons] : []
+        });
+      } catch (error) {
+        console.warn('Turbo parity fallback callback failed:', error);
+      }
+    }
+  }
+
   setTurboWallPolicy(policy) {
     const normalized = (policy === 'off' || policy === 'soft' || policy === 'full') ? policy : 'full';
     this.turboWallPolicy = normalized;
@@ -1959,12 +1979,26 @@ this.world = null;
       status,
       reasons
     };
+    const parityReasonPrefixes = [
+      'step_coverage_low',
+      'rank_correlation_low',
+      'topk_mismatch_high',
+      'winner_delta_high',
+      'median_delta_high'
+    ];
+    const hasParityDrift = reasons.some(reason =>
+      parityReasonPrefixes.some(prefix => String(reason).startsWith(prefix))
+    );
+    cycle.hasParityDrift = hasParityDrift;
 
     this.testingHistory.push(cycle);
     if (this.testingHistory.length > 200) this.testingHistory.shift();
     this.lastTestingResult = cycle;
     this.testingStatus = status;
     this._testingCycleCounter += 1;
+    if (status === 'fail' && hasParityDrift) {
+      this._fallbackTurboToNormalFromParity(cycle);
+    }
   }
 
   getTurboTestSnapshot() {

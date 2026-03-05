@@ -382,16 +382,41 @@ function evaluateBatchShared(payload) {
   return results;
 }
 
+function splitIntoSubBatches(dnaBatch, subBatchCount) {
+  if (!Array.isArray(dnaBatch) || dnaBatch.length === 0) return [];
+  const count = Math.max(1, Math.min(dnaBatch.length, Math.round(Number(subBatchCount) || 1)));
+  if (count <= 1) return [dnaBatch];
+  const out = [];
+  const chunkSize = Math.ceil(dnaBatch.length / count);
+  for (let i = 0; i < dnaBatch.length; i += chunkSize) {
+    out.push(dnaBatch.slice(i, i + chunkSize));
+  }
+  return out;
+}
+
 self.onmessage = e => {
   const payload = e.data;
   try {
     const startedAt = performance.now();
-    const results = evaluateBatchShared(payload);
+    const subBatches = splitIntoSubBatches(payload.dnaBatch || [], payload.subBatchCount);
+    const results = [];
+    if (subBatches.length <= 1) {
+      results.push(...evaluateBatchShared(payload));
+    } else {
+      subBatches.forEach(dnaBatch => {
+        results.push(...evaluateBatchShared({
+          ...payload,
+          dnaBatch
+        }));
+      });
+    }
     self.postMessage({
       ok: true,
       generation: payload.generation,
       workerId: payload.workerId,
       results,
+      batchSize: Array.isArray(payload.dnaBatch) ? payload.dnaBatch.length : 0,
+      subBatchCount: subBatches.length,
       elapsedMs: performance.now() - startedAt
     });
   } catch (err) {
