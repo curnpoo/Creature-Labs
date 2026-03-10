@@ -2,6 +2,7 @@ import { CONFIG } from '../utils/config.js';
 import { createEngine, createGround, cleanup, SCALE, planck, World, Vec2, Body, Circle, Box } from './Physics.js';
 import { Creature } from './Creature.js';
 import { Evolution } from '../nn/Evolution.js';
+import { applyBodySafetyClamp, bindSharedCreatureContactFiltering } from './parityHelpers.js';
 import { TurboCoordinator } from './TurboCoordinator.js';
 import {
   creatureScoreFromFitness,
@@ -421,29 +422,8 @@ export class Simulation {
   }
 
   _setupWorldListeners() {
-    this.world.on('begin-contact', (contact) => {
-      const fixtureA = contact.getFixtureA();
-      const fixtureB = contact.getFixtureB();
-      const bodyA = fixtureA.getBody();
-      const bodyB = fixtureB.getBody();
+    bindSharedCreatureContactFiltering(this.world, (bodyA, bodyB) => {
       this.queueDeathWallKill(bodyA, bodyB);
-      if (bodyA.creatureId === bodyB.creatureId) {
-        if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB)) {
-          contact.setEnabled(false);
-        }
-      }
-    });
-    this.world.on('pre-solve', (contact) => {
-      const fixtureA = contact.getFixtureA();
-      const fixtureB = contact.getFixtureB();
-      const bodyA = fixtureA.getBody();
-      const bodyB = fixtureB.getBody();
-      this.queueDeathWallKill(bodyA, bodyB);
-      if (bodyA.creatureId === bodyB.creatureId) {
-        if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB)) {
-          contact.setEnabled(false);
-        }
-      }
     });
   }
 
@@ -2328,7 +2308,10 @@ this.world = null;
       }
       const turboPlaybackSec = this.paused ? 0 : (dtMs / 1000) * Math.max(1, this.simSpeed);
       this.advanceBestRun(turboPlaybackSec);
-      const shouldRenderUi = !this.lastTurboUiFrameAt || (timestamp - this.lastTurboUiFrameAt) >= 80;
+      const turboUiIntervalMs = (
+        typeof document !== 'undefined' && document.body?.classList?.contains('app-mobile')
+      ) ? 120 : 80;
+      const shouldRenderUi = !this.lastTurboUiFrameAt || (timestamp - this.lastTurboUiFrameAt) >= turboUiIntervalMs;
       if (shouldRenderUi && this.onFrame) {
         this.lastTurboUiFrameAt = timestamp;
         const leader = this.visualLeader || this.getLeader();
@@ -2363,36 +2346,19 @@ this.world = null;
         // Minimal post-step safety clamps only (no non-physical traction or angle teleporting).
         this.creatures.forEach(c => {
           if (c.dead) return;
-          c.bodies.forEach(b => {
-            const vel = b.getLinearVelocity();
-            let vx = vel.x;
-            const vy = vel.y;
-
-            if (this.groundNoSlipEnabled && c.isBodyGroundedStrict && c.isBodyGroundedStrict(b)) {
-              vx *= this.groundNoSlipFactor;
-              if (Math.abs(vx) < this.groundNoSlipEpsilon) vx = 0;
+          applyBodySafetyClamp(c.bodies, {
+            isBodyGroundedStrict: body => !!(c.isBodyGroundedStrict && c.isBodyGroundedStrict(body)),
+            groundNoSlipEnabled: this.groundNoSlipEnabled,
+            groundNoSlipFactor: this.groundNoSlipFactor,
+            groundNoSlipEpsilon: this.groundNoSlipEpsilon,
+            maxHorizontalVelocity: this.maxHorizontalVelocity,
+            maxVerticalVelocity: this.maxVerticalVelocity,
+            tiltLimitEnabled: this.tiltLimitEnabled,
+            maxTiltRad: this.maxTiltRad,
+            onNoSlipApplied: residual => {
               this.noSlipAppliedSteps++;
-              this.noSlipTangentialResidualAccum += Math.abs(vx);
+              this.noSlipTangentialResidualAccum += residual;
               this.noSlipTangentialSamples++;
-            }
-
-            const clampedVx = Math.max(-this.maxHorizontalVelocity, Math.min(this.maxHorizontalVelocity, vx));
-            const clampedVy = Math.max(-this.maxVerticalVelocity, Math.min(this.maxVerticalVelocity, vy));
-            if (clampedVx !== vel.x || clampedVy !== vel.y) {
-              b.setLinearVelocity(Vec2(clampedVx, clampedVy));
-            }
-
-            const angle = this.normalizeAngleRad(b.getAngle());
-            let angularVelocity = b.getAngularVelocity();
-            if (this.tiltLimitEnabled) {
-              const pushingFurtherOut = (angle >= this.maxTiltRad && angularVelocity > 0)
-                || (angle <= -this.maxTiltRad && angularVelocity < 0);
-              if (pushingFurtherOut) angularVelocity = 0;
-            }
-
-            const clampedAngularVelocity = Math.max(-5, Math.min(5, angularVelocity));
-            if (clampedAngularVelocity !== b.getAngularVelocity()) {
-              b.setAngularVelocity(clampedAngularVelocity);
             }
           });
         });
@@ -2504,10 +2470,6 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
         fixture = fixture.getNext();
       }
     });
-  }
-
-  normalizeAngleRad(angle) {
-    return Math.atan2(Math.sin(angle), Math.cos(angle));
   }
 
   getLastGenerationBrain() {

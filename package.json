@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:desktop-contract": "node tests/test-desktop-dom-contract.js"
+    "test:desktop-contract": "python3 tests/test-ui-behavior.py --desktop",
+    "test:mobile-contract": "python3 tests/test-ui-behavior.py --mobile",
+    "test:ui-behavior": "python3 tests/test-ui-behavior.py",
+    "test:mobile-turbo-smoke": "python3 tests/test-mobile-turbo-smoke.py"
   },
   "dependencies": {
     "earcut": "^3.0.2",

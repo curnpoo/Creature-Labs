@@ -1,4 +1,5 @@
 import { SCALE } from '../sim/Physics.js';
+import { getOptimized2dContext } from '../utils/canvas.js';
 
 /**
  * Creature design canvas + tools.
@@ -48,7 +49,7 @@ export class Designer {
 
   _setup() {
     this.canvas = document.createElement('canvas');
-    this.ctx = this.canvas.getContext('2d');
+    this.ctx = getOptimized2dContext(this.canvas, { opaque: true });
     this.container.appendChild(this.canvas);
     this.resize();
 

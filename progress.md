@@ -25,9 +25,116 @@ Original prompt: run through and determine what is a patched mess and how it can
   - `Simulation` now owns the full creature runtime config shape, including `phaseLockEnabled`, `gaitHz`, `commandDeadband`, and `maxCommandDeltaPerStep`.
   - `Simulation.getSimConfig()` and `syncCreatureRuntimeSettings()` now derive from the same runtime config source.
   - Added `tests/test-runtime-config-parity.js` to guard against future config drift.
+  - Extracted mobile HUD/sheet logic into `src/ui/mobileUi.js` and removed the duplicated mobile orchestration block from `src/main.js`.
+  - Extracted splash settings modal wiring into `src/ui/splashSettings.js`; slider labels now show real values instead of placeholder `'test'`.
+  - Shared normal/turbo post-step safety and contact filtering via `src/sim/parityHelpers.js`.
+  - Hid dormant scoring controls in `src/ui/Controls.js` so the visible tuning surface matches the live score path.
+  - Replaced string-presence DOM checks with browser behavior checks in `tests/test-ui-behavior.py`.
+  - Removed the unused `UISurface` / `MobileSurface` / `mobileGestures` path; active mobile UI is now the sheet-based controller only.
+  - Removed the runtime Tailwind CDN script and replaced the deprecated `apple-mobile-web-app-capable` meta tag.
+  - Added a local `.hidden` rule to guarantee hidden panels stop intercepting clicks in browser tests and real mobile usage.
 - Verification:
   - `node tests/test-runtime-config-parity.js` passes.
   - `npm run build` passes.
   - `node tests/test-turbo-parity.js` passes.
-  - `node tests/test-desktop-dom-contract.js` passes.
-  - `node tests/test-mobile-sheet-dom-contract.js` passes.
+  - `python3 tests/test-ui-behavior.py` passes.
+- 2026-03-10: Startup optimization pass.
+- Findings:
+  - The remaining main-bundle cost was startup architecture, not one bad utility module.
+  - Splash was paying for the full sim/runtime stack before the user left the home screen.
+  - `defaultCreatureCatalog` was a cheap secondary split, useful once the app shell was deferred.
+- Fixes applied:
+  - Moved the full app runtime out of the entry module into `src/appBootstrap.js`.
+  - Replaced `src/main.js` with a thin splash shell that handles platform classes, splash settings, and async app bootstrap on first PLAY interaction.
+  - Added build chunk boundaries in `vite.config.js` for `app-bootstrap`, `sim-core`, `ui-heavy`, `catalog-data`, and `vendor-physics`.
+  - Deferred default creature catalog loading until needed instead of bundling it into app bootstrap.
+  - Updated `tests/test-ui-behavior.py` to wait for the async screen transition instead of relying on a fixed 350 ms delay.
+- Verification:
+  - `npm run build` passes.
+  - `node tests/test-turbo-parity.js` passes.
+  - `node tests/test-runtime-config-parity.js` passes.
+  - `python3 tests/test-ui-behavior.py` passes.
+- Build result after optimization:
+  - Entry shell: `3.19 kB`
+  - `app-bootstrap`: `129.90 kB`
+  - `sim-core`: `134.70 kB`
+  - `ui-heavy`: `26.11 kB`
+  - `catalog-data`: `5.33 kB`
+  - `vendor-physics`: `211.62 kB`
+  - Previous `507.02 kB` initial app chunk warning is gone.
+- 2026-03-10: Mobile turbo optimization pass.
+- Findings:
+  - Turbo physics itself was already throttled on the UI side; the remaining waste was hidden UI work during mobile turbo playback.
+  - The compact mobile HUD was active, but the neural visualizer could still be asked to render while its sheet/tab was hidden.
+  - Mobile turbo HUD text was also being rewritten on every refresh even when values had not changed.
+- Fixes applied:
+  - Gated `visualizer.render()` behind desktop/mobile-stats visibility in `src/appBootstrap.js`.
+  - Added a visibility bail-out in `src/ui/Visualizer.js` so hidden canvases do not keep painting stale dimensions.
+  - Made `src/ui/mobileUi.js` `setText()` skip no-op text assignments to reduce DOM churn in the mobile turbo HUD/overlay.
+- Verification:
+  - `npm run build` passes.
+  - `node tests/test-turbo-parity.js` passes.
+  - `python3 tests/test-ui-behavior.py` passes.
+- 2026-03-10: Mobile turbo optimization pass.
+- Findings:
+  - Turbo UI was already throttled globally, but each mobile turbo UI tick still updated hidden desktop telemetry panels and charts.
+  - The mobile turbo overlay chart was redrawing every turbo UI tick.
+  - Canvas rendering in turbo mode still did some desktop-grade work on mobile, including gradient/shadow pole rendering and unnecessary best-run sample lookup.
+- Fixes applied:
+  - Mobile turbo frames now skip hidden desktop telemetry and hidden controls updates in `src/appBootstrap.js`.
+  - Mobile turbo overlay chart redraws are throttled separately in `src/ui/mobileUi.js` while status text still updates live.
+  - Turbo world rendering on mobile now uses a cheaper pole rendering path, shows fewer recent poles, uses wider distance-marker spacing, and avoids fetching best-run samples when not needed.
+- Verification:
+  - `npm run build` passes.
+  - `node tests/test-turbo-parity.js` passes.
+  - `node tests/test-runtime-config-parity.js` passes.
+  - `python3 tests/test-ui-behavior.py --mobile` passes.
+- 2026-03-10: Mobile turbo hardening pass.
+- Findings:
+  - Mobile turbo still had avoidable overhead in the visible-frame path and worker scheduling profile.
+  - Worker startup was still using the generic desktop-oriented `hardwareConcurrency - 1` rule, which can oversubscribe phones and tablets.
+  - Turbo UI cadence was identical on desktop and mobile even after the earlier hidden-panel cuts.
+- Fixes applied:
+  - Added a mobile-aware worker cap in `src/sim/TurboCoordinator.js` to avoid oversubscribing coarse-pointer/mobile runtimes.
+  - Raised turbo UI interval on mobile in `src/sim/Simulation.js` so mobile turbo spends less time repainting and more time simulating.
+  - Hardened `src/ui/Visualizer.js` to bail immediately when its canvas is hidden.
+- Verification:
+  - `npm run build` passes.
+  - `node tests/test-turbo-parity.js` passes.
+  - `python3 tests/test-ui-behavior.py --mobile` passes.
+- 2026-03-10: Added mobile turbo smoke test.
+- Findings:
+  - The app needed a stable test-only entry into mobile turbo without depending on synthetic drawing gestures.
+  - Mobile turbo throughput is available from worker elapsed time even when turbo testing mode is disabled.
+- Fixes applied:
+  - Added an `e2e=1`-gated runtime hook in `src/appBootstrap.js` to load a known design, start a bounded turbo session, and read cadence snapshots.
+  - Added cadence probes for mobile turbo UI frames, overlay refreshes, and chart refreshes.
+  - Added `tests/test-mobile-turbo-smoke.py` and `npm run test:mobile-turbo-smoke`.
+- Verification:
+  - `python3 tests/test-mobile-turbo-smoke.py` passes.
+  - Sample output:
+    - workerCount: `4`
+    - throughputX: `130.51`
+    - uiFrameAvgMs: `124.96`
+    - overlayAvgMs: `118.53`
+    - chartAvgMs: `128.63`
+  - `python3 tests/test-ui-behavior.py --mobile` still passes.
+- 2026-03-10: Safari/PWA physics-side optimization pass.
+- Findings:
+  - The next useful mobile gain was not more scoring changes; it was background lifecycle hardening and reducing 2D canvas compositing overhead on the heavy simulation canvases.
+  - Safari/iOS PWA lifecycle transitions are important because hidden/backgrounded pages can move through page cache states where it is better to suspend hot loops explicitly.
+- Fixes applied:
+  - Added `src/utils/canvas.js` and switched the heavy 2D canvases to feature-detected optimized contexts (`alpha: false` and `desynchronized` when supported).
+  - Added lifecycle suspension/resume handling in `src/appBootstrap.js` for `visibilitychange`, `pagehide`, and `pageshow` so active sim/turbo loops stop in the background and resume on return.
+  - Added Safari-18-friendly `content-visibility` hints to the heaviest mobile panel bodies in `src/mobile/mobile.css`.
+- Verification:
+  - `npm run build` passes.
+  - `node tests/test-turbo-parity.js` passes.
+  - `python3 tests/test-ui-behavior.py --mobile` passes.
+  - `python3 tests/test-mobile-turbo-smoke.py` passes.
+  - Latest smoke output:
+    - workerCount: `4`
+    - throughputX: `147.6`
+    - uiFrameAvgMs: `124.82`
+    - overlayAvgMs: `118.36`
+    - chartAvgMs: `128.46`

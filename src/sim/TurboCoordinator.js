@@ -5,10 +5,18 @@ export class TurboCoordinator {
     this.workerCount = 0;
   }
 
+  _isMobileRuntime() {
+    if (typeof document !== 'undefined' && document.body?.classList?.contains('app-mobile')) {
+      return true;
+    }
+    return !!(typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)')?.matches);
+  }
+
   async init(preferredCount = null) {
     if (this.online && this.workers.length) return;
     const hw = typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency || 4) : 4;
-    const target = preferredCount || Math.max(1, Math.min(8, hw - 1));
+    const maxWorkers = this._isMobileRuntime() ? 4 : 8;
+    const target = preferredCount || Math.max(1, Math.min(maxWorkers, hw - 1));
     this.destroy();
     for (let i = 0; i < target; i++) {
       const worker = new Worker(new URL('./TurboWorker.js', import.meta.url), { type: 'module' });

@@ -1,3 +1,5 @@
+import { getOptimized2dContext } from '../utils/canvas.js';
+
 /**
  * Neural network visualization — clean, math-video style.
  * Inspired by 3Blue1Brown / Pezzza's Work aesthetics:
@@ -11,7 +13,7 @@
 export class Visualizer {
   constructor(canvasEl) {
     this.canvas = canvasEl;
-    this.ctx = canvasEl ? canvasEl.getContext('2d') : null;
+    this.ctx = canvasEl ? getOptimized2dContext(canvasEl, { opaque: true }) : null;
     this._dpr = window.devicePixelRatio || 1;
     this._resized = false;
     // Track prev architecture for change animation
@@ -37,8 +39,17 @@ export class Visualizer {
   render(leader) {
     if (!this.ctx || !this.canvas) return;
 
-    // Re-check size each frame (panels can resize)
+    const style = window.getComputedStyle(this.canvas);
+    if (style.display === 'none' || style.visibility === 'hidden') {
+      return;
+    }
+
     const rect = this.canvas.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) {
+      return;
+    }
+
+    // Re-check size each frame (panels can resize)
     const dpr = this._dpr;
     if (Math.abs(rect.width * dpr - this.canvas.width) > 2 ||
         Math.abs(rect.height * dpr - this.canvas.height) > 2) {

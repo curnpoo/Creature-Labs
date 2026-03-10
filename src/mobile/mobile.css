@@ -105,6 +105,20 @@
   font-size: 9px;
 }
 
+@supports (content-visibility: auto) {
+  .app-mobile #mobile-pane-controls,
+  .app-mobile #mobile-pane-stats,
+  .app-mobile #training-sections,
+  .app-mobile #mobile-training-module-grid,
+  .app-mobile #mobile-stats-live-body,
+  .app-mobile #mobile-stats-neural-body,
+  .app-mobile #mobile-stats-evolution-body,
+  .app-mobile #mobile-stats-secondary-body {
+    content-visibility: auto;
+    contain-intrinsic-size: 480px 320px;
+  }
+}
+
 @media (orientation: portrait) {
   /* Restore splash overrides */
   .app-mobile .splash-bg-viewport {

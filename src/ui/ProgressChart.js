@@ -1,4 +1,5 @@
 import { SCALE } from '../sim/Physics.js';
+import { getOptimized2dContext } from '../utils/canvas.js';
 
 /**
  * Individual Metric Graph System
@@ -9,8 +10,8 @@ export class ProgressChart {
     this.rightCanvas = rightCanvas;
     this.leftCanvas = leftCanvas;
     this.leftMeta = leftMeta;
-    this.rightCtx = rightCanvas ? rightCanvas.getContext('2d') : null;
-    this.leftCtx = leftCanvas ? leftCanvas.getContext('2d') : null;
+    this.rightCtx = rightCanvas ? getOptimized2dContext(rightCanvas, { opaque: true }) : null;
+    this.leftCtx = leftCanvas ? getOptimized2dContext(leftCanvas, { opaque: true }) : null;
 
     this.leftContainer = document.getElementById('left-metrics-container');
     this.topContainer = document.getElementById('top-metrics-container');
@@ -192,7 +193,7 @@ export class ProgressChart {
     container.appendChild(header);
     container.appendChild(canvas);
 
-    return { container, canvas, ctx: canvas.getContext('2d'), valueEl: value, metric };
+    return { container, canvas, ctx: getOptimized2dContext(canvas, { opaque: true }), valueEl: value, metric };
   }
 
   _historyForMode(sim) {

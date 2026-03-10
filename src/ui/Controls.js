@@ -165,25 +165,8 @@ export class Controls {
       this.sim.syncCreatureRuntimeSettings();
     });
     this._bindSlider('inp-distreward', v => { this.sim.distanceRewardWeight = v; });
-    this._bindSlider('inp-speedreward', v => { this.sim.speedRewardWeight = v / 100; });
-    this._bindSlider('inp-jitterpen', v => { this.sim.jitterPenaltyWeight = v; });
-    this._bindSlider('inp-spinpen', v => { this.sim.spinPenaltyWeight = v; });
     this._bindSlider('inp-mut', v => { this.sim.mutationRate = v / 100; });
     this._bindSlider('inp-mutsize', v => { this.sim.mutationSize = v / 100; });
-
-    // Stability reward toggle
-    const stabOn = document.getElementById('stab-on');
-    const stabOff = document.getElementById('stab-off');
-    if (stabOn) stabOn.onclick = () => {
-      this.sim.rewardStability = true;
-      this._updateStabilityMode();
-      this.updateLabels();
-    };
-    if (stabOff) stabOff.onclick = () => {
-      this.sim.rewardStability = false;
-      this._updateStabilityMode();
-      this.updateLabels();
-    };
 
     // Camera buttons
     const camLock = document.getElementById('cam-lock');
@@ -504,6 +487,7 @@ export class Controls {
     this.setTrainingMode(this.sim.trainingMode || 'normal');
     this.setTurboWallPolicy(this.sim.turboWallPolicy || 'full');
     this.setTestingMode(this.sim.testingModeEnabled || false);
+    this._syncLiveScoreControls();
     this._updateStabilityMode();
     this._updateAlgorithmModeUI();
     this.updateLabels();
@@ -522,6 +506,23 @@ export class Controls {
       setter(v);
       this.updateLabels();
     };
+  }
+
+  _syncLiveScoreControls() {
+    const hideGroup = (id) => {
+      const group = document.getElementById(id)?.closest('.control-group');
+      if (!group) return;
+      group.classList.add('hidden');
+      group.setAttribute('aria-hidden', 'true');
+    };
+
+    ['inp-speedreward', 'inp-jitterpen', 'inp-spinpen', 'stab-on'].forEach(hideGroup);
+
+    const fitnessTag = this.els['fitness-tag'];
+    if (fitnessTag) {
+      fitnessTag.textContent = 'DIST + GAIT';
+      fitnessTag.title = 'Distance, gait coordination, airtime, backwards travel, and energy shape the live score.';
+    }
   }
 
   setCameraMode(mode) {
@@ -590,9 +591,9 @@ export class Controls {
   _updateStabilityMode() {
     const stabOn = document.getElementById('stab-on');
     const stabOff = document.getElementById('stab-off');
-    if (stabOn) stabOn.classList.toggle('active', this.sim.rewardStability);
-    if (stabOff) stabOff.classList.toggle('active', !this.sim.rewardStability);
-    if (this.els['val-stabmode']) this.els['val-stabmode'].textContent = this.sim.rewardStability ? 'ON' : 'OFF';
+    if (stabOn) stabOn.classList.remove('active');
+    if (stabOff) stabOff.classList.remove('active');
+    if (this.els['val-stabmode']) this.els['val-stabmode'].textContent = 'INACTIVE';
   }
 
   _isNeatMode() {

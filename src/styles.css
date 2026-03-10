@@ -660,6 +660,11 @@ canvas {
     box-shadow: none;
 }
 
+.hidden {
+    display: none !important;
+    pointer-events: none !important;
+}
+
 /* ─── Creature Catalog (Design Screen) ─── */
 .catalog-panel {
     position: fixed;

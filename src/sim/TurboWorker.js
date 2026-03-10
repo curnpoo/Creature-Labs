@@ -1,6 +1,7 @@
 import { createEngine, createGround, Vec2, Box, SCALE, cleanup, planck } from './Physics.js';
 import { Creature } from './Creature.js';
 import { creatureScoreFromFitness, distMetersFromX } from './fitnessScore.js';
+import { applyBodySafetyClamp, bindSharedCreatureContactFiltering } from './parityHelpers.js';
 
 function createDeathWall(world, deathWallX, groundY, thicknessPx) {
   const wallHalfWidth = Math.max(4, thicknessPx / 2) / SCALE;
@@ -143,25 +144,8 @@ function evaluateBatchShared(payload) {
     if (!Number.isInteger(creatureBody?.creatureId)) return;
     pendingDeathWallKills.add(creatureBody.creatureId);
   };
-  world.on('begin-contact', contact => {
-    const bodyA = contact.getFixtureA().getBody();
-    const bodyB = contact.getFixtureB().getBody();
+  bindSharedCreatureContactFiltering(world, (bodyA, bodyB) => {
     queueDeathWallKill(bodyA, bodyB);
-    if (bodyA.creatureId === bodyB.creatureId) {
-      if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB)) {
-        contact.setEnabled(false);
-      }
-    }
-  });
-  world.on('pre-solve', contact => {
-    const bodyA = contact.getFixtureA().getBody();
-    const bodyB = contact.getFixtureB().getBody();
-    queueDeathWallKill(bodyA, bodyB);
-    if (bodyA.creatureId === bodyB.creatureId) {
-      if (bodyA.connectedBodies && bodyA.connectedBodies.has(bodyB)) {
-        contact.setEnabled(false);
-      }
-    }
   });
 
   const records = payload.dnaBatch.map((item, idx) => {
@@ -262,32 +246,19 @@ function evaluateBatchShared(payload) {
     // Minimal post-step safety clamps only (no non-physical traction or angle teleporting).
     records.forEach(r => {
       if (r.creature.dead) return;
-      r.creature.bodies.forEach(b => {
-        const vel = b.getLinearVelocity();
-        let vx = vel.x;
-        const vy = vel.y;
-        if (groundNoSlipEnabled && isBodyGroundedStrict(b, r.creature.id)) {
-          vx *= groundNoSlipFactor;
-          if (Math.abs(vx) < groundNoSlipEpsilon) vx = 0;
+      applyBodySafetyClamp(r.creature.bodies, {
+        isBodyGroundedStrict: body => isBodyGroundedStrict(body, r.creature.id),
+        groundNoSlipEnabled,
+        groundNoSlipFactor,
+        groundNoSlipEpsilon,
+        maxHorizontalVelocity: simConfig.maxHorizontalVelocity,
+        maxVerticalVelocity: simConfig.maxVerticalVelocity,
+        tiltLimitEnabled: simConfig.tiltLimitEnabled,
+        maxTiltRad: simConfig.maxTiltRad,
+        onNoSlipApplied: residual => {
           r.noSlipAppliedSteps++;
-          r.noSlipTangentialResidualAccum += Math.abs(vx);
+          r.noSlipTangentialResidualAccum += residual;
           r.noSlipTangentialSamples++;
-        }
-        const clampedVx = Math.max(-simConfig.maxHorizontalVelocity, Math.min(simConfig.maxHorizontalVelocity, vx));
-        const clampedVy = Math.max(-simConfig.maxVerticalVelocity, Math.min(simConfig.maxVerticalVelocity, vy));
-        if (clampedVx !== vel.x || clampedVy !== vel.y) {
-          b.setLinearVelocity(Vec2(clampedVx, clampedVy));
-        }
-        const angle = Math.atan2(Math.sin(b.getAngle()), Math.cos(b.getAngle()));
-        let angularVelocity = b.getAngularVelocity();
-        if (simConfig.tiltLimitEnabled) {
-          const pushingFurtherOut = (angle >= simConfig.maxTiltRad && angularVelocity > 0)
-            || (angle <= -simConfig.maxTiltRad && angularVelocity < 0);
-          if (pushingFurtherOut) angularVelocity = 0;
-        }
-        const clampedAngularVelocity = Math.max(-5, Math.min(5, angularVelocity));
-        if (clampedAngularVelocity !== b.getAngularVelocity()) {
-          b.setAngularVelocity(clampedAngularVelocity);
         }
       });
     });
