@@ -262,10 +262,16 @@ const turboPerfProbe = {
   uiFrameIntervals: [],
   overlayIntervals: [],
   chartIntervals: [],
+  rulerIntervals: [],
   lastUiFrameAt: 0,
   lastOverlayAt: 0,
-  lastChartAt: 0
+  lastChartAt: 0,
+  lastRulerAt: 0,
+  worldRenderCount: 0
 };
+
+let e2eMobileTurboRenderMode = null;
+let headlessTurboBackdropSignature = '';
 
 function pushTurboPerfInterval(key, now = performance.now()) {
   const listKey = `${key}Intervals`;
@@ -296,9 +302,178 @@ function resetTurboPerfProbe() {
   turboPerfProbe.uiFrameIntervals = [];
   turboPerfProbe.overlayIntervals = [];
   turboPerfProbe.chartIntervals = [];
+  turboPerfProbe.rulerIntervals = [];
   turboPerfProbe.lastUiFrameAt = 0;
   turboPerfProbe.lastOverlayAt = 0;
   turboPerfProbe.lastChartAt = 0;
+  turboPerfProbe.lastRulerAt = 0;
+  turboPerfProbe.worldRenderCount = 0;
+}
+
+function buildTurboDiagnosticsSnapshot() {
+  const history = Array.isArray(sim.progressHistory) ? sim.progressHistory : [];
+  const recentHistory = history.slice(-12).map(item => ({
+    generation: Number.isFinite(item?.generation) ? item.generation : null,
+    genBest: Number.isFinite(item?.genBest) ? item.genBest : null,
+    allBest: Number.isFinite(item?.allBest) ? item.allBest : null,
+    avg: Number.isFinite(item?.avg) ? item.avg : null
+  }));
+  const runtimeCapabilities = (
+    typeof sim._turboCoordinator?.getCapabilities === 'function'
+      ? sim._turboCoordinator.getCapabilities()
+      : null
+  );
+  const standalone = (
+    window.matchMedia?.('(display-mode: standalone)')?.matches
+    || window.navigator?.standalone === true
+  );
+  const workerCount = sim._turboCoordinator?.workerCount || 0;
+  const mobileTurboRenderMode = getMobileTurboRenderMode();
+  const mobileTurboHeadless = isMobileHeadlessTurboActive();
+  const perf = {
+    uiFrame: summarizeIntervals(turboPerfProbe.uiFrameIntervals),
+    overlay: summarizeIntervals(turboPerfProbe.overlayIntervals),
+    chart: summarizeIntervals(turboPerfProbe.chartIntervals),
+    ruler: summarizeIntervals(turboPerfProbe.rulerIntervals),
+    worldRenderCount: turboPerfProbe.worldRenderCount
+  };
+
+  return {
+    capturedAt: new Date().toISOString(),
+    screen: currentScreen,
+    simSessionStarted,
+    trainingMode: sim.trainingMode,
+    turboStatus: sim.turboStatus,
+    generation: sim.generation,
+    fpsSmoothed: sim.fpsSmoothed,
+    allTimeBest: sim.allTimeBest,
+    workerCount,
+    turboCapabilities: runtimeCapabilities,
+    crossOriginIsolated: globalThis.crossOriginIsolated === true,
+    testingStatus: sim.testingStatus,
+    mobileTurboHeadless,
+    mobileTurboRenderMode,
+    lastTurboGenerationSummary: sim.lastTurboGenerationSummary,
+    lastTurboDiagnostics: sim.lastTurboDiagnostics,
+    perf,
+    app: {
+      screen: currentScreen,
+      simSessionStarted,
+      trainingMode: sim.trainingMode,
+      turboStatus: sim.turboStatus,
+      sandboxMode: sim.sandboxMode,
+      testingStatus: sim.testingStatus,
+      mobileTurboHeadless,
+      mobileTurboRenderMode
+    },
+    runtime: {
+      crossOriginIsolated: globalThis.crossOriginIsolated === true,
+      sharedArrayBuffer: typeof SharedArrayBuffer === 'function',
+      standalone,
+      userAgent: navigator.userAgent,
+      hardwareConcurrency: navigator.hardwareConcurrency ?? null,
+      deviceMemory: navigator.deviceMemory ?? null,
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        devicePixelRatio: window.devicePixelRatio || 1
+      }
+    },
+    turbo: {
+      generation: sim.generation,
+      simDuration: sim.simDuration,
+      simSpeed: sim.simSpeed,
+      fpsSmoothed: sim.fpsSmoothed,
+      popSize: sim.popSize,
+      workerCount,
+      allTimeBest: sim.allTimeBest,
+      genBestDist: sim.genBestDist,
+      turboCapabilities: runtimeCapabilities,
+      lastTurboGenerationSummary: sim.lastTurboGenerationSummary,
+      lastTurboDiagnostics: sim.lastTurboDiagnostics,
+      recentHistory
+    },
+    perf
+  };
+}
+
+function updateMobileDockMetrics() {
+  if (!document.body.classList.contains('app-mobile')) return;
+  const dock = document.getElementById('mobile-quick-controls');
+  const shell = document.getElementById('mobile-panel-shell');
+  const isPortrait = (window.innerHeight || 0) >= (window.innerWidth || 0);
+  if (!isPortrait) {
+    document.documentElement.style.setProperty('--mobile-active-bottom-ui', '0px');
+    return;
+  }
+  const activeBottomHeight = (
+    document.body.classList.contains('mobile-sheet-open') && shell && !shell.classList.contains('hidden')
+  )
+    ? Math.ceil(shell.getBoundingClientRect().height || 0)
+    : (
+        dock && !dock.classList.contains('hidden')
+          ? Math.ceil(dock.getBoundingClientRect().height || 0)
+          : 0
+      );
+  document.documentElement.style.setProperty('--mobile-active-bottom-ui', `${activeBottomHeight}px`);
+}
+
+function getMobileTurboRenderMode() {
+  if (!document.body.classList.contains('app-mobile')) return 'live';
+  return e2eMobileTurboRenderMode === 'live' ? 'live' : 'headless';
+}
+
+function isMobileHeadlessTurboActive() {
+  return (
+    document.body.classList.contains('app-mobile')
+    && currentScreen === 'sim'
+    && simSessionStarted
+    && sim.trainingMode === 'turbo'
+    && !sim.sandboxMode
+    && getMobileTurboRenderMode() === 'headless'
+  );
+}
+
+function syncMobileTurboRuntimeMode() {
+  const mode = getMobileTurboRenderMode();
+  sim.mobileTurboRenderMode = mode;
+  sim.mobileTurboHeadless = isMobileHeadlessTurboActive();
+  document.body.classList.toggle('mobile-turbo-headless-active', sim.mobileTurboHeadless);
+}
+
+function resolveTurboRulerDomainMeters(targetMax) {
+  const numericTarget = Math.max(0, Number(targetMax) || 0);
+  return Math.max(100, Math.ceil(numericTarget / 100) * 100);
+}
+
+function renderHeadlessTurboBackdrop() {
+  if (!worldCtx) return;
+  turboPerfProbe.worldRenderCount += 1;
+  const ctx = worldCtx;
+  ctx.clearRect(0, 0, worldCanvas.width, worldCanvas.height);
+  ctx.fillStyle = '#050916';
+  ctx.fillRect(0, 0, worldCanvas.width, worldCanvas.height);
+
+  const centerX = Math.round(worldCanvas.width * 0.5);
+  const centerY = Math.round(worldCanvas.height * 0.5);
+  const panelWidth = Math.min(worldCanvas.width - 48, 360);
+  const panelHeight = 80;
+  const panelLeft = Math.round(centerX - (panelWidth / 2));
+  const panelTop = Math.round(centerY - (panelHeight / 2));
+
+  ctx.fillStyle = 'rgba(10, 16, 28, 0.92)';
+  ctx.fillRect(panelLeft, panelTop, panelWidth, panelHeight);
+  ctx.strokeStyle = 'rgba(94, 234, 212, 0.22)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(panelLeft, panelTop, panelWidth, panelHeight);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#e2e8f0';
+  ctx.font = '600 20px "Rajdhani", "Inter", sans-serif';
+  ctx.fillText('HEADLESS TURBO', centerX, panelTop + 30);
+  ctx.fillStyle = '#64748b';
+  ctx.font = '12px "JetBrains Mono", monospace';
+  ctx.fillText('Evolution running without world rendering', centerX, panelTop + 52);
 }
 
 // --- Modules ---
@@ -312,7 +487,9 @@ const mobileUi = createMobileUiController({
   getSimSessionStarted: () => simSessionStarted,
   onSyncQuickControlState: () => syncMobileQuickControlState(),
   onTurboOverlayRefresh: () => pushTurboPerfInterval('overlay'),
-  onTurboChartRefresh: () => pushTurboPerfInterval('chart')
+  onTurboChartRefresh: () => pushTurboPerfInterval('chart'),
+  onTurboRulerRefresh: () => pushTurboPerfInterval('ruler'),
+  getTurboDiagnosticsSnapshot: () => buildTurboDiagnosticsSnapshot()
 });
 const {
   closeMobileSheet,
@@ -542,7 +719,9 @@ function setScreen(name) {
   Object.values(screens).forEach(s => s.classList.remove('active'));
   screens[name].classList.add('active');
   currentScreen = name;
+  headlessTurboBackdropSignature = '';
   syncMobileDockVisibility();
+  syncMobileTurboRuntimeMode();
 
   if (name !== 'sim') {
     closeMobileSheet();
@@ -670,6 +849,7 @@ function syncMobileQuickControlState() {
   const desktopGroundDraw = document.getElementById('btn-ground-draw');
   const desktopSpeed = document.getElementById('inp-speed');
   const isMobile = document.body.classList.contains('app-mobile');
+  syncMobileTurboRuntimeMode();
 
   if (isMobile && Number(sim.simSpeed) > MOBILE_SIM_SPEED_MAX && desktopSpeed) {
     sim.simSpeed = MOBILE_SIM_SPEED_MAX;
@@ -686,6 +866,7 @@ function syncMobileQuickControlState() {
   }
 
   updateMobileTurboOverlay();
+  updateMobileDockMetrics();
 }
 
 function setMobileSpeedVisual(speedValue) {
@@ -713,6 +894,8 @@ function syncMobileDockVisibility() {
 
   const shouldShow = document.body.classList.contains('app-mobile') && currentScreen === 'sim';
   dock.classList.toggle('hidden', !shouldShow);
+  syncMobileTurboRuntimeMode();
+  updateMobileDockMetrics();
 }
 
 function updateSandboxUI() {
@@ -1964,6 +2147,8 @@ const startTrainingNow = ({ startPaused = false } = {}) => {
     sim.sandboxPaused = false;
   }
   simSessionStarted = true;
+  syncMobileTurboRuntimeMode();
+  headlessTurboBackdropSignature = '';
   const isPaused = sim.sandboxMode ? sim.sandboxPaused : sim.paused;
   const icon = document.getElementById('icon-pause');
   if (icon) icon.className = isPaused ? 'fas fa-play' : 'fas fa-pause';
@@ -1996,11 +2181,13 @@ function startTurboSmokeSession(options = {}) {
     popSize = 16,
     simDuration = 10,
     simSpeed = 1,
-    testingMode = false
+    testingMode = false,
+    renderMode = null
   } = options || {};
 
   preSandboxSession = null;
   resetControlSettingsForNewCreature();
+  e2eMobileTurboRenderMode = renderMode === 'live' ? 'live' : 'headless';
   sim.setTestingMode?.(!!testingMode);
   controls.setTrainingMode('turbo');
   sim.popSize = Math.max(4, Math.round(Number(popSize) || 16));
@@ -2008,6 +2195,8 @@ function startTurboSmokeSession(options = {}) {
   sim.simSpeed = Math.max(1, Math.round(Number(simSpeed) || 1));
   sim.showGhosts = false;
   resetTurboPerfProbe();
+  syncMobileTurboRuntimeMode();
+  headlessTurboBackdropSignature = '';
 
   const design = designer.getDesign();
   sim.nodes = design.nodes;
@@ -2120,6 +2309,7 @@ const mqToggle = document.getElementById('btn-mq-toggle');
 if (mqToggle) mqToggle.onclick = () => {
     const dock = document.getElementById('mobile-quick-controls');
     if (dock) dock.classList.toggle('minimized');
+    updateMobileDockMetrics();
 };
 
 
@@ -2185,6 +2375,8 @@ if (mqTurbo) {
   mqTurbo.onclick = () => {
     const isTurbo = sim.trainingMode === 'turbo';
     controls.setTrainingMode(isTurbo ? 'normal' : 'turbo');
+    syncMobileTurboRuntimeMode();
+    headlessTurboBackdropSignature = '';
     if (simSessionStarted && !sim.sandboxMode) {
       sim.paused = false;
       sim.sandboxPaused = false;
@@ -2845,6 +3037,7 @@ function updateLeftNeatProgressPanel() {
 
 function renderWorld(leader, viewMode = 'training') {
 if (!worldCtx) return;
+turboPerfProbe.worldRenderCount += 1;
 const ctx = worldCtx;
 const gY = sim.getGroundY();
 const bestRunSample = viewMode === 'bestRun'
@@ -3083,7 +3276,9 @@ function isMobileControlsSheetVisible() {
 // --- Frame callback ---
 sim.onFrame = (leader, simulatedSec) => {
   const isMobile = document.body.classList.contains('app-mobile');
-  const desktopTelemetryVisible = !isMobile || isMobileStatsSheetVisible();
+  const mobileHeadlessTurbo = isMobileHeadlessTurboActive();
+  syncMobileTurboRuntimeMode();
+  const desktopTelemetryVisible = !isMobile || (!mobileHeadlessTurbo && isMobileStatsSheetVisible());
   const desktopControlsVisible = !isMobile || isMobileControlsSheetVisible();
   if (isMobile && sim.trainingMode === 'turbo' && !sim.sandboxMode) {
     pushTurboPerfInterval('uiFrame');
@@ -3101,10 +3296,19 @@ sim.onFrame = (leader, simulatedSec) => {
   }
   updateSandboxScorecard(leader);
   updateSandboxStats(leader);
-  if (sim.viewMode === 'bestRun' && !sim.sandboxMode) {
-    renderBestRunWorld(leader);
+  if (mobileHeadlessTurbo) {
+    const nextBackdropSignature = `${worldCanvas.width}x${worldCanvas.height}`;
+    if (headlessTurboBackdropSignature !== nextBackdropSignature) {
+      renderHeadlessTurboBackdrop();
+      headlessTurboBackdropSignature = nextBackdropSignature;
+    }
   } else {
-    renderTrainingWorld(leader);
+    headlessTurboBackdropSignature = '';
+    if (sim.viewMode === 'bestRun' && !sim.sandboxMode) {
+      renderBestRunWorld(leader);
+    } else {
+      renderTrainingWorld(leader);
+    }
   }
   if (desktopTelemetryVisible) {
     visualizer.render(leader);
@@ -3228,6 +3432,7 @@ clearTimeout(resizeTimeout);
 resizeTimeout = setTimeout(() => {
 resizeCanvases();
 designer.render();
+updateMobileDockMetrics();
 }, 100); // Debounce 100ms
 });
 
@@ -3237,6 +3442,7 @@ resizeCanvases();
 designer.render();
 initSandboxPanelControls();
 syncMobileDockVisibility();
+updateMobileDockMetrics();
 emitAppState();
 
 export function launchFromSplash() {
@@ -3260,24 +3466,7 @@ if (E2E_ENABLED) {
       resetTurboPerfProbe();
     },
     getTurboPerfSnapshot() {
-      return {
-        screen: currentScreen,
-        simSessionStarted,
-        trainingMode: sim.trainingMode,
-        turboStatus: sim.turboStatus,
-        generation: sim.generation,
-        fpsSmoothed: sim.fpsSmoothed,
-        allTimeBest: sim.allTimeBest,
-        workerCount: sim._turboCoordinator?.workerCount || 0,
-        testingStatus: sim.testingStatus,
-        lastTurboGenerationSummary: sim.lastTurboGenerationSummary,
-        lastTurboDiagnostics: sim.lastTurboDiagnostics,
-        perf: {
-          uiFrame: summarizeIntervals(turboPerfProbe.uiFrameIntervals),
-          overlay: summarizeIntervals(turboPerfProbe.overlayIntervals),
-          chart: summarizeIntervals(turboPerfProbe.chartIntervals)
-        }
-      };
+      return buildTurboDiagnosticsSnapshot();
     }
   };
 }

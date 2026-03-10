@@ -113,6 +113,8 @@ export class Simulation {
     this.viewMode = 'training';
     this.trainingMode = 'normal';
     this.turboEnabled = false;
+    this.mobileTurboRenderMode = 'live';
+    this.mobileTurboHeadless = false;
     this.turboTargetSpeed = 50;
     this.turboCaptureReplay = false;
     this.turboStatus = 'idle';
@@ -1517,7 +1519,7 @@ this.world = null;
     this._turboRunning = true;
     this.turboStatus = 'warming';
     try {
-      await this._turboCoordinator.init();
+      await this._turboCoordinator.init(null, { mobileHeadless: !!this.mobileTurboHeadless });
       this.turboStatus = 'running';
       while (this._turboRunning && this.turboEnabled && !this.paused && !this.sandboxMode) {
         await this._runTurboGeneration();
@@ -1561,6 +1563,7 @@ this.world = null;
     if (!this.turboEnabled || this.sandboxMode) return;
     const runStartedAt = performance.now();
     const sessionId = this._turboSessionId;
+    const mobileHeadless = !!this.mobileTurboHeadless;
     const targetPop = Math.max(1, Number(this.popSize) || 1);
     const seed = this._makeSeedDNA(targetPop) || Array.from({ length: targetPop }, () => ({ dna: null }));
     const source = Array.isArray(this._turboGenerationDNA) && this._turboGenerationDNA.length
@@ -1582,9 +1585,7 @@ this.world = null;
     simConfig.maxTiltRad = this.maxTiltRad;
     const designSnapshot = this._serializeDesignSnapshot();
     const spawnCenterX = this.spawnX + (designSnapshot.bounds.maxX - designSnapshot.bounds.minX) / 2;
-    const payload = {
-      generation: this.generation,
-      dnaArray,
+    const staticPayload = {
       simConfig,
       designSnapshot,
       terrainSnapshot: {
@@ -1598,18 +1599,32 @@ this.world = null;
       groundY: this.getGroundY(),
       fixedDtSec: 1 / CONFIG.fixedStepHz,
       replaySampleIntervalSec: this._replaySampleIntervalSec,
-      captureReplay: this.turboCaptureReplay,
+      captureReplay: this.turboCaptureReplay && !mobileHeadless,
       scoreWeights: extractScoreWeights(this)
+    };
+    const payload = {
+      generation: this.generation,
+      dnaArray,
+      staticPayload,
+      mobileHeadless,
+      testingModeEnabled: !!this.testingModeEnabled
     };
     const result = await this._turboCoordinator.evaluateGeneration(payload);
     result.elapsedMs = performance.now() - runStartedAt;
     result.requestedPopulation = targetPop;
+    result.sourceEntries = dnaArray;
+    this._turboCoordinator.recordGenerationTiming(result.elapsedMs);
     if (sessionId !== this._turboSessionId) return;
     this._applyTurboGenerationResult(result);
   }
 
   _applyTurboGenerationResult(result) {
     if (!result?.results?.length) return;
+    const sourceEntries = Array.isArray(result.sourceEntries) ? result.sourceEntries : [];
+    const getSourceEntry = entry => {
+      const sourceIndex = Number.isFinite(entry?.sourceIndex) ? entry.sourceIndex : -1;
+      return sourceIndex >= 0 ? (sourceEntries[sourceIndex] || null) : null;
+    };
     const invalid = result.results.some(r => !Number.isFinite(r.score) || !Number.isFinite(r.distance));
     if (invalid) {
       console.warn('Turbo parity guard: non-finite score detected, falling back to normal mode.');
@@ -1647,25 +1662,37 @@ this.world = null;
     });
     const ranking = this._rankPopulationCandidates(evaluated);
     const ranked = ranking.ranked.map(item => ({
+      ...getSourceEntry(item.raw),
       ...item.raw,
       score: item.score,
       fitness: item.fitness,
       elapsedSec: item.elapsedSec,
       distance: item.distance
     }));
+    const wallElapsedMs = Math.max(1, Number(result.elapsedMs) || 0);
+    const wallThroughputX = this.simDuration > 0 ? (this.simDuration * 1000) / wallElapsedMs : 0;
     this.lastTurboDiagnostics = {
       ...(result.diagnostics || {}),
       requestedPopulation: Number(result.requestedPopulation) || this.popSize,
-      turboWallPolicy: this.turboWallPolicy
+      turboWallPolicy: this.turboWallPolicy,
+      wallElapsedMs,
+      wallThroughputX
     };
     this.turboPopulationLive = ranked.length;
-    this._runTurboParityGuardIfDue(result.results);
+    if (this.testingModeEnabled || !this.mobileTurboHeadless) {
+      this._runTurboParityGuardIfDue(result.results);
+    }
     const distanceWinner = result.results.reduce((best, curr) => {
       const bestDist = Number.isFinite(best?.distance) ? best.distance : -Infinity;
       const currDist = Number.isFinite(curr?.distance) ? curr.distance : -Infinity;
       return currDist > bestDist ? curr : best;
     }, result.results[0]);
     const winner = ranked[0];
+    const winnerSource = getSourceEntry(winner);
+    const winnerGenome = winner?.genome || winnerSource?.genome || null;
+    const winnerParents = Array.isArray(winner?.parents)
+      ? [...winner.parents]
+      : (Array.isArray(winnerSource?.parents) ? [...winnerSource.parents] : [null, null]);
     const genElapsedSec = Number.isFinite(winner?.elapsedSec)
       ? Math.max(0, Math.min(this.simDuration, Number(winner.elapsedSec)))
       : this.simDuration;
@@ -1682,15 +1709,15 @@ this.world = null;
       fitness: winnerFitness,
       hiddenLayers: this.hiddenLayers,
       neuronsPerLayer: this.neuronsPerLayer,
-      dna: new Float32Array(winner.dna || []),
-      genome: winner?.genome || null,
+      dna: new Float32Array(winner.dna || winnerSource?.dna || []),
+      genome: winnerGenome,
       meta: {
-        inputCount: Number(winner?.genome?.inputIds?.length) || 0,
-        outputCount: Number(winner?.genome?.outputIds?.length) || 0,
-        nodeCount: Number(Array.isArray(winner?.genome?.nodes) ? winner.genome.nodes.length : 0),
-        connectionCount: Number(Array.isArray(winner?.genome?.connections) ? winner.genome.connections.length : 0),
-        genomeId: Number(winner?.genomeId) || Number(winner?.genome?.id) || null,
-        parentIds: Array.isArray(winner?.parents) ? [...winner.parents] : [null, null]
+        inputCount: Number(winnerGenome?.inputIds?.length) || 0,
+        outputCount: Number(winnerGenome?.outputIds?.length) || 0,
+        nodeCount: Number(Array.isArray(winnerGenome?.nodes) ? winnerGenome.nodes.length : 0),
+        connectionCount: Number(Array.isArray(winnerGenome?.connections) ? winnerGenome.connections.length : 0),
+        genomeId: Number(winner?.genomeId) || Number(winnerGenome?.id) || Number(winnerSource?.genomeId) || null,
+        parentIds: winnerParents
       }
     };
 
@@ -1745,7 +1772,8 @@ this.world = null;
     if (this.progressHistory.length > 300) this.progressHistory.shift();
     this.lastTurboGenerationSummary = {
       generation: this.generation,
-      elapsedMs: Number(result.elapsedMs) || 0,
+      elapsedMs: wallElapsedMs,
+      wallThroughputX,
       population: ranked.length,
       winnerDistance: Number(genBest) || 0,
       winnerFitness: Number(winnerFitness) || 0,
@@ -2307,10 +2335,12 @@ this.world = null;
         this._startTurboLoop();
       }
       const turboPlaybackSec = this.paused ? 0 : (dtMs / 1000) * Math.max(1, this.simSpeed);
-      this.advanceBestRun(turboPlaybackSec);
+      if (!this.mobileTurboHeadless) {
+        this.advanceBestRun(turboPlaybackSec);
+      }
       const turboUiIntervalMs = (
         typeof document !== 'undefined' && document.body?.classList?.contains('app-mobile')
-      ) ? 120 : 80;
+      ) ? (this.mobileTurboHeadless ? 220 : 120) : 80;
       const shouldRenderUi = !this.lastTurboUiFrameAt || (timestamp - this.lastTurboUiFrameAt) >= turboUiIntervalMs;
       if (shouldRenderUi && this.onFrame) {
         this.lastTurboUiFrameAt = timestamp;

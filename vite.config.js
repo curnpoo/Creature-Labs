@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import { TURBO_ISOLATION_HEADERS } from './src/sim/turboRuntime.js';
 
 export default defineConfig({
   root: 'src',
@@ -37,12 +38,14 @@ export default defineConfig({
     host: true,
     port: 5173,
     strictPort: true,
-    allowedHosts: true
+    allowedHosts: true,
+    headers: TURBO_ISOLATION_HEADERS
   },
   preview: {
     host: true,
     port: 5173,
     strictPort: true,
-    allowedHosts: true
+    allowedHosts: true,
+    headers: TURBO_ISOLATION_HEADERS
   }
 });

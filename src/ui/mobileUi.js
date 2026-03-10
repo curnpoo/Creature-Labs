@@ -31,12 +31,222 @@ export function createMobileUiController({
   getSimSessionStarted,
   onSyncQuickControlState,
   onTurboOverlayRefresh,
-  onTurboChartRefresh
+  onTurboChartRefresh,
+  onTurboRulerRefresh,
+  getTurboDiagnosticsSnapshot
 }) {
   let mobileSheetReady = false;
-  let lastTurboChartRenderAt = 0;
-  let lastTurboChartGeneration = -1;
-  let lastTurboChartHistoryLength = -1;
+  let lastTurboVisualGeneration = -1;
+  let lastTurboVisualHistoryLength = -1;
+  let lastTurboVisualAllBest = -1;
+  let diagnosticsStatusResetId = null;
+
+  function buildTurboDistanceSnapshot() {
+    const history = Array.isArray(sim.progressHistory) ? sim.progressHistory : [];
+    const latestProgress = history.length ? history[history.length - 1] : null;
+    const liveGenBest = Math.max(0, safeNumber(sim.genBestDist, 0));
+    const completedGenBest = Math.max(0, safeNumber(latestProgress?.genBest, 0));
+    const currentBest = Math.max(liveGenBest, completedGenBest);
+    const allTimeBest = Math.max(0, safeNumber(sim.allTimeBest, safeNumber(latestProgress?.allBest, 0)));
+    return {
+      currentBest,
+      allTimeBest,
+      targetMax: Math.max(1, currentBest, allTimeBest)
+    };
+  }
+
+  function resolveRulerDomain(targetMax) {
+    const safeTarget = Math.max(0, safeNumber(targetMax, 0));
+    return Math.max(100, Math.ceil(safeTarget / 100) * 100);
+  }
+
+  function setDiagnosticsStatus(message, tone = 'neutral') {
+    const nodes = document.querySelectorAll('[data-turbo-diagnostics-status]');
+    nodes.forEach(node => {
+      node.textContent = message;
+      node.dataset.state = tone;
+    });
+    if (diagnosticsStatusResetId) clearTimeout(diagnosticsStatusResetId);
+    if (!message) return;
+    diagnosticsStatusResetId = window.setTimeout(() => {
+      document.querySelectorAll('[data-turbo-diagnostics-status]').forEach(node => {
+        node.textContent = '';
+        node.dataset.state = 'neutral';
+      });
+      diagnosticsStatusResetId = null;
+    }, 2200);
+  }
+
+  async function exportTurboDiagnostics(mode = 'copy') {
+    const snapshot = typeof getTurboDiagnosticsSnapshot === 'function'
+      ? getTurboDiagnosticsSnapshot()
+      : null;
+    if (!snapshot) {
+      setDiagnosticsStatus('No turbo snapshot yet', 'error');
+      return;
+    }
+
+    const text = JSON.stringify(snapshot, null, 2);
+    if (mode === 'share' && navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Creature Labs Turbo Diagnostics',
+          text
+        });
+        setDiagnosticsStatus('Shared', 'success');
+        return;
+      } catch {
+        // Fall through to clipboard copy if share is dismissed/unavailable.
+      }
+    }
+
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        setDiagnosticsStatus('Copied', 'success');
+        return;
+      } catch {
+        // Fall through to the textarea copy fallback.
+      }
+    }
+
+    const input = document.createElement('textarea');
+    input.value = text;
+    input.setAttribute('readonly', 'readonly');
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    input.select();
+    const copied = document.execCommand?.('copy');
+    input.remove();
+    if (copied) {
+      setDiagnosticsStatus('Copied', 'success');
+      return;
+    }
+    setDiagnosticsStatus('Share this instead', 'error');
+  }
+
+  function createTurboDiagnosticsActions({ compact = false } = {}) {
+    const wrap = document.createElement('div');
+    wrap.className = `mobile-turbo-diagnostics-actions${compact ? ' compact' : ''}`;
+    wrap.innerHTML = `
+      <button type="button" class="mobile-turbo-diagnostics-btn" data-export-mode="copy">
+        <i class="fas fa-copy" aria-hidden="true"></i>
+        <span>Copy Turbo Logs</span>
+      </button>
+      <button type="button" class="mobile-turbo-diagnostics-btn" data-export-mode="share">
+        <i class="fas fa-arrow-up-from-bracket" aria-hidden="true"></i>
+        <span>Share Turbo Logs</span>
+      </button>
+      <div class="mobile-turbo-diagnostics-status" data-turbo-diagnostics-status data-state="neutral"></div>
+    `;
+
+    wrap.querySelectorAll('[data-export-mode]').forEach(button => {
+      button.addEventListener('click', () => {
+        void exportTurboDiagnostics(button.getAttribute('data-export-mode') || 'copy');
+      });
+    });
+    return wrap;
+  }
+
+  function downsampleSeries(points, maxPoints = 72) {
+    if (!Array.isArray(points) || points.length <= maxPoints) return points;
+    const sampled = [];
+    const lastIndex = points.length - 1;
+    for (let i = 0; i < maxPoints; i++) {
+      const sourceIndex = Math.round((i / Math.max(1, maxPoints - 1)) * lastIndex);
+      sampled.push(points[sourceIndex]);
+    }
+    return sampled;
+  }
+
+  function renderMobileTurboDistanceRuler() {
+    const canvas = document.getElementById('mobile-turbo-distance-ruler');
+    if (!canvas) return;
+
+    const ctx = getOptimized2dContext(canvas, { opaque: true });
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const width = Math.max(240, Math.round((rect.width || 320) * dpr));
+    const height = Math.max(56, Math.round((rect.height || 56) * dpr));
+
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+
+    ctx.clearRect(0, 0, width, height);
+
+    const { currentBest, allTimeBest, targetMax } = buildTurboDistanceSnapshot();
+    const hideGenBestThreshold = 3;
+    const domain = resolveRulerDomain(targetMax);
+    const padX = 14 * dpr;
+    const topY = 8 * dpr;
+    const lineY = 44 * dpr;
+    const bottomY = height - 14 * dpr;
+    const usableWidth = width - (padX * 2);
+    const tickCount = 4;
+
+    ctx.strokeStyle = '#2b3345';
+    ctx.lineWidth = 2 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(padX, lineY);
+    ctx.lineTo(width - padX, lineY);
+    ctx.stroke();
+
+    ctx.lineWidth = 1 * dpr;
+    ctx.strokeStyle = '#344055';
+    ctx.fillStyle = '#6b7689';
+    for (let i = 0; i <= tickCount; i++) {
+      const x = padX + (usableWidth * i) / tickCount;
+      ctx.beginPath();
+      ctx.moveTo(x, lineY - (6 * dpr));
+      ctx.lineTo(x, lineY + (6 * dpr));
+      ctx.stroke();
+      const tickValue = (domain * i) / tickCount;
+      ctx.textAlign = i === tickCount ? 'right' : (i === 0 ? 'left' : 'center');
+      ctx.fillText(`${tickValue.toFixed(0)}m`, x, bottomY);
+    }
+
+    const toX = value => padX + (Math.max(0, Math.min(domain, value)) / domain) * usableWidth;
+    const showGenBest = Math.abs(currentBest - allTimeBest) > hideGenBestThreshold;
+    const allTimeX = toX(allTimeBest);
+    const currentX = toX(currentBest);
+    let allTimeLabelX = allTimeX;
+    let currentLabelX = currentX;
+    const minGap = 42 * dpr;
+    if (showGenBest && Math.abs(currentX - allTimeX) < minGap) {
+      const direction = currentX >= allTimeX ? 1 : -1;
+      allTimeLabelX = Math.max(padX + (24 * dpr), Math.min(width - padX - (24 * dpr), allTimeX - (direction * minGap * 0.5)));
+      currentLabelX = Math.max(padX + (24 * dpr), Math.min(width - padX - (24 * dpr), currentX + (direction * minGap * 0.5)));
+    }
+
+    const drawMarker = (markerX, labelX, color, label, valueText) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(markerX, lineY - (12 * dpr));
+      ctx.lineTo(markerX, lineY + (12 * dpr));
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(markerX, lineY, 3 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.textAlign = 'center';
+      ctx.font = `${10 * dpr}px "JetBrains Mono", monospace`;
+      ctx.fillText(label, labelX, topY);
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = `${11 * dpr}px "Rajdhani", "Inter", sans-serif`;
+      ctx.fillText(valueText, labelX, topY + (12 * dpr));
+    };
+
+    drawMarker(allTimeX, allTimeLabelX, '#5eead4', 'ALL TIME', `${allTimeBest.toFixed(1)}m`);
+    if (showGenBest) {
+      drawMarker(currentX, currentLabelX, '#f59e0b', 'GEN BEST', `${currentBest.toFixed(1)}m`);
+    }
+  }
 
   function renderMobileTurboGenBestChart() {
     const canvas = document.getElementById('mobile-turbo-genbest-chart');
@@ -58,10 +268,10 @@ export function createMobileUiController({
     ctx.clearRect(0, 0, width, height);
 
     const history = Array.isArray(sim.progressHistory) ? sim.progressHistory : [];
-    const points = history.map(item => ({
+    const points = downsampleSeries(history.map(item => ({
       generation: safeNumber(item?.generation, 0),
       value: Math.max(0, safeNumber(item?.genBest, 0))
-    }));
+    })));
 
     const liveGen = safeNumber(sim.generation, 0);
     const liveGenBest = Math.max(0, safeNumber(sim.genBestDist, 0));
@@ -80,15 +290,10 @@ export function createMobileUiController({
     }
 
     const padX = 10 * dpr;
-    const padTop = 12 * dpr;
+    const padTop = 14 * dpr;
     const padBottom = 14 * dpr;
-    const graphTop = 24 * dpr;
+    const graphTop = 44 * dpr;
     const graphHeight = height - graphTop - padBottom;
-
-    ctx.fillStyle = 'rgba(255, 241, 214, 0.7)';
-    ctx.font = `${9 * dpr}px "JetBrains Mono", monospace`;
-    ctx.textBaseline = 'top';
-    ctx.fillText('BEST DISTANCE (GEN)', padX, padTop);
 
     if (points.length < 2) {
       ctx.fillStyle = 'rgba(255, 248, 220, 0.6)';
@@ -143,12 +348,6 @@ export function createMobileUiController({
     ctx.fillStyle = lastPoint.live ? '#fde68a' : '#fff7dc';
     ctx.fill();
 
-    ctx.fillStyle = '#fff7dc';
-    ctx.font = `${15 * dpr}px "Rajdhani", "Inter", sans-serif`;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'top';
-    ctx.fillText(`${lastPoint.value.toFixed(2)}m`, width - padX, padTop - 2 * dpr);
-
     ctx.fillStyle = 'rgba(255, 241, 214, 0.62)';
     ctx.font = `${9 * dpr}px "JetBrains Mono", monospace`;
     ctx.textAlign = 'left';
@@ -165,9 +364,9 @@ export function createMobileUiController({
     const show = isMobileRuntime() && getCurrentScreen() === 'sim' && getSimSessionStarted() && turboMode;
     wrap.classList.toggle('hidden', !show);
     if (!show) {
-      lastTurboChartRenderAt = 0;
-      lastTurboChartGeneration = -1;
-      lastTurboChartHistoryLength = -1;
+      lastTurboVisualGeneration = -1;
+      lastTurboVisualHistoryLength = -1;
+      lastTurboVisualAllBest = -1;
       return;
     }
 
@@ -204,6 +403,7 @@ export function createMobileUiController({
     setText('mobile-turbo-status', status.toUpperCase());
     setText('mobile-turbo-throughput', `${throughputX.toFixed(1)}x`);
     setText('mobile-turbo-delta', `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}m`);
+    setText('mobile-turbo-chart-readout', `${generationDistance.toFixed(2)}m`);
 
     const deltaEl = document.getElementById('mobile-turbo-delta');
     if (deltaEl) {
@@ -213,20 +413,22 @@ export function createMobileUiController({
     }
     onTurboOverlayRefresh?.();
 
-    const now = performance.now();
     const historyLength = history.length;
     const generation = safeNumber(sim.generation, 0);
-    const shouldRefreshChart =
-      generation !== lastTurboChartGeneration
-      || historyLength !== lastTurboChartHistoryLength
-      || (now - lastTurboChartRenderAt) >= 240;
+    const allBest = Math.max(0, safeNumber(sim.allTimeBest, 0));
+    const shouldRefreshVisuals =
+      generation !== lastTurboVisualGeneration
+      || historyLength !== lastTurboVisualHistoryLength
+      || Math.abs(allBest - lastTurboVisualAllBest) > 1e-6;
 
-    if (shouldRefreshChart) {
+    if (shouldRefreshVisuals) {
+      renderMobileTurboDistanceRuler();
+      onTurboRulerRefresh?.();
       renderMobileTurboGenBestChart();
       onTurboChartRefresh?.();
-      lastTurboChartRenderAt = now;
-      lastTurboChartGeneration = generation;
-      lastTurboChartHistoryLength = historyLength;
+      lastTurboVisualGeneration = generation;
+      lastTurboVisualHistoryLength = historyLength;
+      lastTurboVisualAllBest = allBest;
     }
   }
 
@@ -262,6 +464,11 @@ export function createMobileUiController({
     setText('mobile-hud-allbest', `${allBest.toFixed(1)}m`);
     setText('mobile-hud-time', `${timeLeft.toFixed(1)}s`);
     setText('mobile-hud-elapsed', formatElapsed(elapsed));
+
+    const diagnosticsBanner = document.querySelector('.mobile-turbo-diagnostics-banner');
+    if (diagnosticsBanner) {
+      diagnosticsBanner.classList.toggle('hidden', !showingTurboGenBest);
+    }
   }
 
   function setMobileSheetTab(tab = 'controls') {
@@ -443,6 +650,14 @@ export function createMobileUiController({
       turboPolesGroup.remove();
     }
 
+    const controlsPane = document.getElementById('mobile-pane-controls');
+    if (controlsPane && !controlsPane.querySelector('.mobile-turbo-diagnostics-banner')) {
+      const banner = document.createElement('div');
+      banner.className = 'mobile-turbo-diagnostics-banner hidden';
+      banner.appendChild(createTurboDiagnosticsActions({ compact: true }));
+      controlsPane.insertBefore(banner, controlsPane.firstChild);
+    }
+
     appendToModule('physics', groupFor('inp-musbudget'));
     appendToModule('physics', groupFor('inp-strength'));
     appendToModule('physics', groupFor('inp-gravity'));
@@ -455,6 +670,7 @@ export function createMobileUiController({
     appendToModule('debug', groupFor('neat-mode-badge'));
     appendToModule('debug', document.getElementById('legacy-nn-controls'));
     appendToModule('debug', groupFor('dbg-intent-hz'));
+    appendToModule('debug', createTurboDiagnosticsActions());
 
     Array.from(trainingSections.children)
       .filter(child => child !== moduleGrid)

@@ -150,6 +150,28 @@ def run_mobile_behavior(page, base_url: str) -> None:
   page.wait_for_timeout(150)
   assert has_class(page, "body", "mobile-sheet-open"), "mobile settings sheet did not open from quick controls"
   assert not is_hidden(page, "#mobile-panel-shell"), "mobile settings sheet stayed hidden after quick control click"
+  page.evaluate(
+    """
+    () => {
+      window.__copiedTurboLogs = null;
+      const clipboard = {
+        writeText: async text => {
+        window.__copiedTurboLogs = text;
+        }
+      };
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: clipboard
+      });
+      document.querySelector('.mobile-turbo-diagnostics-banner')?.classList.remove('hidden');
+    }
+    """
+  )
+  page.click(".mobile-turbo-diagnostics-banner [data-export-mode='copy']")
+  page.wait_for_function(
+    "() => !!window.__copiedTurboLogs && window.__copiedTurboLogs.includes('capturedAt')",
+    timeout=3000
+  )
   assert not console_errors, f"Console errors detected in mobile flow: {console_errors}"
 
 

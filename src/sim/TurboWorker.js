@@ -2,6 +2,11 @@ import { createEngine, createGround, Vec2, Box, SCALE, cleanup, planck } from '.
 import { Creature } from './Creature.js';
 import { creatureScoreFromFitness, distMetersFromX } from './fitnessScore.js';
 import { applyBodySafetyClamp, bindSharedCreatureContactFiltering } from './parityHelpers.js';
+import {
+  TURBO_RESULT_FLOAT_STRIDE,
+  TURBO_RESULT_INT_STRIDE,
+  encodeTurboDeathReason
+} from './turboRuntime.js';
 
 function createDeathWall(world, deathWallX, groundY, thicknessPx) {
   const wallHalfWidth = Math.max(4, thicknessPx / 2) / SCALE;
@@ -207,6 +212,10 @@ function evaluateBatchShared(payload) {
   const groundNoSlipEnabled = simConfig.groundNoSlipEnabled !== false;
   const groundNoSlipFactor = Number.isFinite(simConfig.groundNoSlipFactor) ? simConfig.groundNoSlipFactor : 0.1;
   const groundNoSlipEpsilon = Number.isFinite(simConfig.groundNoSlipEpsilon) ? simConfig.groundNoSlipEpsilon : 0.02;
+  const deepDiagnostics = payload.testingModeEnabled === true || payload.mobileHeadless !== true;
+  const compactResults = payload.mobileHeadless === true && payload.testingModeEnabled !== true;
+  const sharedFloatView = payload.sharedResults?.floatBuffer ? new Float64Array(payload.sharedResults.floatBuffer) : null;
+  const sharedIntView = payload.sharedResults?.intBuffer ? new Int32Array(payload.sharedResults.intBuffer) : null;
   let executedSteps = 0;
   const getAliveCount = () => records.reduce((acc, r) => acc + (r.creature.dead ? 0 : 1), 0);
 
@@ -291,7 +300,7 @@ function evaluateBatchShared(payload) {
     simTimeElapsed += fixedDtSec;
   }
 
-  const results = records.map(r => {
+  const results = records.map((r, resultIndex) => {
     const creature = r.creature;
     const fitness = creature.getFitnessSnapshot();
     fitness.deathReason = r.deathReason;
@@ -307,7 +316,28 @@ function evaluateBatchShared(payload) {
     );
     const peakX = Number.isFinite(fitness.maxX) ? fitness.maxX : creature.getX();
     const distance = distMetersFromX(peakX, spawnCenterX);
+    const diagnostics = {
+      expectedSteps: Math.max(1, Math.round(simTimeElapsed / Math.max(1e-6, fixedDtSec))),
+      executedSteps,
+      fixedDtExpectedSec: fixedDtSec,
+      fixedDtObservedSec: executedSteps > 0 ? (simTimeElapsed / executedSteps) : fixedDtSec,
+      deathReason: r.deathReason,
+      deathWallKillCount: r.deathWallKillCount
+    };
+    if (deepDiagnostics) {
+      diagnostics.remainingTimerSec = timer;
+      diagnostics.phaseLockEnabled = !!simConfig.phaseLockEnabled;
+      diagnostics.expectedInputs = expectedInputs;
+      diagnostics.expectedOutputs = expectedOutputs;
+      diagnostics.noSlipAppliedSteps = r.noSlipAppliedSteps;
+      diagnostics.groundTangentialResidual = r.noSlipTangentialSamples > 0
+        ? (r.noSlipTangentialResidualAccum / r.noSlipTangentialSamples)
+        : 0;
+      Object.assign(diagnostics, actuationDiagnostics);
+    }
+
     const result = {
+      sourceIndex: Number.isFinite(r.item?.sourceIndex) ? r.item.sourceIndex : null,
       genomeId: Number.isFinite(r.item?.genomeId) ? r.item.genomeId : (Number.isFinite(creature?.genome?.id) ? creature.genome.id : null),
       controllerType: creature.controllerType || r.item.controllerType || 'dense',
       score,
@@ -315,32 +345,38 @@ function evaluateBatchShared(payload) {
       durationSec: simTimeElapsed,
       fitness,
       finalX: creature.getX(),
-      path: r.path || [],
-      replayFrames: r.replayFrames || [],
-      diagnostics: {
-        expectedSteps: Math.max(1, Math.round(simTimeElapsed / Math.max(1e-6, fixedDtSec))),
-        executedSteps,
-        fixedDtExpectedSec: fixedDtSec,
-        fixedDtObservedSec: executedSteps > 0 ? (simTimeElapsed / executedSteps) : fixedDtSec,
-        deathReason: r.deathReason,
-        deathWallKillCount: r.deathWallKillCount,
-        remainingTimerSec: timer,
-        phaseLockEnabled: !!simConfig.phaseLockEnabled,
-        expectedInputs,
-        expectedOutputs,
-        noSlipAppliedSteps: r.noSlipAppliedSteps,
-        groundTangentialResidual: r.noSlipTangentialSamples > 0
-          ? (r.noSlipTangentialResidualAccum / r.noSlipTangentialSamples)
-          : 0,
-        ...actuationDiagnostics
-      },
-      dna: Array.from(creature.dna),
-      architecture: creature.architecture
+      diagnostics
     };
-    if (creature?.genome?.toSerializable) {
+    if (!compactResults) {
+      result.dna = creature.dna instanceof Float32Array ? creature.dna.slice() : new Float32Array(creature.dna);
+      result.architecture = creature.architecture;
+    }
+    if (captureReplay) {
+      result.path = r.path || [];
+      result.replayFrames = r.replayFrames || [];
+    }
+    if (!compactResults && creature?.genome?.toSerializable) {
       result.genome = creature.genome.toSerializable();
-    } else if (r.item?.genome) {
+    } else if (!compactResults && r.item?.genome) {
       result.genome = r.item.genome;
+    }
+    if (compactResults && sharedFloatView && sharedIntView) {
+      const floatOffset = resultIndex * TURBO_RESULT_FLOAT_STRIDE;
+      const intOffset = resultIndex * TURBO_RESULT_INT_STRIDE;
+      sharedFloatView[floatOffset] = score;
+      sharedFloatView[floatOffset + 1] = distance;
+      sharedFloatView[floatOffset + 2] = simTimeElapsed;
+      sharedFloatView[floatOffset + 3] = creature.getX();
+      sharedFloatView[floatOffset + 4] = Number(fitness?.groundSlipRate) || Number(fitness?.groundSlip) || 0;
+      sharedFloatView[floatOffset + 5] = Number(fitness?.actuationLevel) || 0;
+      sharedFloatView[floatOffset + 6] = fixedDtSec;
+      sharedFloatView[floatOffset + 7] = executedSteps > 0 ? (simTimeElapsed / executedSteps) : fixedDtSec;
+      sharedIntView[intOffset] = Number.isFinite(r.item?.sourceIndex) ? r.item.sourceIndex : resultIndex;
+      sharedIntView[intOffset + 1] = executedSteps;
+      sharedIntView[intOffset + 2] = Math.max(1, Math.round(simTimeElapsed / Math.max(1e-6, fixedDtSec)));
+      sharedIntView[intOffset + 3] = r.deathWallKillCount;
+      sharedIntView[intOffset + 4] = encodeTurboDeathReason(r.deathReason);
+      return null;
     }
     return result;
   });
@@ -350,7 +386,7 @@ function evaluateBatchShared(payload) {
   });
   challengeBodies.forEach(body => world.destroyBody(body));
   cleanup(world);
-  return results;
+  return sharedFloatView && sharedIntView ? [] : results.filter(Boolean);
 }
 
 function splitIntoSubBatches(dnaBatch, subBatchCount) {
@@ -365,28 +401,46 @@ function splitIntoSubBatches(dnaBatch, subBatchCount) {
   return out;
 }
 
+let cachedStaticPayload = null;
+let cachedStaticPayloadVersion = 0;
+
 self.onmessage = e => {
   const payload = e.data;
   try {
+    if (payload.staticPayload) {
+      cachedStaticPayload = payload.staticPayload;
+      cachedStaticPayloadVersion = Number(payload.staticPayloadVersion) || (cachedStaticPayloadVersion + 1);
+    }
+    if (!cachedStaticPayload) {
+      throw new Error('Turbo worker missing static payload.');
+    }
+
+    const runPayload = {
+      ...cachedStaticPayload,
+      ...payload,
+      staticPayload: undefined
+    };
     const startedAt = performance.now();
-    const subBatches = splitIntoSubBatches(payload.dnaBatch || [], payload.subBatchCount);
+    const subBatches = splitIntoSubBatches(runPayload.dnaBatch || [], runPayload.subBatchCount);
     const results = [];
     if (subBatches.length <= 1) {
-      results.push(...evaluateBatchShared(payload));
+      results.push(...evaluateBatchShared(runPayload));
     } else {
       subBatches.forEach(dnaBatch => {
         results.push(...evaluateBatchShared({
-          ...payload,
+          ...runPayload,
           dnaBatch
         }));
       });
     }
     self.postMessage({
       ok: true,
-      generation: payload.generation,
-      workerId: payload.workerId,
+      generation: runPayload.generation,
+      workerId: runPayload.workerId,
+      staticPayloadVersion: cachedStaticPayloadVersion,
       results,
-      batchSize: Array.isArray(payload.dnaBatch) ? payload.dnaBatch.length : 0,
+      useSharedResults: !!(runPayload.sharedResults?.floatBuffer && runPayload.sharedResults?.intBuffer),
+      batchSize: Array.isArray(runPayload.dnaBatch) ? runPayload.dnaBatch.length : 0,
       subBatchCount: subBatches.length,
       elapsedMs: performance.now() - startedAt
     });

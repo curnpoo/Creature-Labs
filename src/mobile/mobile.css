@@ -507,32 +507,16 @@ body:not(.app-mobile) .app-mobile-only {
   right: calc(8px + var(--mobile-safe-right));
   z-index: 1001;
   border-radius: 14px;
-  border: 1px solid rgba(245, 203, 66, 0.45);
-  background:
-    radial-gradient(120% 100% at 15% 0%, rgba(255, 201, 86, 0.26) 0%, rgba(255, 144, 66, 0.2) 32%, rgba(22, 22, 34, 0.78) 100%),
-    linear-gradient(125deg, rgba(37, 26, 6, 0.88), rgba(28, 18, 8, 0.82));
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow:
-    0 0 0 1px rgba(255, 210, 120, 0.18) inset,
-    0 10px 30px rgba(2, 8, 23, 0.45),
-    0 0 18px rgba(255, 157, 0, 0.24);
+  border: 1px solid rgba(94, 234, 212, 0.18);
+  background: rgba(8, 12, 20, 0.92);
+  box-shadow: 0 8px 24px rgba(2, 8, 23, 0.32);
   overflow: hidden;
   pointer-events: none;
-  animation: mobile-turbo-pulse 1.6s ease-in-out infinite;
-}
-
-.app-mobile .sim-mobile-turbo-overlay::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(102deg, transparent 28%, rgba(255, 241, 182, 0.24) 50%, transparent 72%);
-  transform: translateX(-100%);
-  animation: mobile-turbo-scan 1.8s linear infinite;
 }
 
 .app-mobile .sim-mobile-turbo-head,
 .app-mobile .sim-mobile-turbo-metrics,
+.app-mobile .sim-mobile-turbo-ruler-wrap,
 .app-mobile .sim-mobile-turbo-chart-wrap,
 .app-mobile .sim-mobile-turbo-foot {
   position: relative;
@@ -548,9 +532,9 @@ body:not(.app-mobile) .app-mobile-only {
 .app-mobile .sim-mobile-turbo-status {
   border-radius: 999px;
   padding: 2px 8px;
-  border: 1px solid rgba(245, 203, 66, 0.62);
-  background: rgba(202, 138, 4, 0.24);
-  color: #fff3c3;
+  border: 1px solid rgba(94, 234, 212, 0.3);
+  background: rgba(20, 184, 166, 0.12);
+  color: #d5fff5;
   font-family: "JetBrains Mono", monospace;
   font-size: 9px;
   letter-spacing: 0.08em;
@@ -567,8 +551,8 @@ body:not(.app-mobile) .app-mobile-only {
 
 .app-mobile .sim-mobile-turbo-metric {
   border-radius: 10px;
-  border: 1px solid rgba(255, 214, 143, 0.26);
-  background: rgba(48, 32, 11, 0.55);
+  border: 1px solid rgba(71, 85, 105, 0.7);
+  background: rgba(15, 23, 42, 0.82);
   padding: 8px 10px;
 }
 
@@ -577,7 +561,7 @@ body:not(.app-mobile) .app-mobile-only {
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 233, 187, 0.9);
+  color: rgba(148, 163, 184, 0.95);
 }
 
 .app-mobile .sim-mobile-turbo-value {
@@ -587,20 +571,89 @@ body:not(.app-mobile) .app-mobile-only {
   font-weight: 700;
   letter-spacing: 0.01em;
   line-height: 1;
-  color: #fff7dc;
+  color: #f8fafc;
 }
 
+.app-mobile .sim-mobile-turbo-ruler-wrap,
 .app-mobile .sim-mobile-turbo-chart-wrap {
   padding: 0 10px 10px;
 }
 
+.app-mobile .sim-mobile-turbo-chart-wrap {
+  position: relative;
+}
+
+.app-mobile .sim-mobile-turbo-chart-head {
+  position: absolute;
+  top: 10px;
+  left: 18px;
+  right: 18px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.app-mobile .sim-mobile-turbo-chart-label {
+  color: rgba(226, 232, 240, 0.78);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-mobile .sim-mobile-turbo-chart-readout {
+  min-width: 92px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #f8fafc;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 14px;
+  line-height: 1;
+  text-align: left;
+  pointer-events: none;
+}
+
+.app-mobile .sim-mobile-turbo-ruler,
 .app-mobile .sim-mobile-turbo-chart {
   display: block;
   width: 100%;
-  height: 88px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 214, 143, 0.2);
-  background: linear-gradient(180deg, rgba(36, 24, 10, 0.7), rgba(18, 12, 6, 0.36));
+  border: 1px solid rgba(51, 65, 85, 0.95);
+  background: rgba(10, 16, 28, 0.96);
+}
+
+.app-mobile .sim-mobile-turbo-ruler {
+  height: 56px;
+}
+
+.app-mobile .sim-mobile-turbo-chart {
+  height: 78px;
+  border-radius: 12px;
+}
+
+.app-mobile.mobile-turbo-headless-active .sim-mobile-turbo-overlay {
+  top: calc(74px + var(--mobile-safe-top));
+  bottom: calc(var(--mobile-active-bottom-ui, 0px) + 12px);
+  display: flex;
+  flex-direction: column;
+}
+
+.app-mobile.mobile-turbo-headless-active .sim-mobile-turbo-ruler {
+  height: 78px;
+}
+
+.app-mobile.mobile-turbo-headless-active .sim-mobile-turbo-chart-wrap {
+  flex: 1;
+  min-height: 0;
+}
+
+.app-mobile.mobile-turbo-headless-active .sim-mobile-turbo-chart {
+  height: 100%;
+  min-height: clamp(180px, 28vh, 320px);
 }
 
 .app-mobile .sim-mobile-turbo-foot {
@@ -617,10 +670,77 @@ body:not(.app-mobile) .app-mobile-only {
   color: #fff7dc;
 }
 
+.app-mobile .mobile-turbo-diagnostics-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.app-mobile .mobile-turbo-diagnostics-actions.compact {
+  margin-top: 0;
+}
+
+.app-mobile .mobile-turbo-diagnostics-banner {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid rgba(94, 234, 212, 0.18);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(8, 16, 30, 0.98), rgba(9, 19, 34, 0.95));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+}
+
+.app-mobile .mobile-turbo-diagnostics-btn {
+  min-height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(94, 234, 212, 0.3);
+  background: rgba(11, 18, 32, 0.92);
+  color: #e2e8f0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  font-family: "Rajdhani", "Inter", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.app-mobile .mobile-turbo-diagnostics-actions.compact .mobile-turbo-diagnostics-btn {
+  min-height: 46px;
+}
+
+.app-mobile .mobile-turbo-diagnostics-btn:active {
+  transform: translateY(1px);
+}
+
+.app-mobile .mobile-turbo-diagnostics-status {
+  grid-column: 1 / -1;
+  min-height: 16px;
+  padding: 0 2px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.92);
+}
+
+.app-mobile .mobile-turbo-diagnostics-status[data-state="success"] {
+  color: #86efac;
+}
+
+.app-mobile .mobile-turbo-diagnostics-status[data-state="error"] {
+  color: #fca5a5;
+}
+
 .app-mobile .sim-mobile-turbo-overlay.is-warming .sim-mobile-turbo-status {
-  border-color: rgba(245, 203, 66, 0.75);
-  background: rgba(234, 179, 8, 0.32);
-  color: #fff7cc;
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(245, 158, 11, 0.14);
+  color: #fde68a;
 }
 
 .app-mobile .sim-mobile-turbo-overlay.is-fallback .sim-mobile-turbo-status {
