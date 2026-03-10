@@ -584,6 +584,7 @@ function syncMobileQuickControlState() {
   const mqTurbo = document.getElementById('btn-mq-turbo');
   const mqCam = document.getElementById('btn-mq-cam');
   const mqGroundDraw = document.getElementById('btn-mq-ground-draw');
+  const mqSettings = document.getElementById('btn-mq-settings');
   const desktopGroundDraw = document.getElementById('btn-ground-draw');
   const desktopSpeed = document.getElementById('inp-speed');
   const isMobile = document.body.classList.contains('app-mobile');
@@ -595,6 +596,7 @@ function syncMobileQuickControlState() {
 
   if (mqTurbo) mqTurbo.classList.toggle('active', sim.trainingMode === 'turbo');
   if (mqCam) mqCam.classList.toggle('active', sim.cameraMode === 'lock');
+  if (mqSettings) mqSettings.classList.toggle('active', document.body.classList.contains('mobile-sheet-open'));
   setMobileSpeedVisual(sim.simSpeed);
 
   if (mqGroundDraw && desktopGroundDraw) {
@@ -665,17 +667,10 @@ function updateMobileTurboOverlay() {
     if (el) el.textContent = text;
   };
 
-  const title = status === 'warming'
-    ? 'Accelerating Simulation'
-    : status === 'fallback'
-      ? 'Turbo Fallback Active'
-      : 'Running Simulation';
-
   wrap.classList.toggle('is-warming', status === 'warming');
   wrap.classList.toggle('is-running', status === 'running');
   wrap.classList.toggle('is-fallback', status === 'fallback');
 
-  setText('mobile-turbo-title', title);
   setText('mobile-turbo-status', status.toUpperCase());
   setText('mobile-turbo-throughput', `${throughputX.toFixed(1)}x`);
   setText('mobile-turbo-delta', `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}m`);
@@ -686,6 +681,128 @@ function updateMobileTurboOverlay() {
     if (delta > 0.05) deltaEl.classList.add('delta-positive');
     else if (delta < -0.05) deltaEl.classList.add('delta-negative');
   }
+
+  renderMobileTurboGenBestChart();
+}
+
+function renderMobileTurboGenBestChart() {
+  const canvas = document.getElementById('mobile-turbo-genbest-chart');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  const width = Math.max(240, Math.round((rect.width || 320) * dpr));
+  const height = Math.max(88, Math.round((rect.height || 88) * dpr));
+
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+
+  ctx.clearRect(0, 0, width, height);
+
+  const history = Array.isArray(sim.progressHistory) ? sim.progressHistory : [];
+  const points = history.map(item => ({
+    generation: Number(item?.generation) || 0,
+    value: Math.max(0, Number(item?.genBest) || 0)
+  }));
+
+  const liveGen = Number(sim.generation) || 0;
+  const liveGenBest = Math.max(0, Number(sim.genBestDist) || 0);
+  if (liveGenBest > 0) {
+    const lastPoint = points[points.length - 1];
+    if (!lastPoint || lastPoint.generation !== liveGen) {
+      points.push({ generation: liveGen, value: liveGenBest, live: true });
+    } else if (liveGenBest > lastPoint.value) {
+      lastPoint.value = liveGenBest;
+      lastPoint.live = true;
+    }
+  }
+
+  if (!points.length || points[0].generation > 0) {
+    points.unshift({ generation: 0, value: 0 });
+  }
+
+  const padX = 10 * dpr;
+  const padTop = 12 * dpr;
+  const padBottom = 14 * dpr;
+  const graphTop = 24 * dpr;
+  const graphHeight = height - graphTop - padBottom;
+
+  ctx.fillStyle = 'rgba(255, 241, 214, 0.7)';
+  ctx.font = `${9 * dpr}px "JetBrains Mono", monospace`;
+  ctx.textBaseline = 'top';
+  ctx.fillText('BEST DISTANCE (GEN)', padX, padTop);
+
+  if (points.length < 2) {
+    ctx.fillStyle = 'rgba(255, 248, 220, 0.6)';
+    ctx.font = `${11 * dpr}px "JetBrains Mono", monospace`;
+    ctx.fillText('Awaiting turbo data', padX, graphTop + 18 * dpr);
+    return;
+  }
+
+  const values = points.map(point => point.value).filter(Number.isFinite);
+  const minVal = 0;
+  const rawMax = values.length ? Math.max(...values) : 1;
+  const maxVal = Math.max(1, rawMax * 1.12);
+  const span = Math.max(1e-6, maxVal - minVal);
+  const graphWidth = width - padX * 2;
+  const maxGeneration = Math.max(1, ...points.map(point => point.generation));
+  const toX = generation => padX + (Math.max(0, generation) / maxGeneration) * graphWidth;
+  const toY = value => graphTop + graphHeight - ((value - minVal) / span) * graphHeight;
+
+  const baselineY = toY(minVal);
+  ctx.strokeStyle = 'rgba(255, 241, 214, 0.12)';
+  ctx.lineWidth = 1 * dpr;
+  ctx.beginPath();
+  ctx.moveTo(padX, baselineY);
+  ctx.lineTo(width - padX, baselineY);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(toX(points[0].generation), baselineY);
+  points.forEach(point => {
+    ctx.lineTo(toX(point.generation), toY(point.value));
+  });
+  ctx.lineTo(toX(points[points.length - 1].generation), baselineY);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255, 0, 85, 0.16)';
+  ctx.fill();
+
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    const x = toX(point.generation);
+    const y = toY(point.value);
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#ff4d7d';
+  ctx.lineWidth = 2 * dpr;
+  ctx.stroke();
+
+  const lastPoint = points[points.length - 1];
+  const lastX = toX(lastPoint.generation);
+  const lastY = toY(lastPoint.value);
+  ctx.beginPath();
+  ctx.arc(lastX, lastY, 3 * dpr, 0, Math.PI * 2);
+  ctx.fillStyle = lastPoint.live ? '#fde68a' : '#fff7dc';
+  ctx.fill();
+
+  ctx.fillStyle = '#fff7dc';
+  ctx.font = `${15 * dpr}px "Rajdhani", "Inter", sans-serif`;
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'top';
+  ctx.fillText(`${lastPoint.value.toFixed(2)}m`, width - padX, padTop - 2 * dpr);
+
+  ctx.fillStyle = 'rgba(255, 241, 214, 0.62)';
+  ctx.font = `${9 * dpr}px "JetBrains Mono", monospace`;
+  ctx.textAlign = 'left';
+  ctx.fillText('G0', padX, height - 11 * dpr);
+  ctx.textAlign = 'right';
+  ctx.fillText(`G${Math.max(0, lastPoint.generation || liveGen || 0)}`, width - padX, height - 11 * dpr);
 }
 
 function updateMobileSimTopHud() {
@@ -699,14 +816,21 @@ function updateMobileSimTopHud() {
   if (!show) return;
 
   const safe = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
+  const leader = sim.visualLeader || (typeof sim.getLeader === 'function' ? sim.getLeader() : null);
+  const leaderX = leader && typeof leader.getX === 'function' ? leader.getX() : Number(leader?.x);
+  const currentDist = Number.isFinite(leaderX)
+    ? (typeof sim.distMetersContinuousFromX === 'function'
+      ? sim.distMetersContinuousFromX(leaderX)
+      : (typeof sim.distMetersFromX === 'function' ? sim.distMetersFromX(leaderX) : 0))
+    : 0;
   const latestProgress = Array.isArray(sim.progressHistory) && sim.progressHistory.length
     ? sim.progressHistory[sim.progressHistory.length - 1]
     : null;
   const latestGenBest = Number.isFinite(Number(latestProgress?.genBest))
     ? Number(latestProgress.genBest)
     : 0;
-  const liveGenBest = safe(sim.genBestDist, 0);
-  const genBestDisplay = Math.max(liveGenBest, latestGenBest);
+  const showingTurboGenBest = sim.trainingMode === 'turbo' && !sim.sandboxMode;
+  const primaryDistance = showingTurboGenBest ? latestGenBest : currentDist;
   const allBest = safe(sim.allTimeBest, 0);
   const timeLeft = Math.max(0, safe(sim.timer, 0));
   const elapsed = Math.max(0, safe(sim.runElapsedSec, safe(sim.simTimeElapsed, 0)));
@@ -717,10 +841,22 @@ function updateMobileSimTopHud() {
   };
 
   setText('mobile-hud-gen', String(safe(sim.generation, 1)));
-  setText('mobile-hud-genbest', `${genBestDisplay.toFixed(1)}m`);
+  setText('mobile-hud-genbest', `${primaryDistance.toFixed(1)}m`);
+  setText('mobile-hud-genbest-label', showingTurboGenBest ? 'Gen Best' : 'Current');
   setText('mobile-hud-allbest', `${allBest.toFixed(1)}m`);
+  const formatElapsed = totalSeconds => {
+    const s = Math.max(0, Number(totalSeconds) || 0);
+    if (s < 120) return `${s.toFixed(1)}s`;
+    const minutes = s / 60;
+    if (minutes < 60) return `${minutes.toFixed(1)}m`;
+    const hours = minutes / 60;
+    if (hours < 24) return `${hours.toFixed(1)}h`;
+    const days = hours / 24;
+    return `${days.toFixed(1)}d`;
+  };
+
   setText('mobile-hud-time', `${timeLeft.toFixed(1)}s`);
-  setText('mobile-hud-elapsed', `${elapsed.toFixed(1)}s`);
+  setText('mobile-hud-elapsed', formatElapsed(elapsed));
 }
 
 function isMobileRuntime() {
@@ -763,6 +899,7 @@ function openMobileSheet(tab = 'controls') {
   shell.classList.remove('hidden');
   shell.setAttribute('aria-hidden', 'false');
   setMobileSheetTab(tab);
+  syncMobileQuickControlState();
 }
 
 function closeMobileSheet() {
@@ -773,10 +910,11 @@ function closeMobileSheet() {
     shell.classList.add('hidden');
     shell.setAttribute('aria-hidden', 'true');
   }
+  syncMobileQuickControlState();
 }
 
 function createMobileControlModule(config) {
-  const { id, title, advanced = false } = config;
+  const { id, title, advanced = false, defaultCollapsed = false } = config;
   const root = document.createElement('section');
   root.className = 'mobile-control-module';
   root.dataset.moduleId = id;
@@ -794,7 +932,7 @@ function createMobileControlModule(config) {
   body.className = 'mobile-control-module-body';
 
   const storageKey = `${MOBILE_MODULE_STORAGE_PREFIX}${id}.collapsed`;
-  let collapsed = !!advanced;
+  let collapsed = defaultCollapsed || !!advanced;
   try {
     const saved = localStorage.getItem(storageKey);
     if (saved === '1') collapsed = true;
@@ -834,11 +972,11 @@ function setupMobileTrainingModules() {
   trainingSections.insertBefore(moduleGrid, trainingSections.firstChild);
 
   const configs = [
+    { id: 'brains', title: 'Brains', defaultCollapsed: true },
     { id: 'simulation', title: 'Simulation' },
     { id: 'camera', title: 'Camera & Environment' },
+    { id: 'physics', title: 'Physics', advanced: true },
     { id: 'evolution', title: 'Evolution' },
-    { id: 'turbo', title: 'Turbo' },
-    { id: 'physics', title: 'Physics (Advanced)', advanced: true },
     { id: 'debug', title: 'Neural & Debug (Advanced)', advanced: true }
   ];
 
@@ -860,31 +998,50 @@ function setupMobileTrainingModules() {
   const actionRow = document.getElementById('btn-start-sim')?.closest('.flex.justify-between.gap-2') || null;
   const resetSettings = document.getElementById('btn-reset-settings') || null;
   const mutationInfo = groupFor('inp-mutsize')?.nextElementSibling || null;
+  const brainSection = document.getElementById('brain-library-section') || null;
+  const zoomGroup = groupFor('inp-zoom');
+  const turboGroup = groupFor('engine-normal');
+  const turboPolicyGroup = groupFor('turbo-wall-off');
+  const turboPolesGroup = groupFor('inp-turbo-poles');
 
+  appendToModule('brains', brainSection);
   appendToModule('simulation', groupFor('ghosts-on'));
-  appendToModule('simulation', actionRow);
+  if (actionRow) {
+    actionRow.dataset.mobileModuleMoved = '1';
+    actionRow.remove();
+  }
   appendToModule('simulation', resetSettings);
-  appendToModule('simulation', groupFor('view-training'));
   appendToModule('simulation', groupFor('inp-speed'));
+  appendToModule('simulation', groupFor('inp-duration'));
+  appendToModule('simulation', groupFor('inp-wall-speed'));
+  appendToModule('simulation', groupFor('inp-wall-start'));
 
   appendToModule('camera', groupFor('cam-lock'));
   appendToModule('camera', groupFor('btn-ground-draw'));
-  appendToModule('camera', groupFor('btn-brain-save'));
-  appendToModule('camera', groupFor('inp-zoom'));
+  if (zoomGroup) {
+    zoomGroup.dataset.mobileModuleMoved = '1';
+    zoomGroup.remove();
+  }
 
   appendToModule('evolution', groupFor('fitness-tag'));
-  appendToModule('evolution', groupFor('inp-duration'));
   appendToModule('evolution', groupFor('inp-pop'));
   appendToModule('evolution', groupFor('inp-mut'));
   appendToModule('evolution', groupFor('inp-mutsize'));
   appendToModule('evolution', mutationInfo);
   appendToModule('evolution', groupFor('testing-off'));
 
-  appendToModule('turbo', groupFor('engine-normal'));
-  appendToModule('turbo', groupFor('turbo-wall-off'));
-  appendToModule('turbo', groupFor('inp-turbo-poles'));
-  appendToModule('turbo', groupFor('inp-wall-speed'));
-  appendToModule('turbo', groupFor('inp-wall-start'));
+  if (turboGroup) {
+    turboGroup.dataset.mobileModuleMoved = '1';
+    turboGroup.remove();
+  }
+  if (turboPolicyGroup) {
+    turboPolicyGroup.dataset.mobileModuleMoved = '1';
+    turboPolicyGroup.remove();
+  }
+  if (turboPolesGroup) {
+    turboPolesGroup.dataset.mobileModuleMoved = '1';
+    turboPolesGroup.remove();
+  }
 
   appendToModule('physics', groupFor('inp-musbudget'));
   appendToModule('physics', groupFor('inp-strength'));
@@ -2318,6 +2475,30 @@ function resetControlSettingsForNewCreature() {
   controls.updateLabels();
 }
 
+const handleStartSim = () => {
+  preSandboxSession = null;
+  resetControlSettingsForNewCreature();
+  const design = designer.getDesign();
+  sim.nodes = design.nodes;
+  sim.constraints = design.constraints;
+  fitCurrentSimCameraToCreature(true);
+  sim.exitSandboxMode();
+  startTrainingNow();
+};
+
+const handlePauseToggle = () => {
+  if (sim.sandboxMode) {
+    sim.sandboxPaused = !sim.sandboxPaused;
+    syncSandboxPauseButtons();
+  } else {
+    sim.paused = !sim.paused;
+  }
+  const isPaused = sim.sandboxMode ? sim.sandboxPaused : sim.paused;
+  const icon = document.getElementById('icon-pause');
+  if (icon) icon.className = isPaused ? 'fas fa-play' : 'fas fa-pause';
+  updateStartSimUI();
+};
+
 const showEndSimConfirmation = () => {
   const modal = document.getElementById('modal-end-sim');
   if (modal) modal.classList.remove('hidden');
@@ -2354,29 +2535,9 @@ controls.bind({
   onStartDraw: () => setScreen('draw'),
   onBack: () => setScreen('splash'),
   onRun: () => setScreen('sim'),
-  onStartSim: () => {
-    preSandboxSession = null;
-    resetControlSettingsForNewCreature();
-    const design = designer.getDesign();
-    sim.nodes = design.nodes;
-    sim.constraints = design.constraints;
-    fitCurrentSimCameraToCreature(true);
-    sim.exitSandboxMode();
-    startTrainingNow();
-  },
+  onStartSim: handleStartSim,
   onEdit: showEndSimConfirmation,
-  onPause: () => {
-    if (sim.sandboxMode) {
-      sim.sandboxPaused = !sim.sandboxPaused;
-      syncSandboxPauseButtons();
-    } else {
-      sim.paused = !sim.paused;
-    }
-    const isPaused = sim.sandboxMode ? sim.sandboxPaused : sim.paused;
-    const icon = document.getElementById('icon-pause');
-    if (icon) icon.className = isPaused ? 'fas fa-play' : 'fas fa-pause';
-    updateStartSimUI();
-  },
+  onPause: handlePauseToggle,
   onReset: showResetSimConfirmation,
   onResetSettings: () => {
     if (sim.world) {
@@ -2580,24 +2741,20 @@ if (mqToggle) mqToggle.onclick = () => {
     if (dock) dock.classList.toggle('minimized');
 };
 
-const mqStats = document.getElementById('btn-mq-stats');
-if (mqStats) mqStats.onclick = () => {
-  openMobileSheet('stats');
-};
 
 const mqStart = document.getElementById('btn-mq-start');
 if (mqStart) {
   mqStart.onclick = () => {
     if (!simSessionStarted) {
-      document.getElementById('btn-start-sim')?.click();
+      handleStartSim();
       return;
     }
-    document.getElementById('btn-pause')?.click();
+    handlePauseToggle();
   };
 }
 
 const mqReset = document.getElementById('btn-mq-reset');
-if (mqReset) mqReset.onclick = () => document.getElementById('btn-reset').click();
+if (mqReset) mqReset.onclick = showResetSimConfirmation;
 
 const ensureSimulationLoopRunning = () => {
   if (sim.frameId || sim.sandboxMode) return;
@@ -2754,19 +2911,49 @@ if (speedRange) {
   });
 }
 
-const mqMore = document.getElementById('btn-mq-more');
-if (mqMore) mqMore.onclick = () => {
-  openMobileSheet('controls');
-};
+const mqSettings = document.getElementById('btn-mq-settings');
+if (mqSettings) {
+  mqSettings.onclick = () => {
+    if (document.body.classList.contains('mobile-sheet-open')) {
+      closeMobileSheet();
+      return;
+    }
+    openMobileSheet('controls');
+  };
+}
 
 const mqCamReset = document.getElementById('btn-mq-cam-reset');
-if (mqCamReset) mqCamReset.onclick = () => document.getElementById('cam-reset')?.click();
+if (mqCamReset) {
+  mqCamReset.onclick = () => {
+    mqCamReset.classList.remove('mq-press');
+    void mqCamReset.offsetWidth;
+    mqCamReset.classList.add('mq-press');
+    document.getElementById('cam-reset')?.click();
+  };
+  mqCamReset.addEventListener('animationend', () => mqCamReset.classList.remove('mq-press'));
+}
 
 const mqGroundDraw = document.getElementById('btn-mq-ground-draw');
-if (mqGroundDraw) mqGroundDraw.onclick = () => document.getElementById('btn-ground-draw')?.click();
+if (mqGroundDraw) {
+  mqGroundDraw.onclick = () => {
+    mqGroundDraw.classList.remove('mq-press');
+    void mqGroundDraw.offsetWidth;
+    mqGroundDraw.classList.add('mq-press');
+    document.getElementById('btn-ground-draw')?.click();
+  };
+  mqGroundDraw.addEventListener('animationend', () => mqGroundDraw.classList.remove('mq-press'));
+}
 
 const mqGroundClear = document.getElementById('btn-mq-ground-clear');
-if (mqGroundClear) mqGroundClear.onclick = () => document.getElementById('btn-ground-clear')?.click();
+if (mqGroundClear) {
+  mqGroundClear.onclick = () => {
+    mqGroundClear.classList.remove('mq-press');
+    void mqGroundClear.offsetWidth;
+    mqGroundClear.classList.add('mq-press');
+    document.getElementById('btn-ground-clear')?.click();
+  };
+  mqGroundClear.addEventListener('animationend', () => mqGroundClear.classList.remove('mq-press'));
+}
 
 ensureMobileSheetMounted();
 updateStartSimUI();

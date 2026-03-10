@@ -8,6 +8,7 @@ export class HUD {
     this.els = {
       gen: document.getElementById('hud-gen'),
       genBest: document.getElementById('hud-genbest'),
+      genBestLabel: document.getElementById('hud-genbest-label'),
       allBest: document.getElementById('hud-allbest'),
       improve: document.getElementById('hud-improve'),
       stagnant: document.getElementById('hud-stagnant'),
@@ -21,14 +22,14 @@ export class HUD {
   }
 
   _formatElapsed(totalSeconds) {
-    const s = Math.floor(totalSeconds);
-    if (s < 60) return `${s}s`;
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    if (m < 60) return `${m}:${String(sec).padStart(2, '0')}`;
-    const h = Math.floor(m / 60);
-    const min = m % 60;
-    return `${h}:${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+    const s = Math.max(0, Number(totalSeconds) || 0);
+    if (s < 120) return `${s.toFixed(1)}s`;
+    const minutes = s / 60;
+    if (minutes < 60) return `${minutes.toFixed(1)}m`;
+    const hours = minutes / 60;
+    if (hours < 24) return `${hours.toFixed(1)}h`;
+    const days = hours / 24;
+    return `${days.toFixed(1)}d`;
   }
 
   update(sim) {
@@ -39,13 +40,21 @@ export class HUD {
     const latestGenBest = Number.isFinite(Number(latestProgress?.genBest))
       ? Number(latestProgress.genBest)
       : 0;
-    const liveGenBest = safe(sim.genBestDist, 0);
-    const genBestDisplay = Math.max(liveGenBest, latestGenBest);
+    const leader = sim.visualLeader || (typeof sim.getLeader === 'function' ? sim.getLeader() : null);
+    const leaderX = leader && typeof leader.getX === 'function' ? leader.getX() : Number(leader?.x);
+    const currentDist = Number.isFinite(leaderX)
+      ? (typeof sim.distMetersContinuousFromX === 'function'
+        ? sim.distMetersContinuousFromX(leaderX)
+        : (typeof sim.distMetersFromX === 'function' ? sim.distMetersFromX(leaderX) : 0))
+      : 0;
+    const showingTurboGenBest = sim.trainingMode === 'turbo' && !sim.sandboxMode;
+    const primaryDistance = showingTurboGenBest ? latestGenBest : currentDist;
     const generationChanged = this.lastGeneration !== null && sim.generation > this.lastGeneration;
     const allTimeBestImproved = this.lastAllTimeBest !== null && sim.allTimeBest > this.lastAllTimeBest + 1e-6;
 
     if (this.els.gen) this.els.gen.textContent = String(sim.generation);
-    if (this.els.genBest) this.els.genBest.textContent = `${genBestDisplay.toFixed(2)}m`;
+    if (this.els.genBest) this.els.genBest.textContent = `${primaryDistance.toFixed(2)}m`;
+    if (this.els.genBestLabel) this.els.genBestLabel.textContent = showingTurboGenBest ? 'GEN BEST' : 'CURRENT';
     if (this.els.allBest) this.els.allBest.textContent = `${safe(sim.allTimeBest).toFixed(2)}m`;
 
     if (generationChanged && sim.trainingMode === 'normal' && !sim.sandboxMode && this.els.gen) {

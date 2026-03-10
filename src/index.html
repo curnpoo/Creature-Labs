@@ -350,7 +350,7 @@
                         <div id="mobile-hud-gen" class="sim-mobile-top-hud-value">1</div>
                     </div>
                     <div class="sim-mobile-top-hud-item">
-                        <div class="sim-mobile-top-hud-label">Gen Dist</div>
+                        <div id="mobile-hud-genbest-label" class="sim-mobile-top-hud-label">Current</div>
                         <div id="mobile-hud-genbest" class="sim-mobile-top-hud-value">0.0m</div>
                     </div>
                     <div class="sim-mobile-top-hud-item">
@@ -370,10 +370,6 @@
 
             <div id="mobile-turbo-overlay" class="app-mobile-only sim-mobile-turbo-overlay hidden" aria-live="polite">
                 <div class="sim-mobile-turbo-head">
-                    <div class="sim-mobile-turbo-title-wrap">
-                        <i class="fas fa-bolt"></i>
-                        <span id="mobile-turbo-title">Accelerating Simulation</span>
-                    </div>
                     <div id="mobile-turbo-status" class="sim-mobile-turbo-status">WARMING</div>
                 </div>
                 <div class="sim-mobile-turbo-metrics">
@@ -385,6 +381,9 @@
                         <div class="sim-mobile-turbo-label">Delta</div>
                         <div id="mobile-turbo-delta" class="sim-mobile-turbo-value">+0.0m</div>
                     </div>
+                </div>
+                <div class="sim-mobile-turbo-chart-wrap">
+                    <canvas id="mobile-turbo-genbest-chart" class="sim-mobile-turbo-chart" aria-label="Best Distance per Generation"></canvas>
                 </div>
             </div>
 
@@ -448,13 +447,9 @@
                             <i class="fas fa-eraser"></i>
                             <span>Clear</span>
                         </button>
-                        <button id="btn-mq-more" class="mq-btn mq-btn-icon mq-thin mq-span-1" title="More Controls">
+                        <button id="btn-mq-settings" class="mq-btn mq-btn-icon mq-thin mq-span-2 mq-settings" title="More Settings">
                             <i class="fas fa-sliders-h"></i>
-                            <span>More</span>
-                        </button>
-                        <button id="btn-mq-stats" class="mq-btn mq-btn-icon mq-thin mq-span-1 mq-info" title="Stats Panel">
-                            <i class="fas fa-chart-line"></i>
-                            <span>Stats</span>
+                            <span>More Settings</span>
                         </button>
                         <button id="btn-mq-end-sim" class="mq-btn mq-end mq-span-2" title="End Simulation">
                             <i class="fas fa-pencil"></i>
@@ -485,15 +480,21 @@
                     <section id="mobile-pane-stats" class="mobile-sheet-pane hidden" aria-label="Stats">
                         <div class="mobile-stats-category-row" aria-hidden="true">
                             <span class="mobile-stats-category-pill">Signals</span>
+                            <span class="mobile-stats-category-pill">Timeline</span>
                             <span class="mobile-stats-category-pill">Neural</span>
                             <span class="mobile-stats-category-pill">Evolution</span>
-                            <span class="mobile-stats-category-pill">Timeline</span>
                         </div>
                         <div id="mobile-stats-live-card" class="mobile-stats-card">
                             <div class="mobile-sheet-card-title">
                                 <span><i class="fas fa-wave-square mr-1"></i> Live Signals</span>
                             </div>
                             <div id="mobile-stats-live-body"></div>
+                        </div>
+                        <div id="mobile-stats-secondary-card" class="mobile-stats-card">
+                            <div class="mobile-sheet-card-title">
+                                <span><i class="fas fa-timeline mr-1"></i> Run Timeline</span>
+                            </div>
+                            <div id="mobile-stats-secondary-body"></div>
                         </div>
                         <div id="mobile-stats-core-card" class="mobile-stats-card">
                             <div class="mobile-sheet-card-title">
@@ -512,12 +513,6 @@
                                 <span><i class="fas fa-dna mr-1"></i> Evolution Intelligence</span>
                             </div>
                             <div id="mobile-stats-evolution-body"></div>
-                        </div>
-                        <div id="mobile-stats-secondary-card" class="mobile-stats-card">
-                            <div class="mobile-sheet-card-title">
-                                <span><i class="fas fa-timeline mr-1"></i> Run Timeline</span>
-                            </div>
-                            <div id="mobile-stats-secondary-body"></div>
                         </div>
                     </section>
                 </div>
@@ -557,7 +552,7 @@
                                     class="stat-value text-cyan-300"
                                     id="hud-genbest"
                                 >0m</span>
-                                <span class="stat-label">GEN BEST</span>
+                                <span id="hud-genbest-label" class="stat-label">CURRENT</span>
                             </div>
                             <div class="stat-divider"></div>
                             <div class="stat-item">
@@ -892,25 +887,6 @@
                         >
                             Reset Settings to Defaults
                         </button>
-
-                        <div class="section-divider"></div>
-
-                        <div class="control-group">
-                            <div class="control-label">
-                                View Mode <span
-                                    class="control-val"
-                                    id="val-viewmode"
-                                >TRAINING</span>
-                            </div>
-                            <div class="flex gap-2">
-                                <button
-                                    id="view-training"
-                                    class="toggle-btn active"
-                                >
-                                    Training View
-                                </button>
-                            </div>
-                        </div>
 
                         <div class="control-group">
                             <div class="control-label">

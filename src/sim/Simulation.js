@@ -11,6 +11,56 @@ import {
   normalizedGroundSlip
 } from './fitnessScore.js';
 
+const CREATURE_RUNTIME_CONFIG_KEYS = [
+  'jointFreedom',
+  'muscleStrength',
+  'jointMoveSpeed',
+  'muscleRange',
+  'muscleMinLength',
+  'muscleMaxLength',
+  'muscleSmoothing',
+  'muscleSignalRateLimit',
+  'muscleSpringConstant',
+  'muscleDamping',
+  'groundedBothBodies',
+  'groundedOneBody',
+  'groundedNoBodies',
+  'groundedVerticalForceScale',
+  'groundedDeadbandErrorPx',
+  'groundedDeadbandVelPxPerSec',
+  'groundedSoftZoneErrorPx',
+  'groundedSoftZoneForceScale',
+  'groundedForceRateLimit',
+  'groundedSignFlipDeadband',
+  'groundedMinForceMagnitude',
+  'maxHorizontalVelocity',
+  'maxVerticalVelocity',
+  'groundNoSlipEnabled',
+  'groundNoSlipFactor',
+  'groundNoSlipEpsilon',
+  'tractionDamping',
+  'muscleActionBudget',
+  'phaseLockEnabled',
+  'gaitHz',
+  'commandDeadband',
+  'maxCommandDeltaPerStep',
+  'bodyFriction',
+  'bodyStaticFriction',
+  'bodyAirFriction',
+  'groundedThreshold',
+  'tiltLimitEnabled',
+  'maxTiltDeg',
+  'energyEnabled',
+  'maxEnergy',
+  'energyRegenRate',
+  'energyUsagePerActuation',
+  'minEnergyForActuation',
+  'baseDrain',
+  'trainingAlgorithm',
+  'hiddenLayers',
+  'neuronsPerLayer'
+];
+
 /**
  * Simulation manager: game loop, generation lifecycle, evolution.
  * Migrated to Planck.js physics engine.
@@ -154,6 +204,10 @@ export class Simulation {
     this.groundedSignFlipDeadband = CONFIG.defaultGroundedSignFlipDeadband;
     this.groundedMinForceMagnitude = CONFIG.defaultGroundedMinForceMagnitude;
     this.muscleActionBudget = CONFIG.defaultMuscleActionBudget;
+    this.phaseLockEnabled = CONFIG.defaultPhaseLockEnabled;
+    this.gaitHz = CONFIG.defaultGaitHz;
+    this.commandDeadband = CONFIG.defaultCommandDeadband;
+    this.maxCommandDeltaPerStep = CONFIG.defaultMaxCommandDeltaPerStep;
     this.distanceRewardWeight = CONFIG.defaultDistanceRewardWeight;
     this.speedRewardWeight = CONFIG.defaultSpeedRewardWeight;
     this.stabilityRewardWeight = CONFIG.defaultStabilityRewardWeight;
@@ -307,6 +361,15 @@ export class Simulation {
 
   getSimConfig() {
     return {
+      ...this._buildCreatureRuntimeConfig(),
+      // Auto-evolving NN architecture
+      currentGeneration: this.generation,
+      baseFitness: this.championFitness > 0 ? this.championFitness : 0
+    };
+  }
+
+  _buildCreatureRuntimeConfig() {
+    return {
       jointFreedom: this.jointFreedom,
       muscleStrength: this.muscleStrength,
       jointMoveSpeed: this.jointMoveSpeed,
@@ -335,6 +398,10 @@ export class Simulation {
       groundNoSlipEpsilon: this.groundNoSlipEpsilon,
       tractionDamping: this.tractionDamping,
       muscleActionBudget: this.muscleActionBudget,
+      phaseLockEnabled: this.phaseLockEnabled,
+      gaitHz: this.gaitHz,
+      commandDeadband: this.commandDeadband,
+      maxCommandDeltaPerStep: this.maxCommandDeltaPerStep,
       bodyFriction: this.bodyFriction,
       bodyStaticFriction: this.bodyStaticFriction,
       bodyAirFriction: this.bodyAirFriction,
@@ -349,10 +416,7 @@ export class Simulation {
       energyUsagePerActuation: this.energyUsagePerActuation,
       minEnergyForActuation: this.minEnergyForActuation,
       baseDrain: this.baseDrain ?? CONFIG.ENERGY_CONFIG.baseDrain,
-      trainingAlgorithm: this.trainingAlgorithm,
-      // Auto-evolving NN architecture
-      currentGeneration: this.generation,
-      baseFitness: this.championFitness > 0 ? this.championFitness : 0
+      trainingAlgorithm: this.trainingAlgorithm
     };
   }
 
@@ -2409,41 +2473,11 @@ this.currentGhostPath.push({ x: center.x, y: center.y });
   }
 
   syncCreatureRuntimeSettings() {
+    const runtimeConfig = this._buildCreatureRuntimeConfig();
     this.creatures.forEach(c => {
-      c.simConfig.jointFreedom = this.jointFreedom;
-      c.simConfig.muscleStrength = this.muscleStrength;
-      c.simConfig.jointMoveSpeed = this.jointMoveSpeed;
-      c.simConfig.muscleRange = this.muscleRange;
-      c.simConfig.muscleMinLength = this.muscleMinLength;
-      c.simConfig.muscleMaxLength = this.muscleMaxLength;
-      c.simConfig.muscleSmoothing = this.muscleSmoothing;
-      c.simConfig.muscleSignalRateLimit = this.muscleSignalRateLimit;
-      c.simConfig.muscleSpringConstant = this.muscleSpringConstant;
-      c.simConfig.muscleDamping = this.muscleDamping;
-      c.simConfig.groundedBothBodies = this.groundedBothBodies;
-      c.simConfig.groundedOneBody = this.groundedOneBody;
-      c.simConfig.groundedNoBodies = this.groundedNoBodies;
-      c.simConfig.groundedThreshold = this.groundedThreshold;
-      c.simConfig.tiltLimitEnabled = this.tiltLimitEnabled;
-      c.simConfig.maxTiltDeg = this.maxTiltDeg;
-      c.simConfig.groundedVerticalForceScale = this.groundedVerticalForceScale;
-      c.simConfig.groundedDeadbandErrorPx = this.groundedDeadbandErrorPx;
-      c.simConfig.groundedDeadbandVelPxPerSec = this.groundedDeadbandVelPxPerSec;
-      c.simConfig.groundedSoftZoneErrorPx = this.groundedSoftZoneErrorPx;
-      c.simConfig.groundedSoftZoneForceScale = this.groundedSoftZoneForceScale;
-      c.simConfig.groundedForceRateLimit = this.groundedForceRateLimit;
-      c.simConfig.groundedSignFlipDeadband = this.groundedSignFlipDeadband;
-      c.simConfig.groundedMinForceMagnitude = this.groundedMinForceMagnitude;
-      c.simConfig.maxHorizontalVelocity = this.maxHorizontalVelocity;
-      c.simConfig.maxVerticalVelocity = this.maxVerticalVelocity;
-      c.simConfig.groundNoSlipEnabled = this.groundNoSlipEnabled;
-      c.simConfig.groundNoSlipFactor = this.groundNoSlipFactor;
-      c.simConfig.groundNoSlipEpsilon = this.groundNoSlipEpsilon;
-      c.simConfig.muscleActionBudget = this.muscleActionBudget;
-      c.simConfig.bodyFriction = this.bodyFriction;
-      c.simConfig.bodyStaticFriction = this.bodyStaticFriction;
-      c.simConfig.bodyAirFriction = this.bodyAirFriction;
-      c.simConfig.energyEnabled = this.energyEnabled;
+      CREATURE_RUNTIME_CONFIG_KEYS.forEach(key => {
+        c.simConfig[key] = runtimeConfig[key];
+      });
 
       // Update body friction
       c.bodies.forEach(b => {

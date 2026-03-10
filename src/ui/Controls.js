@@ -28,7 +28,7 @@ export class Controls {
       'val-hidden', 'val-neurons', 'val-elites', 'val-tournament',
       'cam-lock', 'cam-free', 'icon-pause',
       'fitness-tag', 'fitness-speed', 'fitness-stability', 'fitness-upright',
-      'val-spinpen', 'val-wall-speed', 'val-wall-start', 'val-viewmode', 'val-engine', 'turbo-status', 'val-turbo-wall-policy', 'val-turbo-poles',
+      'val-spinpen', 'val-wall-speed', 'val-wall-start', 'val-engine', 'turbo-status', 'val-turbo-wall-policy', 'val-turbo-poles',
       'testing-last-run', 'testing-health', 'testing-scope', 'testing-copy-compact', 'testing-copy-full',
       'neat-mode-badge', 'neat-species-count', 'neat-innovation-count', 'neat-champion-complexity', 'nn-control-hint',
       'dbg-intent-hz', 'dbg-osc-hz', 'dbg-delta-sec', 'dbg-micro-index', 'dbg-grounded-slip',
@@ -215,9 +215,6 @@ export class Controls {
     if (replayPrev) replayPrev.onclick = () => this.setReplayIndex(this.sim.replayIndex - 1);
     if (replayNext) replayNext.onclick = () => this.setReplayIndex(this.sim.replayIndex + 1);
     if (replayPlay) replayPlay.onclick = () => this.toggleReplayPlay();
-
-    const viewTrainingBtn = document.getElementById('view-training');
-    if (viewTrainingBtn) viewTrainingBtn.onclick = () => this.setViewMode('training');
 
     const engineNormalBtn = document.getElementById('engine-normal');
     const engineTurboBtn = document.getElementById('engine-turbo');
@@ -539,11 +536,6 @@ export class Controls {
 
   setViewMode(mode) {
     if (this.sim.setViewMode) this.sim.setViewMode('training');
-    const viewTraining = document.getElementById('view-training');
-    if (viewTraining) viewTraining.classList.toggle('active', this.sim.viewMode === 'training');
-    if (this.els['val-viewmode']) {
-      this.els['val-viewmode'].textContent = 'TRAINING';
-    }
     this.updateLabels();
   }
 
@@ -825,7 +817,6 @@ export class Controls {
       set('val-tournament', `${Math.round(s.tournamentSize || 0)}`);
     }
     set('val-zoom', `${s.zoom.toFixed(2)}x`);
-    set('val-viewmode', 'TRAINING');
     set('val-engine', s.trainingMode === 'turbo' ? 'ON' : 'OFF');
     set('turbo-status', (s.turboStatus || 'idle').toUpperCase());
     set('val-turbo-wall-policy', (s.turboWallPolicy || 'full').toUpperCase());

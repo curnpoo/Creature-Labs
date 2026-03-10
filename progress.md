@@ -1,0 +1,33 @@
+Original prompt: run through and determine what is a patched mess and how it can be cleaned up and then systematically debug this whole app, theres been a lot of fixing now im in refining stage
+
+- 2026-03-10: Started refinement/debugging pass.
+- Initial checks:
+  - `npm run build` passes.
+  - `node tests/test-turbo-parity.js` passes.
+  - `node tests/test-neat-runtime.js` passes.
+  - `node tests/test-topology.js` passes.
+- Existing dirty worktree detected in:
+  - `src/index.html`
+  - `src/main.js`
+  - `src/mobile/mobile.css`
+  - `src/ui/Controls.js`
+  - `src/ui/HUD.js`
+- Next steps:
+  - Inspect orchestration seams (`Simulation`, `TurboWorker`, UI controls, config flattening).
+  - Run live dev/browser loop and check console/runtime behavior.
+- Findings:
+  - `src/main.js` and `src/sim/Simulation.js` are primary god-files and main cleanup targets.
+  - Mobile UI currently mixes active sheet-based logic with older `MobileSurface`/gesture code that appears unused.
+  - Live browser pass showed no runtime errors, but did show warnings for Tailwind CDN usage and deprecated iOS meta tag usage.
+  - Splash settings modal still contains placeholder `'test'` output wiring.
+  - Runtime config drift was real: advanced muscle controls existed in `MUSCLE_CONFIG`/`Creature` but were not fully owned or forwarded by `Simulation`.
+- Fixes applied:
+  - `Simulation` now owns the full creature runtime config shape, including `phaseLockEnabled`, `gaitHz`, `commandDeadband`, and `maxCommandDeltaPerStep`.
+  - `Simulation.getSimConfig()` and `syncCreatureRuntimeSettings()` now derive from the same runtime config source.
+  - Added `tests/test-runtime-config-parity.js` to guard against future config drift.
+- Verification:
+  - `node tests/test-runtime-config-parity.js` passes.
+  - `npm run build` passes.
+  - `node tests/test-turbo-parity.js` passes.
+  - `node tests/test-desktop-dom-contract.js` passes.
+  - `node tests/test-mobile-sheet-dom-contract.js` passes.
