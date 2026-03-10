@@ -60,7 +60,7 @@ def run_desktop_behavior(page, base_url: str) -> None:
   console_errors = []
   page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
 
-  page.goto(f"{base_url}?ui=desktop", wait_until="networkidle")
+  page.goto(f"{base_url}?ui=desktop&e2e=1", wait_until="networkidle")
   page.wait_for_timeout(250)
 
   assert page.locator("body").get_attribute("data-ui-platform") == "desktop", "desktop platform override not applied"
@@ -78,11 +78,36 @@ def run_desktop_behavior(page, base_url: str) -> None:
     "() => document.getElementById('screen-draw')?.classList.contains('active')",
     timeout=3000
   )
+  page.wait_for_function("() => !!window.__creatureLabsE2E", timeout=3000)
   assert has_class(page, "#screen-draw", "active"), "draw screen did not become active after PLAY"
   assert not has_class(page, "#screen-splash", "active"), "splash screen stayed active after PLAY"
 
   page.click("#tool-bone")
   assert has_class(page, "#tool-bone", "active"), "bone tool did not activate on desktop"
+
+  page.evaluate("() => window.__creatureLabsE2E.goToScreen('sim')")
+  page.wait_for_function(
+    "() => document.getElementById('screen-sim')?.classList.contains('active')",
+    timeout=3000
+  )
+  page.evaluate(
+    """
+    () => {
+      const panel = document.getElementById('panel-controls');
+      if (panel) {
+        panel.classList.add('module-hidden');
+        panel.style.display = '';
+      }
+    }
+    """
+  )
+  assert has_class(page, "#panel-controls", "module-hidden"), "test setup failed to hide controls panel"
+  page.click("#toggle-right")
+  page.wait_for_timeout(100)
+  assert not has_class(page, "#panel-controls", "module-hidden"), "sim corner toggle did not reopen a module-hidden panel"
+  page.click("#toggle-right")
+  page.wait_for_timeout(100)
+  assert has_class(page, "#panel-controls", "module-hidden"), "sim corner toggle did not re-hide the controls panel"
   assert not console_errors, f"Console errors detected in desktop flow: {console_errors}"
 
 
@@ -91,7 +116,7 @@ def run_mobile_behavior(page, base_url: str) -> None:
   page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
 
   page.set_viewport_size({"width": 430, "height": 932})
-  page.goto(f"{base_url}?ui=mobile", wait_until="networkidle")
+  page.goto(f"{base_url}?ui=mobile&e2e=1", wait_until="networkidle")
   page.wait_for_timeout(250)
 
   assert page.locator("body").get_attribute("data-ui-platform") == "mobile", "mobile platform override not applied"
@@ -108,12 +133,23 @@ def run_mobile_behavior(page, base_url: str) -> None:
     "() => document.getElementById('screen-draw')?.classList.contains('active')",
     timeout=3000
   )
+  page.wait_for_function("() => !!window.__creatureLabsE2E", timeout=3000)
   assert has_class(page, "#screen-draw", "active"), "draw screen did not become active on mobile"
   assert page.locator("#panel-controls").evaluate("el => el.parentElement && el.parentElement.id") == "mobile-pane-controls", "mobile sheet did not adopt panel-controls"
   assert page.locator("#panel-top-bar").evaluate("el => getComputedStyle(el).display") == "none", "desktop top bar was not hidden in mobile sheet mode"
 
   page.click("#tool-bone")
   assert has_class(page, "#tool-bone", "active"), "bone tool did not activate on mobile"
+  page.evaluate("() => window.__creatureLabsE2E.goToScreen('sim')")
+  page.wait_for_function(
+    "() => document.getElementById('screen-sim')?.classList.contains('active')",
+    timeout=3000
+  )
+  assert not is_hidden(page, "#mobile-quick-controls"), "mobile quick controls stayed hidden on sim screen"
+  page.click("#btn-mq-settings")
+  page.wait_for_timeout(150)
+  assert has_class(page, "body", "mobile-sheet-open"), "mobile settings sheet did not open from quick controls"
+  assert not is_hidden(page, "#mobile-panel-shell"), "mobile settings sheet stayed hidden after quick control click"
   assert not console_errors, f"Console errors detected in mobile flow: {console_errors}"
 
 

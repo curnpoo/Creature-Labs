@@ -684,6 +684,11 @@ body:not(.app-mobile) .app-mobile-only {
   padding-bottom: var(--mobile-safe-bottom);
 }
 
+.app-mobile .sim-mobile-dock.hidden {
+  display: none !important;
+  pointer-events: none !important;
+}
+
 .app-mobile .sim-mobile-dock.minimized {
   transform: translateY(calc(100% - 40px - var(--mobile-safe-bottom)));
 }

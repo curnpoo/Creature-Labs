@@ -1,4 +1,4 @@
-import { CONFIG } from './utils/config.js';
+import { CONFIG, STORAGE_KEYS } from './utils/config.js';
 import { Simulation } from './sim/Simulation.js';
 import { Designer } from './ui/Designer.js';
 import { Controls } from './ui/Controls.js';
@@ -542,6 +542,7 @@ function setScreen(name) {
   Object.values(screens).forEach(s => s.classList.remove('active'));
   screens[name].classList.add('active');
   currentScreen = name;
+  syncMobileDockVisibility();
 
   if (name !== 'sim') {
     closeMobileSheet();
@@ -704,6 +705,14 @@ function setMobileSpeedVisual(speedValue) {
     mqSpeedSlider.style.setProperty('--mq-speed-pct', `${pct.toFixed(2)}%`);
     mqSpeedSlider.style.setProperty('--mq-speed-scale', scale.toFixed(4));
   }
+}
+
+function syncMobileDockVisibility() {
+  const dock = document.getElementById('mobile-quick-controls');
+  if (!dock) return;
+
+  const shouldShow = document.body.classList.contains('app-mobile') && currentScreen === 'sim';
+  dock.classList.toggle('hidden', !shouldShow);
 }
 
 function updateSandboxUI() {
@@ -3107,7 +3116,7 @@ sim.onFrame = (leader, simulatedSec) => {
 
 // --- Panel Toggle Buttons ---
 function panelIsShown(panel) {
-  return !!panel && panel.style.display !== 'none';
+  return !!panel && !panel.classList.contains('module-hidden');
 }
 
 function updatePanelToggleButtonPositions() {
@@ -3126,29 +3135,63 @@ function updatePanelToggleButtonPositions() {
   }
 }
 
-document.querySelectorAll('.panel-toggle-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const panelId = btn.getAttribute('data-panel');
-    const panel = document.getElementById(panelId);
-    const icon = btn.querySelector('i');
+function panelShownIconClass(panelId) {
+  if (panelId === 'panel-top-bar') return 'fas fa-chevron-up';
+  if (panelId === 'panel-progress-left') return 'fas fa-chevron-left';
+  if (panelId === 'panel-controls') return 'fas fa-chevron-right';
+  if (panelId === 'panel-scorecard') return 'fas fa-chevron-down';
+  return 'fas fa-chevron-right';
+}
 
-    if (panel.style.display === 'none') {
-      // Show panel
-      panel.style.display = '';
-      // Update icon to point inward (hide direction)
-      if (panelId === 'panel-top-bar') icon.className = 'fas fa-chevron-up';
-      else if (panelId === 'panel-progress-left') icon.className = 'fas fa-chevron-left';
-      else if (panelId === 'panel-controls') icon.className = 'fas fa-chevron-right';
-      else if (panelId === 'panel-scorecard') icon.className = 'fas fa-chevron-down';
-    } else {
-      // Hide panel
-      panel.style.display = 'none';
-      // Update icon to point outward (show direction)
-      if (panelId === 'panel-top-bar') icon.className = 'fas fa-chevron-down';
-      else if (panelId === 'panel-progress-left') icon.className = 'fas fa-chevron-right';
-      else if (panelId === 'panel-controls') icon.className = 'fas fa-chevron-left';
-      else if (panelId === 'panel-scorecard') icon.className = 'fas fa-chevron-up';
-    }
+function panelHiddenIconClass(panelId) {
+  if (panelId === 'panel-top-bar') return 'fas fa-chevron-down';
+  if (panelId === 'panel-progress-left') return 'fas fa-chevron-right';
+  if (panelId === 'panel-controls') return 'fas fa-chevron-left';
+  if (panelId === 'panel-scorecard') return 'fas fa-chevron-up';
+  return 'fas fa-chevron-left';
+}
+
+function syncPanelToggleButton(btn, shown) {
+  if (!btn) return;
+  const panelId = btn.getAttribute('data-panel');
+  const icon = btn.querySelector('i');
+  if (icon && panelId) {
+    icon.className = shown ? panelShownIconClass(panelId) : panelHiddenIconClass(panelId);
+  }
+  btn.setAttribute('aria-pressed', shown ? 'true' : 'false');
+}
+
+function setPanelVisibility(panelId, shown) {
+  if (!panelId) return;
+  const panel = document.getElementById(panelId);
+  if (!panel) return;
+
+  // Clear stale inline display toggles from the old button implementation and
+  // keep panel state on the shared module-hidden path used elsewhere.
+  panel.style.display = '';
+  panel.classList.toggle('module-hidden', !shown);
+
+  try {
+    localStorage.setItem(`${STORAGE_KEYS.modulePrefix}${panelId}`, shown ? '1' : '0');
+  } catch {
+    // Ignore storage failures; the panel should still toggle for this session.
+  }
+
+  document.querySelectorAll(`.panel-toggle-btn[data-panel="${panelId}"]`).forEach(btn => {
+    syncPanelToggleButton(btn, shown);
+  });
+  document.querySelectorAll(`.edge-tab[data-target="${panelId}"]`).forEach(btn => {
+    btn.classList.toggle('active', shown);
+  });
+}
+
+document.querySelectorAll('.panel-toggle-btn').forEach(btn => {
+  const panelId = btn.getAttribute('data-panel');
+  syncPanelToggleButton(btn, panelIsShown(document.getElementById(panelId)));
+  btn.addEventListener('click', () => {
+    const panel = document.getElementById(panelId);
+    if (!panel || !panelId) return;
+    setPanelVisibility(panelId, !panelIsShown(panel));
     updatePanelToggleButtonPositions();
   });
 });
@@ -3193,6 +3236,7 @@ setTool('node', document.getElementById('tool-node'));
 resizeCanvases();
 designer.render();
 initSandboxPanelControls();
+syncMobileDockVisibility();
 emitAppState();
 
 export function launchFromSplash() {
